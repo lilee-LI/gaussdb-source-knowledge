@@ -129,7 +129,7 @@ def compiler_arguments(entry, profile, originals, roots):
             result.append("--sysroot=" + remap(arg.split("=", 1)[1]))
         elif arg.startswith(("-Xclang", "-fplugin", "-load", "@")) or arg in {"-cc1", "-mllvm"}:
             raise ValueError("Unsupported compiler plugin/response/internal flag: " + arg)
-        elif arg in {"-nostdinc", "-nostdinc++", "-ansi", "-pedantic", "-pedantic-errors"} or arg.startswith(("-D", "-U", "-std=", "-f", "-m", "-W", "-O", "-g", "-pthread", "--target=", "-target", "-x")):
+        elif arg in {"-w", "-nostdinc", "-nostdinc++", "-ansi", "-pedantic", "-pedantic-errors"} or arg.startswith(("-D", "-U", "-std=", "-f", "-m", "-W", "-O", "-g", "-pthread", "--target=", "-target", "-x")):
             result.append(arg)
             if arg in {"-x", "-target"}:
                 require(i + 1 < len(raw), "Missing frontend option value")

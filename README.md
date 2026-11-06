@@ -88,4 +88,4 @@ claude --mcp-config E:/kb/member-a/worker.mcp.json
 python scripts/package_release.py
 ~~~
 
-打包命令从当前 Git 暂存区生成 `dist/gaussdb-source-knowledge-2.1.0.zip` 和 SHA-256 清单。发布物包含两端代码、测试、研究方法和离线依赖。产品源码、构建依赖和用户已有的 Claude 使用各自环境。要从一次真实 Make 编译自测到协调端回放，可在同时具备 Python 3.12 和 Make/C++ 的 Linux 上运行 `python3.12 scripts/verify_ecs_producer.py --output /tmp/new-kb-acceptance`，输出目录须为新路径。
+打包命令从当前 Git 暂存区生成 `dist/gaussdb-source-knowledge-2.1.1.zip` 和 SHA-256 清单。发布物包含两端代码、测试、研究方法和离线依赖。产品源码、构建依赖和用户已有的 Claude 使用各自环境。要从一次真实 Make 编译自测到协调端回放，可在同时具备 Python 3.12 和 Make/C++ 的 Linux 上运行 `python3.12 scripts/verify_ecs_producer.py --output /tmp/new-kb-acceptance`，输出目录须为新路径。

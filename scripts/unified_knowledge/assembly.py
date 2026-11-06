@@ -1,14 +1,15 @@
 """Join scoped module graphs at an explicit integration point without reparsing C++."""
 from collections import Counter
 import json
+from pathlib import Path
 
 from .graph_facts import link_calls
 from .store import canonical, digest, identity, now, require
 from .study import current
 
 
-def integrate(store, run_ids=(), profile=None):
-    plan = current(store)
+def integrate(store, run_ids=(), profile=None, *, snapshot=None, retry_failed=False):
+    plan = {"snapshot":snapshot,"profile":profile} if snapshot else current(store)
     profile = profile or plan["profile"]
     if not run_ids:
         run_ids = [r[0] for r in store.db.execute(
@@ -18,13 +19,24 @@ def integrate(store, run_ids=(), profile=None):
     inputs = [store.record("runs", k) for k in sorted(set(run_ids))]
     require(all(r["snapshot"] == plan["snapshot"] and r["profile"] == profile and r["status"] in {"ready", "partial"}
                 and r.get("mode") in {"selected", "full"} for r in inputs), "Incompatible module graph scope")
-    rid = identity("assembled", ["assemble/v2", [(r["id"], r["facts_digest"]) for r in inputs]])
+    scope = ["assemble/v2", [(r["id"], r["facts_digest"]) for r in inputs]]
+    if retry_failed:
+        scope.append({"retry_failed":True})
+    rid = identity("assembled", scope)
     units, files = {}, set()
     for run in inputs:
         files.update(run.get("selected_files") or [])
         for tu in run["tu_results"]:
-            proof = (tu.get("cache_key"), tu["status"], sorted((d.get("asset") or d["path"], d["sha"]) for d in tu["includes"]))
+            proof = (tu.get("cache_key"), tu["status"], sorted((d.get("asset") or d["path"], d["sha"]) for d in tu.get("includes", [])))
             previous = units.get(tu["context"])
+            if retry_failed and previous and previous[1]["status"] != tu["status"] and "failed" in {previous[1]["status"],tu["status"]}:
+                failed = previous[1] if previous[1]["status"]=="failed" else tu
+                successful = tu if previous[1]["status"]=="failed" else previous[1]
+                require(failed.get("cache_key") in {None,successful.get("cache_key")},
+                        "Failed TU retry changed its frontend inputs")
+                if tu["status"]=="failed":
+                    continue
+                previous = None
             require(not previous or previous[0] == proof, "Conflicting TU inputs; supply current compatible runs explicitly")
             units[tu["context"]] = (proof, tu)
     with store.transaction():
@@ -34,6 +46,15 @@ def integrate(store, run_ids=(), profile=None):
             store.set_meta(head, rid)
             return store.record("runs", rid)
         for run in inputs:
+            if retry_failed:
+                failed = [t["context"] for t in run["tu_results"] if t["status"]=="failed"]
+                require(not store.db.execute("SELECT 1 FROM relations WHERE run=? AND json_extract(data,'$.context') IN "
+                    "(SELECT value FROM json_each(?)) LIMIT 1",(run["id"],canonical(failed))).fetchone(),
+                    "A failed TU contains facts; replace only empty failed attempts")
+                if failed:
+                    require(not store.db.execute("SELECT 1 FROM symbols s,json_each(s.data,'$.contexts') c WHERE s.run=? "
+                        "AND c.value IN (SELECT value FROM json_each(?)) LIMIT 1",(run["id"],canonical(failed))).fetchone(),
+                        "A failed TU contains symbols; replace only empty failed attempts")
             for row in store.db.execute("SELECT data FROM symbols WHERE run=?", (run["id"],)):
                 s = json.loads(row[0])
                 prior = store.db.execute("SELECT data FROM symbols WHERE run=? AND id=?", (rid, s["id"])).fetchone()
@@ -60,6 +81,14 @@ def integrate(store, run_ids=(), profile=None):
                   "inputs": [r["id"] for r in inputs], "selected_files": sorted(files), "coverage": coverage,
                   "tu_results": [tu for _, tu in units.values()], "frontend_invocations": 0,
                   "facts_digest": digest([rid, links]), "database_execution": "not_run"}
+        native = {r.get("native_facts") for r in inputs}
+        if len(native)==1 and None not in native:
+            record["native_facts"] = next(iter(native))
+            record["evidence_assets"] = sorted({a for r in inputs for a in r["evidence_assets"]})
+            record["coverage"]["source_evidence_files"] = len(record["evidence_assets"])
+            record["tools"] = {"assembly":digest(Path(__file__).read_bytes()),
+                               "inputs":{r["id"]:r.get("tools",{}) for r in inputs}}
+            record["upstream_frontend_invocations"] = sum(r.get("frontend_invocations",0) for r in inputs)
         store.db.execute("INSERT INTO runs VALUES(?,?,?,?,?,?)",
                          (rid, plan["snapshot"], profile, record["created"], record["status"], canonical(record)))
         store.set_meta(head, rid)
