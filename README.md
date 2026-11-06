@@ -81,6 +81,8 @@ claude --mcp-config E:/kb/member-a/worker.mcp.json
 
 [完整技术设计](docs/DESIGN.md) · [验证范围与结果](docs/VALIDATION.md) · [ECS 交付与调用图查询](CALLGRAPH-REPLAY.md)
 
+已实测公开 openGauss 的全部 2,412 个编译上下文：最终交付图 4.914 GiB，Windows `start` 用时 50.173 秒，生成 157 张模块盘点单和 3,370 条候选线索。818 个 TU 干净解析、1,594 个部分解析；当前仍有 GCC/Clang 兼容问题和产图写放大，详见[全仓实测报告](docs/benchmarks/opengauss-2412.md)。
+
 ~~~powershell
 .\kb.cmd --help
 .\.venv\Scripts\python -m unittest discover -s tests
