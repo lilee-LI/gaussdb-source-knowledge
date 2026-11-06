@@ -5,11 +5,14 @@ from pathlib import Path
 
 from .graph_facts import link_calls
 from .store import canonical, digest, identity, now, require
-from .study import current
 
 
 def integrate(store, run_ids=(), profile=None, *, snapshot=None, retry_failed=False):
-    plan = {"snapshot":snapshot,"profile":profile} if snapshot else current(store)
+    if snapshot:
+        plan = {"snapshot":snapshot,"profile":profile}
+    else:
+        from .study import current
+        plan = current(store)
     profile = profile or plan["profile"]
     if not run_ids:
         run_ids = [r[0] for r in store.db.execute(
