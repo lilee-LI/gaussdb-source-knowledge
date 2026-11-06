@@ -1,0 +1,253 @@
+{
+  "type": "object",
+  "properties": {
+    "contract": {
+      "const": "study-result/v1"
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "spec_sha256": {
+      "type": "string",
+      "minLength": 1
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 12
+    },
+    "question_answers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "question_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "answered",
+              "not_applicable",
+              "open"
+            ]
+          },
+          "answer": {
+            "type": "string",
+            "minLength": 12
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 0
+          },
+          "next_step": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "question_id",
+          "status",
+          "answer",
+          "evidence_ids"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {
+            "type": "string",
+            "minLength": 12
+          },
+          "provenance": {
+            "enum": [
+              "extracted",
+              "inferred",
+              "ambiguous"
+            ]
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "provenance",
+          "evidence_ids"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "snapshot_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "file_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "start_line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "end_line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "quote": {
+            "type": "string",
+            "minLength": 1
+          },
+          "quote_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "path",
+          "file_sha256",
+          "start_line",
+          "end_line"
+        ],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "quote"
+            ]
+          },
+          {
+            "required": [
+              "quote_sha256"
+            ]
+          }
+        ]
+      }
+    },
+    "domain_findings": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string",
+          "minLength": 12
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "minLength": 1
+          },
+          "next_step": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "question",
+          "next_step"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 0
+    },
+    "validation_plan": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "enum": [
+              "source_analysis",
+              "runtime_observation",
+              "runtime_behavior",
+              "retrieval_use"
+            ]
+          },
+          "objective": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expected": {
+            "type": "string",
+            "minLength": 1
+          },
+          "method": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "objective",
+          "expected",
+          "method"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 0
+    },
+    "source_analysis": {
+      "type": "object"
+    },
+    "error_analysis": {
+      "type": "object"
+    },
+    "error_applicability": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "contract",
+    "task_id",
+    "spec_sha256",
+    "summary",
+    "question_answers",
+    "claims",
+    "evidence",
+    "domain_findings",
+    "gaps",
+    "validation_plan"
+  ],
+  "additionalProperties": false
+}

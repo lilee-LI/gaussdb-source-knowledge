@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:database-knowledge:unified-context-request:v1",
+  "type": "object",
+  "required": ["task", "source_snapshot", "build_profile"],
+  "properties": {
+    "task": {"enum": ["coding", "test_generation", "review", "operations"]},
+    "source_snapshot": {"type": "string"},
+    "build_profile": {"type": "string"},
+    "index_run": {"type": "string"},
+    "knowledge_revision": {"type": ["string", "null"]},
+    "query": {"type": "string", "maxLength": 50000},
+    "targets": {"type": "array", "items": {"type": "string"}},
+    "token_budget": {"type": "integer", "minimum": 512, "maximum": 128000},
+    "diff_ref": {"type": "string"},
+    "embedding_space": {"type": "string"},
+    "query_vector": {"type": "array", "minItems": 1, "items": {"type": "number"}}
+  },
+  "additionalProperties": false,
+  "$comment": "An embedding_space requires a real matching vector space already imported into this knowledge revision. Finite values, dimension and content hashes are checked at runtime."
+}

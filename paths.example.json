@@ -1,0 +1,8 @@
+{
+  "source": "E:/GaussDB/source",
+  "design": "E:/corpus/design",
+  "manual": "E:/corpus/manual",
+  "index_db": "E:/ecs-export/knowledge.sqlite3",
+  "home": "E:/gaussdb-learning",
+  "graph_storage": "reference"
+}

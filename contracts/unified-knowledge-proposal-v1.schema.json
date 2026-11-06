@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:database-knowledge:unified-knowledge-proposal:v1",
+  "type": "object",
+  "required": ["snapshot", "run", "profile", "author", "expected_head", "units"],
+  "properties": {
+    "snapshot": {"type": "string"}, "run": {"type": "string"}, "profile": {"type": "string"},
+    "author": {"type": "string", "minLength": 1}, "expected_head": {"type": ["string", "null"]},
+    "research_tasks": {"$ref": "#/$defs/refs"}, "import_provenance": {"type": "string", "minLength": 1},
+    "units": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/unit"}}
+  },
+  "anyOf": [{"required": ["research_tasks"], "properties": {"research_tasks": {"minItems": 1}}}, {"required": ["import_provenance"]}],
+  "$defs": {
+    "refs": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "unit": {
+      "type": "object", "required": ["id", "kind", "title", "body"],
+      "propertyNames": {"not": {"pattern": "^_"}},
+      "properties": {
+        "id": {"type": "string", "minLength": 1}, "title": {"type": "string", "minLength": 1}, "body": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["module", "responsibility", "feature", "mechanism", "claim", "contract", "flow", "test_obligation", "requirement", "observation", "decision"]},
+        "source_refs": {"$ref": "#/$defs/refs"}, "symbol_refs": {"$ref": "#/$defs/refs"}, "conditions": {"$ref": "#/$defs/refs"}, "counterexamples": {"$ref": "#/$defs/refs"},
+        "knowledge_refs": {"type": "array", "items": {"type": "object", "required": ["target", "relation"], "properties": {"target": {"type": "string"}, "relation": {"enum": ["DEPENDS_ON", "PRODUCES", "CONSUMES", "IMPLEMENTS", "REQUIRES_TEST", "REFINES", "CONTRADICTS", "VERIFIED_BY", "CITES"]}}}},
+        "statement": {"type": "string"}, "producers": {"$ref": "#/$defs/refs"}, "consumers": {"$ref": "#/$defs/refs"},
+        "requires": {"$ref": "#/$defs/refs"}, "ensures": {"$ref": "#/$defs/refs"}, "invariants": {"$ref": "#/$defs/refs"},
+        "level": {"type": "integer", "minimum": 1, "maximum": 4}, "parent": {"type": ["string", "null"]},
+        "steps": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["kind"], "properties": {"kind": {"enum": ["call", "data_stage", "state_transition", "async_message"]}}}},
+        "expected_from": {"type": "object", "required": ["kind", "ref"], "properties": {"kind": {"enum": ["requirement", "claim", "contract", "source_prediction"]}, "ref": {"type": "string"}}},
+        "execution_status": {"const": "not_run"}, "runtime_verified": {"const": false}, "runtime_validation": {"const": "not_run"}, "database_execution": {"const": "not_run"}
+      },
+      "allOf": [
+        {"if": {"properties": {"kind": {"enum": ["claim", "contract", "requirement"]}}}, "then": {"required": ["source_refs", "conditions", "counterexamples"], "properties": {"source_refs": {"minItems": 1}, "conditions": {"minItems": 1}, "counterexamples": {"minItems": 1}}}},
+        {"if": {"properties": {"kind": {"const": "claim"}}}, "then": {"required": ["statement"]}},
+        {"if": {"properties": {"kind": {"const": "contract"}}}, "then": {"required": ["producers", "consumers", "requires", "ensures", "invariants"], "properties": {"producers": {"minItems": 1}, "consumers": {"minItems": 1}, "requires": {"minItems": 1}, "ensures": {"minItems": 1}, "invariants": {"minItems": 1}}}},
+        {"if": {"properties": {"kind": {"enum": ["feature", "responsibility"]}}}, "then": {"required": ["level"]}},
+        {"if": {"properties": {"kind": {"const": "flow"}}}, "then": {"required": ["steps"]}},
+        {"if": {"properties": {"kind": {"const": "test_obligation"}}}, "then": {"required": ["expected_from"]}}
+      ]
+    }
+  },
+  "$comment": "Runtime additionally checks real anchors/symbol identities, material and method versions, tree parents, oracle types, references, CAS and actual evidence reads before review. No schema can replace semantic review."
+}

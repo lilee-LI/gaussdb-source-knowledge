@@ -1,0 +1,1064 @@
+{
+  "snapshots": [
+    {
+      "id": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+      "created": "2026-11-05T08:18:19.655443+00:00",
+      "data": {
+        "assets": [
+          {
+            "bytes": 2318,
+            "key": "__codewiki_enhanced_rules/enhanced-learning.md",
+            "kind": "method",
+            "path": "enhanced-learning.md",
+            "reason": null,
+            "repo": "__codewiki_enhanced_rules",
+            "sha": "95cefec6f829082280fa0a716bf555a71e9708ee16dc9fb990e605b1d5377126",
+            "status": "frozen"
+          },
+          {
+            "bytes": 1950,
+            "key": "__engine_research_contract/research_contract.md",
+            "kind": "method",
+            "path": "research_contract.md",
+            "reason": null,
+            "repo": "__engine_research_contract",
+            "sha": "8cd2f3e0fee9c92b5e795b3f0d7e261cb737a7b7250feee5c128d9876c0baec5",
+            "status": "frozen"
+          },
+          {
+            "bytes": 73,
+            "key": "server/executor/consumer.cpp",
+            "kind": "source",
+            "path": "executor/consumer.cpp",
+            "reason": null,
+            "repo": "server",
+            "sha": "a5fcbde0572598f4ba15d8ad483577c41084a623a5f990272305c6e91cc82bef",
+            "status": "frozen"
+          },
+          {
+            "bytes": 40,
+            "key": "server/include/api.h",
+            "kind": "source",
+            "path": "include/api.h",
+            "reason": null,
+            "repo": "server",
+            "sha": "974f162642245ace9c9d9b867a7d3c67a44bdcc59ca4984f113e510cfad9bf5c",
+            "status": "frozen"
+          },
+          {
+            "bytes": 65,
+            "key": "server/optimizer/producer.cpp",
+            "kind": "source",
+            "path": "optimizer/producer.cpp",
+            "reason": null,
+            "repo": "server",
+            "sha": "3e256fc31373963bf7adff6b1ea8e4f2bdea46459e71f294ec4f146203554da0",
+            "status": "frozen"
+          },
+          {
+            "bytes": 28,
+            "key": "server/tools/idle.cpp",
+            "kind": "source",
+            "path": "tools/idle.cpp",
+            "reason": null,
+            "repo": "server",
+            "sha": "5fb03608a87d0226ba4ae724a8f164f6d5ea3c53a402fff9b151e6a1faa2ed17",
+            "status": "frozen"
+          }
+        ],
+        "created": "2026-11-05T08:18:19.655443+00:00",
+        "database_execution": "not_run",
+        "execution_profile": "source_only",
+        "id": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "materials": [
+          {
+            "git_head": "3bc7b7fa063ee2d60086e6f06367b70ac9dfd9c3",
+            "id": "server",
+            "kind": "source",
+            "root": "/fixture/source"
+          },
+          {
+            "git_head": null,
+            "id": "__engine_research_contract",
+            "kind": "method",
+            "path": "/fixture/tool/research_contract.md",
+            "revision": "unified-research/v1",
+            "root": "/fixture/tool/research_contract.md"
+          },
+          {
+            "git_head": null,
+            "id": "__codewiki_enhanced_rules",
+            "kind": "method",
+            "path": "/fixture/tool/enhanced-learning.md",
+            "revision": "content-addressed",
+            "root": "/fixture/tool/enhanced-learning.md"
+          }
+        ],
+        "methods_digest": "c39f0a8be053ef982d97c3af9d602bcf39f7091e8fcd09a689c4c2c8f8f29b01",
+        "ownership": [],
+        "product": "source-only-fixture",
+        "profiles": [
+          {
+            "commands": [
+              {
+                "arguments": [
+                  "clang++",
+                  "-std=c++17",
+                  "/fixture/source/include",
+                  "-c",
+                  "optimizer/producer.cpp"
+                ],
+                "directory": "/fixture/source",
+                "file": "optimizer/producer.cpp"
+              },
+              {
+                "arguments": [
+                  "clang++",
+                  "-std=c++17",
+                  "/fixture/source/include",
+                  "-c",
+                  "executor/consumer.cpp"
+                ],
+                "directory": "/fixture/source",
+                "file": "executor/consumer.cpp"
+              },
+              {
+                "arguments": [
+                  "clang++",
+                  "-std=c++17",
+                  "/fixture/source/include",
+                  "-c",
+                  "tools/idle.cpp"
+                ],
+                "directory": "/fixture/source",
+                "file": "tools/idle.cpp"
+              }
+            ],
+            "compile_database_sha": "940d1a2d18a5d7b5570aebd4c8ddff35afeb9c2df9a24ab192f8161eb6f17bae",
+            "digest": "ce0f679ae7d9a4cb55db543e06edacfbd8c92381b0dfb522f91712e331bf0057",
+            "duplicate_commands": 0,
+            "extra_arguments": [],
+            "id": "ecs-row",
+            "repository": "server",
+            "toolchain": "unknown"
+          },
+          {
+            "commands": [],
+            "digest": "f5112af6d0faa84ff69781540857334d23a497bb89cb40690ca0d3104d0872d2",
+            "extra_arguments": [],
+            "id": "unknown",
+            "repository": null,
+            "toolchain": "unknown"
+          }
+        ],
+        "revision": "ecs-fixture-v1"
+      }
+    }
+  ],
+  "runs": [
+    {
+      "id": "index:97c2e0c7264f0076a50db55123e850c5",
+      "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+      "profile": "ecs-row",
+      "created": "2026-11-05T08:18:19.682008+00:00",
+      "status": "ready",
+      "data": {
+        "cache_hits": 0,
+        "completed_tus": [
+          "tu:6fc9598600d296ec63dc0f662d803fab",
+          "tu:68fc944f8c5c14fe26fbfe0ad0ba950d",
+          "tu:14794bfea43585b100936213244a8595"
+        ],
+        "coverage": {
+          "assets": 4,
+          "ctags": {
+            "candidates": 0,
+            "configured": false,
+            "errors": [],
+            "retained_as_candidates": 0,
+            "semantic_completeness": "not_certified",
+            "unmatched": []
+          },
+          "failed_tus": 0,
+          "parsed_tus": 3,
+          "partial_tus": 0,
+          "relations": 6,
+          "semantic_completeness": "not_certified",
+          "symbols": 7,
+          "translation_units": 3,
+          "unknown_profile": false
+        },
+        "created": "2026-11-05T08:18:19.682008+00:00",
+        "database_execution": "not_run",
+        "diagnostics": [],
+        "facts_digest": "fd517e778c60b13361476bfb7a80feb11f595fc12a930e167ea74388ed5f5bb6",
+        "id": "index:97c2e0c7264f0076a50db55123e850c5",
+        "profile": "ecs-row",
+        "profile_digest": "ce0f679ae7d9a4cb55db543e06edacfbd8c92381b0dfb522f91712e331bf0057",
+        "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "status": "ready",
+        "syntax_complete": true,
+        "tools": {
+          "frontend": "synthetic-reference"
+        },
+        "tu_results": [
+          {
+            "asset": "server/optimizer/producer.cpp",
+            "context": "tu:6fc9598600d296ec63dc0f662d803fab",
+            "status": "parsed"
+          },
+          {
+            "asset": "server/executor/consumer.cpp",
+            "context": "tu:68fc944f8c5c14fe26fbfe0ad0ba950d",
+            "status": "parsed"
+          },
+          {
+            "asset": "server/tools/idle.cpp",
+            "context": "tu:14794bfea43585b100936213244a8595",
+            "status": "parsed"
+          }
+        ]
+      }
+    }
+  ],
+  "assets": [
+    {
+      "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+      "key": "server/executor/consumer.cpp",
+      "repo": "server",
+      "path": "executor/consumer.cpp",
+      "sha": "a5fcbde0572598f4ba15d8ad483577c41084a623a5f990272305c6e91cc82bef",
+      "kind": "source",
+      "status": "frozen",
+      "data": {
+        "bytes": 73,
+        "key": "server/executor/consumer.cpp",
+        "kind": "source",
+        "path": "executor/consumer.cpp",
+        "reason": null,
+        "repo": "server",
+        "sha": "a5fcbde0572598f4ba15d8ad483577c41084a623a5f990272305c6e91cc82bef",
+        "status": "frozen"
+      }
+    },
+    {
+      "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+      "key": "server/include/api.h",
+      "repo": "server",
+      "path": "include/api.h",
+      "sha": "974f162642245ace9c9d9b867a7d3c67a44bdcc59ca4984f113e510cfad9bf5c",
+      "kind": "source",
+      "status": "frozen",
+      "data": {
+        "bytes": 40,
+        "key": "server/include/api.h",
+        "kind": "source",
+        "path": "include/api.h",
+        "reason": null,
+        "repo": "server",
+        "sha": "974f162642245ace9c9d9b867a7d3c67a44bdcc59ca4984f113e510cfad9bf5c",
+        "status": "frozen"
+      }
+    },
+    {
+      "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+      "key": "server/optimizer/producer.cpp",
+      "repo": "server",
+      "path": "optimizer/producer.cpp",
+      "sha": "3e256fc31373963bf7adff6b1ea8e4f2bdea46459e71f294ec4f146203554da0",
+      "kind": "source",
+      "status": "frozen",
+      "data": {
+        "bytes": 65,
+        "key": "server/optimizer/producer.cpp",
+        "kind": "source",
+        "path": "optimizer/producer.cpp",
+        "reason": null,
+        "repo": "server",
+        "sha": "3e256fc31373963bf7adff6b1ea8e4f2bdea46459e71f294ec4f146203554da0",
+        "status": "frozen"
+      }
+    },
+    {
+      "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+      "key": "server/tools/idle.cpp",
+      "repo": "server",
+      "path": "tools/idle.cpp",
+      "sha": "5fb03608a87d0226ba4ae724a8f164f6d5ea3c53a402fff9b151e6a1faa2ed17",
+      "kind": "source",
+      "status": "frozen",
+      "data": {
+        "bytes": 28,
+        "key": "server/tools/idle.cpp",
+        "kind": "source",
+        "path": "tools/idle.cpp",
+        "reason": null,
+        "repo": "server",
+        "sha": "5fb03608a87d0226ba4ae724a8f164f6d5ea3c53a402fff9b151e6a1faa2ed17",
+        "status": "frozen"
+      }
+    },
+    {
+      "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+      "key": "__engine_research_contract/research_contract.md",
+      "repo": "__engine_research_contract",
+      "path": "research_contract.md",
+      "sha": "8cd2f3e0fee9c92b5e795b3f0d7e261cb737a7b7250feee5c128d9876c0baec5",
+      "kind": "method",
+      "status": "frozen",
+      "data": {
+        "bytes": 1950,
+        "key": "__engine_research_contract/research_contract.md",
+        "kind": "method",
+        "path": "research_contract.md",
+        "reason": null,
+        "repo": "__engine_research_contract",
+        "sha": "8cd2f3e0fee9c92b5e795b3f0d7e261cb737a7b7250feee5c128d9876c0baec5",
+        "status": "frozen"
+      }
+    },
+    {
+      "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+      "key": "__codewiki_enhanced_rules/enhanced-learning.md",
+      "repo": "__codewiki_enhanced_rules",
+      "path": "enhanced-learning.md",
+      "sha": "95cefec6f829082280fa0a716bf555a71e9708ee16dc9fb990e605b1d5377126",
+      "kind": "method",
+      "status": "frozen",
+      "data": {
+        "bytes": 2318,
+        "key": "__codewiki_enhanced_rules/enhanced-learning.md",
+        "kind": "method",
+        "path": "enhanced-learning.md",
+        "reason": null,
+        "repo": "__codewiki_enhanced_rules",
+        "sha": "95cefec6f829082280fa0a716bf555a71e9708ee16dc9fb990e605b1d5377126",
+        "status": "frozen"
+      }
+    }
+  ],
+  "profiles": [
+    {
+      "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+      "id": "ecs-row",
+      "digest": "ce0f679ae7d9a4cb55db543e06edacfbd8c92381b0dfb522f91712e331bf0057",
+      "data": {
+        "commands": [
+          {
+            "arguments": [
+              "clang++",
+              "-std=c++17",
+              "/fixture/source/include",
+              "-c",
+              "optimizer/producer.cpp"
+            ],
+            "directory": "/fixture/source",
+            "file": "optimizer/producer.cpp"
+          },
+          {
+            "arguments": [
+              "clang++",
+              "-std=c++17",
+              "/fixture/source/include",
+              "-c",
+              "executor/consumer.cpp"
+            ],
+            "directory": "/fixture/source",
+            "file": "executor/consumer.cpp"
+          },
+          {
+            "arguments": [
+              "clang++",
+              "-std=c++17",
+              "/fixture/source/include",
+              "-c",
+              "tools/idle.cpp"
+            ],
+            "directory": "/fixture/source",
+            "file": "tools/idle.cpp"
+          }
+        ],
+        "compile_database_sha": "940d1a2d18a5d7b5570aebd4c8ddff35afeb9c2df9a24ab192f8161eb6f17bae",
+        "digest": "ce0f679ae7d9a4cb55db543e06edacfbd8c92381b0dfb522f91712e331bf0057",
+        "duplicate_commands": 0,
+        "extra_arguments": [],
+        "id": "ecs-row",
+        "repository": "server",
+        "toolchain": "unknown"
+      }
+    },
+    {
+      "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+      "id": "unknown",
+      "digest": "f5112af6d0faa84ff69781540857334d23a497bb89cb40690ca0d3104d0872d2",
+      "data": {
+        "commands": [],
+        "digest": "f5112af6d0faa84ff69781540857334d23a497bb89cb40690ca0d3104d0872d2",
+        "extra_arguments": [],
+        "id": "unknown",
+        "repository": null,
+        "toolchain": "unknown"
+      }
+    }
+  ],
+  "symbols": [
+    {
+      "run": "index:97c2e0c7264f0076a50db55123e850c5",
+      "id": "symbol-instance:bd75e29d7df8c89eb98a5083a2378c7d",
+      "logical": "symbol:77f2752b7b3f857a7f095392564a3018",
+      "name": "cg_compute",
+      "asset": "server/optimizer/producer.cpp",
+      "kind": "function_decl",
+      "data": {
+        "asset": "server/optimizer/producer.cpp",
+        "contexts": [
+          "tu:6fc9598600d296ec63dc0f662d803fab"
+        ],
+        "definition": true,
+        "end": 2,
+        "evidence": "evidence:a0832a34ff0f2323d5b549f1ecbe8b90",
+        "expansion_location": {
+          "asset": "server/optimizer/producer.cpp",
+          "column": 5,
+          "line": 2,
+          "offset": 21
+        },
+        "frontend_selected": true,
+        "id": "symbol-instance:bd75e29d7df8c89eb98a5083a2378c7d",
+        "kind": "function_decl",
+        "logical": "symbol:77f2752b7b3f857a7f095392564a3018",
+        "name": "cg_compute",
+        "offset": 21,
+        "profile": "ecs-row",
+        "resolution": "resolved",
+        "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "spelling": "cg_compute(int)",
+        "spelling_location": {
+          "asset": "server/optimizer/producer.cpp",
+          "column": 5,
+          "line": 2,
+          "offset": 21
+        },
+        "start": 2,
+        "type": "int (int)",
+        "usr": "c:@F@cg_compute#I#"
+      }
+    },
+    {
+      "run": "index:97c2e0c7264f0076a50db55123e850c5",
+      "id": "symbol-instance:58552dda5e112e8fba721d89cb0741be",
+      "logical": "symbol:24f142df03e3d1b6c02e7c78228d89d3",
+      "name": "value",
+      "asset": "server/optimizer/producer.cpp",
+      "kind": "parm_decl",
+      "data": {
+        "asset": "server/optimizer/producer.cpp",
+        "contexts": [
+          "tu:6fc9598600d296ec63dc0f662d803fab"
+        ],
+        "definition": true,
+        "end": 2,
+        "evidence": "evidence:a0832a34ff0f2323d5b549f1ecbe8b90",
+        "expansion_location": {
+          "asset": "server/optimizer/producer.cpp",
+          "column": 20,
+          "line": 2,
+          "offset": 36
+        },
+        "frontend_selected": true,
+        "id": "symbol-instance:58552dda5e112e8fba721d89cb0741be",
+        "kind": "parm_decl",
+        "logical": "symbol:24f142df03e3d1b6c02e7c78228d89d3",
+        "name": "value",
+        "offset": 36,
+        "profile": "ecs-row",
+        "resolution": "resolved",
+        "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "spelling": "value",
+        "spelling_location": {
+          "asset": "server/optimizer/producer.cpp",
+          "column": 20,
+          "line": 2,
+          "offset": 36
+        },
+        "start": 2,
+        "type": "int",
+        "usr": "c:producer.cpp@32@F@cg_compute#I#@value"
+      }
+    },
+    {
+      "run": "index:97c2e0c7264f0076a50db55123e850c5",
+      "id": "symbol-instance:ebab782f430ea75255f5c86949ee3019",
+      "logical": "symbol:63ba9801549f1e8c2a477ab0c6a54264",
+      "name": "cg_compute",
+      "asset": "server/include/api.h",
+      "kind": "function_decl",
+      "data": {
+        "asset": "server/include/api.h",
+        "contexts": [
+          "tu:68fc944f8c5c14fe26fbfe0ad0ba950d",
+          "tu:6fc9598600d296ec63dc0f662d803fab"
+        ],
+        "definition": false,
+        "end": 2,
+        "evidence": "evidence:da5eea4060804c5ae7d1d6554c338b70",
+        "expansion_location": {
+          "asset": "server/include/api.h",
+          "column": 5,
+          "line": 2,
+          "offset": 17
+        },
+        "frontend_selected": true,
+        "id": "symbol-instance:ebab782f430ea75255f5c86949ee3019",
+        "kind": "function_decl",
+        "logical": "symbol:63ba9801549f1e8c2a477ab0c6a54264",
+        "name": "cg_compute",
+        "offset": 17,
+        "profile": "ecs-row",
+        "resolution": "resolved",
+        "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "spelling": "cg_compute(int)",
+        "spelling_location": {
+          "asset": "server/include/api.h",
+          "column": 5,
+          "line": 2,
+          "offset": 17
+        },
+        "start": 2,
+        "type": "int (int)",
+        "usr": "c:@F@cg_compute#I#"
+      }
+    },
+    {
+      "run": "index:97c2e0c7264f0076a50db55123e850c5",
+      "id": "symbol-instance:f4f1f1e642bede8c9dd531f42750eb36",
+      "logical": "symbol:9796e57cc107a7408b114c86b8df4abb",
+      "name": "value",
+      "asset": "server/include/api.h",
+      "kind": "parm_decl",
+      "data": {
+        "asset": "server/include/api.h",
+        "contexts": [
+          "tu:68fc944f8c5c14fe26fbfe0ad0ba950d",
+          "tu:6fc9598600d296ec63dc0f662d803fab"
+        ],
+        "definition": true,
+        "end": 2,
+        "evidence": "evidence:da5eea4060804c5ae7d1d6554c338b70",
+        "expansion_location": {
+          "asset": "server/include/api.h",
+          "column": 20,
+          "line": 2,
+          "offset": 32
+        },
+        "frontend_selected": true,
+        "id": "symbol-instance:f4f1f1e642bede8c9dd531f42750eb36",
+        "kind": "parm_decl",
+        "logical": "symbol:9796e57cc107a7408b114c86b8df4abb",
+        "name": "value",
+        "offset": 32,
+        "profile": "ecs-row",
+        "resolution": "resolved",
+        "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "spelling": "value",
+        "spelling_location": {
+          "asset": "server/include/api.h",
+          "column": 20,
+          "line": 2,
+          "offset": 32
+        },
+        "start": 2,
+        "type": "int",
+        "usr": "c:api.h@28@F@cg_compute#I#@value"
+      }
+    },
+    {
+      "run": "index:97c2e0c7264f0076a50db55123e850c5",
+      "id": "symbol-instance:dfd5a2908fd93e6ac8081a1ab4af61f3",
+      "logical": "symbol:d88516988e884ee89026a26d605da70b",
+      "name": "cg_consume",
+      "asset": "server/executor/consumer.cpp",
+      "kind": "function_decl",
+      "data": {
+        "asset": "server/executor/consumer.cpp",
+        "contexts": [
+          "tu:68fc944f8c5c14fe26fbfe0ad0ba950d"
+        ],
+        "definition": true,
+        "end": 2,
+        "evidence": "evidence:b2570a5d32bdd7cff008d62e2c586530",
+        "expansion_location": {
+          "asset": "server/executor/consumer.cpp",
+          "column": 5,
+          "line": 2,
+          "offset": 21
+        },
+        "frontend_selected": true,
+        "id": "symbol-instance:dfd5a2908fd93e6ac8081a1ab4af61f3",
+        "kind": "function_decl",
+        "logical": "symbol:d88516988e884ee89026a26d605da70b",
+        "name": "cg_consume",
+        "offset": 21,
+        "profile": "ecs-row",
+        "resolution": "resolved",
+        "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "spelling": "cg_consume(int)",
+        "spelling_location": {
+          "asset": "server/executor/consumer.cpp",
+          "column": 5,
+          "line": 2,
+          "offset": 21
+        },
+        "start": 2,
+        "type": "int (int)",
+        "usr": "c:@F@cg_consume#I#"
+      }
+    },
+    {
+      "run": "index:97c2e0c7264f0076a50db55123e850c5",
+      "id": "symbol-instance:4d80a39fd0cc1c3bf6ef260decc53a55",
+      "logical": "symbol:ccebe61eaabb82f435454f20ebb6614d",
+      "name": "value",
+      "asset": "server/executor/consumer.cpp",
+      "kind": "parm_decl",
+      "data": {
+        "asset": "server/executor/consumer.cpp",
+        "contexts": [
+          "tu:68fc944f8c5c14fe26fbfe0ad0ba950d"
+        ],
+        "definition": true,
+        "end": 2,
+        "evidence": "evidence:b2570a5d32bdd7cff008d62e2c586530",
+        "expansion_location": {
+          "asset": "server/executor/consumer.cpp",
+          "column": 20,
+          "line": 2,
+          "offset": 36
+        },
+        "frontend_selected": true,
+        "id": "symbol-instance:4d80a39fd0cc1c3bf6ef260decc53a55",
+        "kind": "parm_decl",
+        "logical": "symbol:ccebe61eaabb82f435454f20ebb6614d",
+        "name": "value",
+        "offset": 36,
+        "profile": "ecs-row",
+        "resolution": "resolved",
+        "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "spelling": "value",
+        "spelling_location": {
+          "asset": "server/executor/consumer.cpp",
+          "column": 20,
+          "line": 2,
+          "offset": 36
+        },
+        "start": 2,
+        "type": "int",
+        "usr": "c:consumer.cpp@32@F@cg_consume#I#@value"
+      }
+    },
+    {
+      "run": "index:97c2e0c7264f0076a50db55123e850c5",
+      "id": "symbol-instance:480bbbe774f8b10b2c6d3d19b30fca39",
+      "logical": "symbol:0f5f5d29851ad0732b3752fb5cbcc191",
+      "name": "cg_idle",
+      "asset": "server/tools/idle.cpp",
+      "kind": "function_decl",
+      "data": {
+        "asset": "server/tools/idle.cpp",
+        "contexts": [
+          "tu:14794bfea43585b100936213244a8595"
+        ],
+        "definition": true,
+        "end": 1,
+        "evidence": "evidence:f79c876f4fe21e7d36086aae6287866e",
+        "expansion_location": {
+          "asset": "server/tools/idle.cpp",
+          "column": 5,
+          "line": 1,
+          "offset": 4
+        },
+        "frontend_selected": true,
+        "id": "symbol-instance:480bbbe774f8b10b2c6d3d19b30fca39",
+        "kind": "function_decl",
+        "logical": "symbol:0f5f5d29851ad0732b3752fb5cbcc191",
+        "name": "cg_idle",
+        "offset": 4,
+        "profile": "ecs-row",
+        "resolution": "resolved",
+        "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "spelling": "cg_idle()",
+        "spelling_location": {
+          "asset": "server/tools/idle.cpp",
+          "column": 5,
+          "line": 1,
+          "offset": 4
+        },
+        "start": 1,
+        "type": "int ()",
+        "usr": "c:@F@cg_idle#"
+      }
+    }
+  ],
+  "relations": [
+    {
+      "run": "index:97c2e0c7264f0076a50db55123e850c5",
+      "id": "relation:d3f2fcce21c02a344a972a8ba215f19f",
+      "source": "symbol-instance:bd75e29d7df8c89eb98a5083a2378c7d",
+      "target": "symbol-instance:58552dda5e112e8fba721d89cb0741be",
+      "kind": "REFERS_TO",
+      "resolution": "resolved",
+      "data": {
+        "asset": "server/optimizer/producer.cpp",
+        "context": "tu:6fc9598600d296ec63dc0f662d803fab",
+        "end": 2,
+        "evidence": "evidence:a0832a34ff0f2323d5b549f1ecbe8b90",
+        "expansion_location": {
+          "asset": "server/optimizer/producer.cpp",
+          "column": 36,
+          "line": 2,
+          "offset": 52
+        },
+        "id": "relation:d3f2fcce21c02a344a972a8ba215f19f",
+        "kind": "REFERS_TO",
+        "name": "value",
+        "offset": 52,
+        "profile": "ecs-row",
+        "resolution": "resolved",
+        "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "source": "symbol-instance:bd75e29d7df8c89eb98a5083a2378c7d",
+        "source_logical": "symbol:77f2752b7b3f857a7f095392564a3018",
+        "spelling_location": {
+          "asset": "server/optimizer/producer.cpp",
+          "column": 36,
+          "line": 2,
+          "offset": 52
+        },
+        "start": 2,
+        "target": "symbol-instance:58552dda5e112e8fba721d89cb0741be",
+        "target_logical": "symbol:24f142df03e3d1b6c02e7c78228d89d3"
+      }
+    },
+    {
+      "run": "index:97c2e0c7264f0076a50db55123e850c5",
+      "id": "relation:2bd0cd4f335a3ee98b1a63f1f737a9ef",
+      "source": "symbol-instance:2fe112b6aa550078da4bf16163d70181",
+      "target": "symbol-instance:f2f090b0a6c9e954742432fb2803dd5d",
+      "kind": "INCLUDES",
+      "resolution": "resolved",
+      "data": {
+        "asset": "server/optimizer/producer.cpp",
+        "context": "tu:6fc9598600d296ec63dc0f662d803fab",
+        "end": 1,
+        "evidence": "evidence:897ef929d0ccc7e14149223c02ea983c",
+        "id": "relation:2bd0cd4f335a3ee98b1a63f1f737a9ef",
+        "kind": "INCLUDES",
+        "name": "server/include/api.h",
+        "profile": "ecs-row",
+        "resolution": "resolved",
+        "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "source": "symbol-instance:2fe112b6aa550078da4bf16163d70181",
+        "source_logical": "file:1a67a262cf7a1d3444c32c033fcc6dec",
+        "start": 1,
+        "target": "symbol-instance:f2f090b0a6c9e954742432fb2803dd5d",
+        "target_logical": "file:145016e619f9bbb516f80a3a9db23279"
+      }
+    },
+    {
+      "run": "index:97c2e0c7264f0076a50db55123e850c5",
+      "id": "relation:bf3ee53265706af034a4e17e93327303",
+      "source": "symbol-instance:dfd5a2908fd93e6ac8081a1ab4af61f3",
+      "target": "symbol-instance:ebab782f430ea75255f5c86949ee3019",
+      "kind": "CALLS",
+      "resolution": "resolved",
+      "data": {
+        "asset": "server/executor/consumer.cpp",
+        "context": "tu:68fc944f8c5c14fe26fbfe0ad0ba950d",
+        "end": 2,
+        "evidence": "evidence:b2570a5d32bdd7cff008d62e2c586530",
+        "expansion_location": {
+          "asset": "server/executor/consumer.cpp",
+          "column": 36,
+          "line": 2,
+          "offset": 52
+        },
+        "id": "relation:bf3ee53265706af034a4e17e93327303",
+        "kind": "CALLS",
+        "name": "cg_compute",
+        "offset": 52,
+        "profile": "ecs-row",
+        "resolution": "resolved",
+        "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "source": "symbol-instance:dfd5a2908fd93e6ac8081a1ab4af61f3",
+        "source_logical": "symbol:d88516988e884ee89026a26d605da70b",
+        "spelling_location": {
+          "asset": "server/executor/consumer.cpp",
+          "column": 36,
+          "line": 2,
+          "offset": 52
+        },
+        "start": 2,
+        "target": "symbol-instance:ebab782f430ea75255f5c86949ee3019",
+        "target_logical": "symbol:63ba9801549f1e8c2a477ab0c6a54264"
+      }
+    },
+    {
+      "run": "index:97c2e0c7264f0076a50db55123e850c5",
+      "id": "relation:1a4a82e3988f11630dfa685cd8a4a147",
+      "source": "symbol-instance:dfd5a2908fd93e6ac8081a1ab4af61f3",
+      "target": "symbol-instance:ebab782f430ea75255f5c86949ee3019",
+      "kind": "REFERS_TO",
+      "resolution": "resolved",
+      "data": {
+        "asset": "server/executor/consumer.cpp",
+        "context": "tu:68fc944f8c5c14fe26fbfe0ad0ba950d",
+        "end": 2,
+        "evidence": "evidence:b2570a5d32bdd7cff008d62e2c586530",
+        "expansion_location": {
+          "asset": "server/executor/consumer.cpp",
+          "column": 36,
+          "line": 2,
+          "offset": 52
+        },
+        "id": "relation:1a4a82e3988f11630dfa685cd8a4a147",
+        "kind": "REFERS_TO",
+        "name": "cg_compute",
+        "offset": 52,
+        "profile": "ecs-row",
+        "resolution": "resolved",
+        "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "source": "symbol-instance:dfd5a2908fd93e6ac8081a1ab4af61f3",
+        "source_logical": "symbol:d88516988e884ee89026a26d605da70b",
+        "spelling_location": {
+          "asset": "server/executor/consumer.cpp",
+          "column": 36,
+          "line": 2,
+          "offset": 52
+        },
+        "start": 2,
+        "target": "symbol-instance:ebab782f430ea75255f5c86949ee3019",
+        "target_logical": "symbol:63ba9801549f1e8c2a477ab0c6a54264"
+      }
+    },
+    {
+      "run": "index:97c2e0c7264f0076a50db55123e850c5",
+      "id": "relation:ea2cee9c6382c509b6de396e1429602a",
+      "source": "symbol-instance:dfd5a2908fd93e6ac8081a1ab4af61f3",
+      "target": "symbol-instance:4d80a39fd0cc1c3bf6ef260decc53a55",
+      "kind": "REFERS_TO",
+      "resolution": "resolved",
+      "data": {
+        "asset": "server/executor/consumer.cpp",
+        "context": "tu:68fc944f8c5c14fe26fbfe0ad0ba950d",
+        "end": 2,
+        "evidence": "evidence:b2570a5d32bdd7cff008d62e2c586530",
+        "expansion_location": {
+          "asset": "server/executor/consumer.cpp",
+          "column": 47,
+          "line": 2,
+          "offset": 63
+        },
+        "id": "relation:ea2cee9c6382c509b6de396e1429602a",
+        "kind": "REFERS_TO",
+        "name": "value",
+        "offset": 63,
+        "profile": "ecs-row",
+        "resolution": "resolved",
+        "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "source": "symbol-instance:dfd5a2908fd93e6ac8081a1ab4af61f3",
+        "source_logical": "symbol:d88516988e884ee89026a26d605da70b",
+        "spelling_location": {
+          "asset": "server/executor/consumer.cpp",
+          "column": 47,
+          "line": 2,
+          "offset": 63
+        },
+        "start": 2,
+        "target": "symbol-instance:4d80a39fd0cc1c3bf6ef260decc53a55",
+        "target_logical": "symbol:ccebe61eaabb82f435454f20ebb6614d"
+      }
+    },
+    {
+      "run": "index:97c2e0c7264f0076a50db55123e850c5",
+      "id": "relation:fb61c65ff8a7654a46f229929590741c",
+      "source": "symbol-instance:70e0ce3ec8a697cfa1af4ecbfa4f54e9",
+      "target": "symbol-instance:f2f090b0a6c9e954742432fb2803dd5d",
+      "kind": "INCLUDES",
+      "resolution": "resolved",
+      "data": {
+        "asset": "server/executor/consumer.cpp",
+        "context": "tu:68fc944f8c5c14fe26fbfe0ad0ba950d",
+        "end": 1,
+        "evidence": "evidence:c3fd10ce35add70e48ec5cd13a54ad44",
+        "id": "relation:fb61c65ff8a7654a46f229929590741c",
+        "kind": "INCLUDES",
+        "name": "server/include/api.h",
+        "profile": "ecs-row",
+        "resolution": "resolved",
+        "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "source": "symbol-instance:70e0ce3ec8a697cfa1af4ecbfa4f54e9",
+        "source_logical": "file:73570da10c0d475c858503c993e19e43",
+        "start": 1,
+        "target": "symbol-instance:f2f090b0a6c9e954742432fb2803dd5d",
+        "target_logical": "file:145016e619f9bbb516f80a3a9db23279"
+      }
+    }
+  ],
+  "anchors": [
+    {
+      "id": "evidence:b2570a5d32bdd7cff008d62e2c586530",
+      "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+      "asset": "server/executor/consumer.cpp",
+      "sha": "a5fcbde0572598f4ba15d8ad483577c41084a623a5f990272305c6e91cc82bef",
+      "start": 2,
+      "end": 2,
+      "data": {
+        "asset": "server/executor/consumer.cpp",
+        "asset_sha": "a5fcbde0572598f4ba15d8ad483577c41084a623a5f990272305c6e91cc82bef",
+        "end": 2,
+        "id": "evidence:b2570a5d32bdd7cff008d62e2c586530",
+        "quote_sha256": "b894e4388e608ec109c2d60e8a0519334085e574b3e0f1111d16c868fd00dd69",
+        "sha": "a5fcbde0572598f4ba15d8ad483577c41084a623a5f990272305c6e91cc82bef",
+        "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "start": 2,
+        "view": "source"
+      }
+    },
+    {
+      "id": "evidence:a0832a34ff0f2323d5b549f1ecbe8b90",
+      "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+      "asset": "server/optimizer/producer.cpp",
+      "sha": "3e256fc31373963bf7adff6b1ea8e4f2bdea46459e71f294ec4f146203554da0",
+      "start": 2,
+      "end": 2,
+      "data": {
+        "asset": "server/optimizer/producer.cpp",
+        "asset_sha": "3e256fc31373963bf7adff6b1ea8e4f2bdea46459e71f294ec4f146203554da0",
+        "end": 2,
+        "id": "evidence:a0832a34ff0f2323d5b549f1ecbe8b90",
+        "quote_sha256": "964be8a9636d96c001b3e13e03e37f0193bc319c13fac1058735c781a4dd7001",
+        "sha": "3e256fc31373963bf7adff6b1ea8e4f2bdea46459e71f294ec4f146203554da0",
+        "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "start": 2,
+        "view": "source"
+      }
+    },
+    {
+      "id": "evidence:f79c876f4fe21e7d36086aae6287866e",
+      "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+      "asset": "server/tools/idle.cpp",
+      "sha": "5fb03608a87d0226ba4ae724a8f164f6d5ea3c53a402fff9b151e6a1faa2ed17",
+      "start": 1,
+      "end": 1,
+      "data": {
+        "asset": "server/tools/idle.cpp",
+        "asset_sha": "5fb03608a87d0226ba4ae724a8f164f6d5ea3c53a402fff9b151e6a1faa2ed17",
+        "end": 1,
+        "id": "evidence:f79c876f4fe21e7d36086aae6287866e",
+        "quote_sha256": "5fb03608a87d0226ba4ae724a8f164f6d5ea3c53a402fff9b151e6a1faa2ed17",
+        "sha": "5fb03608a87d0226ba4ae724a8f164f6d5ea3c53a402fff9b151e6a1faa2ed17",
+        "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "start": 1,
+        "view": "source"
+      }
+    },
+    {
+      "id": "evidence:da5eea4060804c5ae7d1d6554c338b70",
+      "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+      "asset": "server/include/api.h",
+      "sha": "974f162642245ace9c9d9b867a7d3c67a44bdcc59ca4984f113e510cfad9bf5c",
+      "start": 2,
+      "end": 2,
+      "data": {
+        "asset": "server/include/api.h",
+        "asset_sha": "974f162642245ace9c9d9b867a7d3c67a44bdcc59ca4984f113e510cfad9bf5c",
+        "end": 2,
+        "id": "evidence:da5eea4060804c5ae7d1d6554c338b70",
+        "quote_sha256": "32b73b58dee39baff58087c83607d454218a01c5463387545e04af3bf20aa2ef",
+        "sha": "974f162642245ace9c9d9b867a7d3c67a44bdcc59ca4984f113e510cfad9bf5c",
+        "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "start": 2,
+        "view": "source"
+      }
+    },
+    {
+      "id": "evidence:897ef929d0ccc7e14149223c02ea983c",
+      "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+      "asset": "server/optimizer/producer.cpp",
+      "sha": "3e256fc31373963bf7adff6b1ea8e4f2bdea46459e71f294ec4f146203554da0",
+      "start": 1,
+      "end": 1,
+      "data": {
+        "asset": "server/optimizer/producer.cpp",
+        "asset_sha": "3e256fc31373963bf7adff6b1ea8e4f2bdea46459e71f294ec4f146203554da0",
+        "end": 1,
+        "id": "evidence:897ef929d0ccc7e14149223c02ea983c",
+        "quote_sha256": "7827ef7afa833a680e647d342aceca5c95e285e2cfdb008c332ada67e42d4c1c",
+        "sha": "3e256fc31373963bf7adff6b1ea8e4f2bdea46459e71f294ec4f146203554da0",
+        "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "start": 1,
+        "view": "source"
+      }
+    },
+    {
+      "id": "evidence:c3fd10ce35add70e48ec5cd13a54ad44",
+      "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+      "asset": "server/executor/consumer.cpp",
+      "sha": "a5fcbde0572598f4ba15d8ad483577c41084a623a5f990272305c6e91cc82bef",
+      "start": 1,
+      "end": 1,
+      "data": {
+        "asset": "server/executor/consumer.cpp",
+        "asset_sha": "a5fcbde0572598f4ba15d8ad483577c41084a623a5f990272305c6e91cc82bef",
+        "end": 1,
+        "id": "evidence:c3fd10ce35add70e48ec5cd13a54ad44",
+        "quote_sha256": "7827ef7afa833a680e647d342aceca5c95e285e2cfdb008c332ada67e42d4c1c",
+        "sha": "a5fcbde0572598f4ba15d8ad483577c41084a623a5f990272305c6e91cc82bef",
+        "snapshot": "snapshot:8814a56e8e9a61907f88c5f1d45212cd",
+        "start": 1,
+        "view": "source"
+      }
+    }
+  ],
+  "meta": [
+    {
+      "key": "snapshot_head",
+      "value": "snapshot:8814a56e8e9a61907f88c5f1d45212cd"
+    },
+    {
+      "key": "raw_structure:snapshot:8814a56e8e9a61907f88c5f1d45212cd:server/executor/consumer.cpp",
+      "value": {
+        "guards": [],
+        "macros": []
+      }
+    },
+    {
+      "key": "raw_structure:snapshot:8814a56e8e9a61907f88c5f1d45212cd:server/include/api.h",
+      "value": {
+        "guards": [],
+        "macros": []
+      }
+    },
+    {
+      "key": "raw_structure:snapshot:8814a56e8e9a61907f88c5f1d45212cd:server/optimizer/producer.cpp",
+      "value": {
+        "guards": [],
+        "macros": []
+      }
+    },
+    {
+      "key": "raw_structure:snapshot:8814a56e8e9a61907f88c5f1d45212cd:server/tools/idle.cpp",
+      "value": {
+        "guards": [],
+        "macros": []
+      }
+    },
+    {
+      "key": "index_head:snapshot:8814a56e8e9a61907f88c5f1d45212cd:ecs-row",
+      "value": "index:97c2e0c7264f0076a50db55123e850c5"
+    },
+    {
+      "key": "index_lease:index:97c2e0c7264f0076a50db55123e850c5",
+      "value": null
+    }
+  ]
+}

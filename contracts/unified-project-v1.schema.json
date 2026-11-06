@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:database-knowledge:unified-project:v1",
+  "title": "Unified source, design, manual and research-method project",
+  "type": "object",
+  "required": ["product", "repositories"],
+  "properties": {
+    "product": {"type": "string", "minLength": 1},
+    "revision": {"type": "string"},
+    "repositories": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/repository"}},
+    "materials": {"type": "array", "items": {"$ref": "#/$defs/material"}},
+    "methods": {"type": "array", "items": {"$ref": "#/$defs/material"}},
+    "profiles": {"type": "array", "items": {"$ref": "#/$defs/profile"}},
+    "module_prefixes": {"$ref": "#/$defs/strings"},
+    "ownership": {"type": "array", "items": {"type": "object", "required": ["prefix", "owner"], "properties": {"prefix": {"type": "string"}, "owner": {"type": "string"}}}}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+$"},
+    "strings": {"type": "array", "items": {"type": "string"}},
+    "repository": {"type": "object", "required": ["id", "root"], "properties": {"id": {"$ref": "#/$defs/id"}, "root": {"type": "string"}, "include": {"$ref": "#/$defs/strings"}, "exclude": {"$ref": "#/$defs/strings"}}},
+    "material": {"type": "object", "required": ["id", "path"], "properties": {"id": {"$ref": "#/$defs/id"}, "path": {"type": "string"}, "revision": {"type": "string"}, "material_kind": {"type": "string"}, "status": {"type": "string"}, "include": {"$ref": "#/$defs/strings"}, "exclude": {"$ref": "#/$defs/strings"}}},
+    "profile": {"type": "object", "required": ["id", "repository"], "properties": {"id": {"type": "string", "minLength": 1, "maxLength": 96, "not": {"const": "unknown"}}, "repository": {"$ref": "#/$defs/id"}, "compile_commands": {"type": "string"}, "commands": {"type": "array", "items": {"type": "object"}}, "extra_arguments": {"$ref": "#/$defs/strings"}, "toolchain": {"type": "string"}}}
+  },
+  "$comment": "Runtime also validates path isolation, actual material hashes, exact profile binding and supported static frontend arguments. JSON Schema does not attest semantic correctness."
+}

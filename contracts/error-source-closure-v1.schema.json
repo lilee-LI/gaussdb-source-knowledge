@@ -1,0 +1,202 @@
+{
+  "type": "object",
+  "properties": {
+    "contract": {
+      "const": "error-source-closure/v1"
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1
+    },
+    "search_limitations": {
+      "type": "string",
+      "minLength": 1
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "location": {
+            "type": "string",
+            "minLength": 1
+          },
+          "search_axes": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "code",
+                "message",
+                "sqlstate",
+                "wrapper",
+                "caller"
+              ]
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "disposition": {
+            "enum": [
+              "included",
+              "excluded",
+              "unresolved"
+            ]
+          },
+          "site_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 0,
+            "uniqueItems": true
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 0,
+            "uniqueItems": true
+          },
+          "next_step": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "location",
+          "search_axes",
+          "disposition",
+          "site_ids",
+          "reason",
+          "evidence_ids",
+          "next_step"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "obligations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "enum": [
+              "entry",
+              "state_writer",
+              "guard",
+              "cleanup",
+              "domain"
+            ]
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1
+          },
+          "site_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "cause_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 0,
+            "uniqueItems": true
+          },
+          "domain": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "closed",
+              "open",
+              "not_applicable"
+            ]
+          },
+          "conclusion": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 0,
+            "uniqueItems": true
+          },
+          "next_step": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "question",
+          "site_ids",
+          "cause_ids",
+          "domain",
+          "status",
+          "conclusion",
+          "evidence_ids",
+          "next_step"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "conclusion": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "enum": [
+            "complete_within_scope",
+            "partial"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "status",
+        "reason"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "contract",
+    "scope",
+    "search_limitations",
+    "candidates",
+    "obligations",
+    "conclusion"
+  ],
+  "additionalProperties": false
+}

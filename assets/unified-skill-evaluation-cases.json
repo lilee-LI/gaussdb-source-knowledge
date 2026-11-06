@@ -1,0 +1,223 @@
+{
+  "schema": "unified-skill-evaluation-cases/v1",
+  "status": "designed_not_executed",
+  "grading": "actual source-bound semantic review; no keyword-only pass",
+  "cases": [
+    {
+      "id": "errors-1",
+      "topic": "errors",
+      "name": "同码不同抛出点",
+      "prompt": "用户只给错误码，要求唯一根因。",
+      "acceptance_checks": [
+        "区分检测点与成因",
+        "保留未知并提出可区分的证据"
+      ],
+      "source_binding_required": true,
+      "execution_status": "not_run"
+    },
+    {
+      "id": "errors-2",
+      "topic": "errors",
+      "name": "异常传播",
+      "prompt": "错误在资源状态变更后发生，如何判断哪些清理必然执行？",
+      "acceptance_checks": [
+        "跟踪真实传播与清理",
+        "不能用条件取反直接给处理"
+      ],
+      "source_binding_required": true,
+      "execution_status": "not_run"
+    },
+    {
+      "id": "compatibility-1",
+      "topic": "compatibility",
+      "name": "重载与转换",
+      "prompt": "同名函数在两种实参类型下结果不同，能否只比较函数体？",
+      "acceptance_checks": [
+        "追注册、签名、转换和模式",
+        "区分文档、源码推导、实际目标结果"
+      ],
+      "source_binding_required": true,
+      "execution_status": "not_run"
+    },
+    {
+      "id": "compatibility-2",
+      "topic": "compatibility",
+      "name": "缓存与模式",
+      "prompt": "已有表达式或计划在模式变化后复用，哪些语义已经固化？",
+      "acceptance_checks": [
+        "核对缓存键、构建、失效和执行读取",
+        "证据不足时保留未知"
+      ],
+      "source_binding_required": true,
+      "execution_status": "not_run"
+    },
+    {
+      "id": "memory-1",
+      "topic": "memory",
+      "name": "上下文与指针",
+      "prompt": "对象在上下文清理后仍由另一个节点持有，如何判断有效期？",
+      "acceptance_checks": [
+        "追所有者、别名、最后合法使用与清理",
+        "不能把切换解释成搬迁"
+      ],
+      "source_binding_required": true,
+      "execution_status": "not_run"
+    },
+    {
+      "id": "memory-2",
+      "topic": "memory",
+      "name": "统计与泄漏",
+      "prompt": "逻辑清理后 RSS 没有下降，能否判定泄漏？",
+      "acceptance_checks": [
+        "核对指标口径、allocator保留和负载",
+        "给出竞争解释及区分方法"
+      ],
+      "source_binding_required": true,
+      "execution_status": "not_run"
+    },
+    {
+      "id": "guc-1",
+      "topic": "guc",
+      "name": "显示与消费",
+      "prompt": "显示值已改变，能否证明已有计划使用了新值？",
+      "acceptance_checks": [
+        "追生效阶段、消费者和缓存",
+        "不默认 reload/重连/重启"
+      ],
+      "source_binding_required": true,
+      "execution_status": "not_run"
+    },
+    {
+      "id": "guc-2",
+      "topic": "guc",
+      "name": "覆盖与钩子",
+      "prompt": "多个配置入口同时设置，错误或副作用在何阶段发生？",
+      "acceptance_checks": [
+        "核对实际覆盖关系和hook顺序",
+        "绑定版本/角色/事务范围"
+      ],
+      "source_binding_required": true,
+      "execution_status": "not_run"
+    },
+    {
+      "id": "waits-1",
+      "topic": "waits",
+      "name": "唤醒与授予",
+      "prompt": "线程被唤醒是否代表它已获得资源？",
+      "acceptance_checks": [
+        "区分唤醒、重试、授予与退出",
+        "核对取消与队列清理"
+      ],
+      "source_binding_required": true,
+      "execution_status": "not_run"
+    },
+    {
+      "id": "waits-2",
+      "topic": "waits",
+      "name": "计时与采样",
+      "prompt": "事件未被采样且累计值不变，能否排除短等待？",
+      "acceptance_checks": [
+        "核对时钟、主体、开关及重置",
+        "不从事件名虚构持续时间"
+      ],
+      "source_binding_required": true,
+      "execution_status": "not_run"
+    },
+    {
+      "id": "views-1",
+      "topic": "views",
+      "name": "空值与权限",
+      "prompt": "同一系统视图在不同身份下出现 NULL/无行，怎样解释？",
+      "acceptance_checks": [
+        "追权限、置空及字段生产者",
+        "NULL/零/失败分别判断"
+      ],
+      "source_binding_required": true,
+      "execution_status": "not_run"
+    },
+    {
+      "id": "views-2",
+      "topic": "views",
+      "name": "跨视图关联",
+      "prompt": "两个视图的编号相同，能否断言同一时刻的同一对象？",
+      "acceptance_checks": [
+        "核对标识复用与快照一致性",
+        "保留时间和节点范围"
+      ],
+      "source_binding_required": true,
+      "execution_status": "not_run"
+    },
+    {
+      "id": "tools-1",
+      "topic": "tools",
+      "name": "退出与结果",
+      "prompt": "工具退出码成功是否足以证明迁移等价？",
+      "acceptance_checks": [
+        "核对对象、数据、约束和提交阶段",
+        "区分客户端与服务器状态"
+      ],
+      "source_binding_required": true,
+      "execution_status": "not_run"
+    },
+    {
+      "id": "tools-2",
+      "topic": "tools",
+      "name": "中断与重试",
+      "prompt": "部分数据提交后重试，是否可以保证幂等？",
+      "acceptance_checks": [
+        "追残留、checkpoint和提交边界",
+        "未读路径不宣称支持续传"
+      ],
+      "source_binding_required": true,
+      "execution_status": "not_run"
+    },
+    {
+      "id": "decoding-1",
+      "topic": "decoding",
+      "name": "确认与持久化",
+      "prompt": "确认位点推进是否证明下游已经持久化？",
+      "acceptance_checks": [
+        "区分各位点及确认层次",
+        "需要消费端证据"
+      ],
+      "source_binding_required": true,
+      "execution_status": "not_run"
+    },
+    {
+      "id": "decoding-2",
+      "topic": "decoding",
+      "name": "槽与重启",
+      "prompt": "删除重建槽是否可保证无重复无遗漏？",
+      "acceptance_checks": [
+        "明确一致基线、快照及restart条件",
+        "保留资源和恢复缺口"
+      ],
+      "source_binding_required": true,
+      "execution_status": "not_run"
+    },
+    {
+      "id": "kernel-algorithm_contract",
+      "topic": "kernel",
+      "name": "algorithm_contract",
+      "prompt": "算法的前置、后置、不变量与物理属性是什么？",
+      "acceptance_checks": [
+        "给出真实生产者/消费者和不变量",
+        "用最近反例挑战；未建立的保证保留未知"
+      ],
+      "source_binding_required": true,
+      "execution_status": "not_run"
+    },
+    {
+      "id": "kernel-concurrency",
+      "topic": "kernel",
+      "name": "concurrency",
+      "prompt": "共享状态的锁序、发布、唤醒和并发交错怎样成立？",
+      "acceptance_checks": [
+        "给出真实生产者/消费者和不变量",
+        "用最近反例挑战；未建立的保证保留未知"
+      ],
+      "source_binding_required": true,
+      "execution_status": "not_run"
+    }
+  ]
+}

@@ -1,0 +1,921 @@
+{
+  "type": "object",
+  "properties": {
+    "contract": {
+      "const": "error-causal/v1"
+    },
+    "field_conclusion": {
+      "const": "not_assessed"
+    },
+    "identity": {
+      "type": "object",
+      "properties": {
+        "requested_code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "meaning": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mapping_limitations": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "sqlstates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1
+              },
+              "meaning": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "code",
+              "meaning"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0
+        },
+        "mapping_status": {
+          "enum": [
+            "bound",
+            "alias_only",
+            "unresolved"
+          ]
+        }
+      },
+      "required": [
+        "requested_code",
+        "meaning",
+        "mapping_limitations",
+        "evidence_ids",
+        "sqlstates",
+        "mapping_status"
+      ],
+      "additionalProperties": false
+    },
+    "searches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scope": {
+            "type": "string",
+            "minLength": 1
+          },
+          "limitation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "axis": {
+            "enum": [
+              "code",
+              "message",
+              "sqlstate",
+              "wrapper",
+              "caller"
+            ]
+          }
+        },
+        "required": [
+          "query",
+          "scope",
+          "limitation",
+          "axis"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 5
+    },
+    "sites": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "severity": {
+            "type": "string",
+            "minLength": 1
+          },
+          "checked_predicate": {
+            "type": "string",
+            "minLength": 1
+          },
+          "normal_behavior": {
+            "type": "string",
+            "minLength": 1
+          },
+          "state_effect": {
+            "type": "string",
+            "minLength": 1
+          },
+          "cleanup": {
+            "type": "string",
+            "minLength": 1
+          },
+          "next_step": {
+            "type": "string"
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "claim_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "status": {
+            "enum": [
+              "analyzed",
+              "open"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "message",
+          "severity",
+          "checked_predicate",
+          "normal_behavior",
+          "state_effect",
+          "cleanup",
+          "next_step",
+          "evidence_ids",
+          "claim_ids",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "causes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "upstream_origin": {
+            "type": "string",
+            "minLength": 1
+          },
+          "distinguishing_fact": {
+            "type": "string",
+            "minLength": 1
+          },
+          "gap": {
+            "type": "string"
+          },
+          "next_step": {
+            "type": "string"
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "site_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "chain": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "step": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "evidence_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "minItems": 1,
+                  "uniqueItems": true
+                }
+              },
+              "required": [
+                "step",
+                "evidence_ids"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 2
+          },
+          "prerequisites": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "alternative_cause_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 0,
+            "uniqueItems": true
+          },
+          "claim_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "status": {
+            "enum": [
+              "source_supported",
+              "hypothesis"
+            ]
+          },
+          "obligation_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 0,
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "upstream_origin",
+          "distinguishing_fact",
+          "gap",
+          "next_step",
+          "evidence_ids",
+          "site_ids",
+          "chain",
+          "prerequisites",
+          "alternative_cause_ids",
+          "claim_ids",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "entry": {
+            "type": "string",
+            "minLength": 1
+          },
+          "what_changes_decision": {
+            "type": "string",
+            "minLength": 1
+          },
+          "limitations": {
+            "type": "string",
+            "minLength": 1
+          },
+          "next_step": {
+            "type": "string"
+          },
+          "cause_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "conditions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "symptoms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "lookalikes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "discriminator_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 0,
+            "uniqueItems": true
+          },
+          "action_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 0,
+            "uniqueItems": true
+          },
+          "status": {
+            "enum": [
+              "conditional_playbook",
+              "needs_evidence",
+              "source_gap",
+              "no_safe_action"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "entry",
+          "what_changes_decision",
+          "limitations",
+          "next_step",
+          "cause_ids",
+          "conditions",
+          "symptoms",
+          "lookalikes",
+          "discriminator_ids",
+          "action_ids",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "discriminators": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1
+          },
+          "positive_condition": {
+            "type": "string",
+            "minLength": 1
+          },
+          "negative_condition": {
+            "type": "string",
+            "minLength": 1
+          },
+          "unknown_behavior": {
+            "type": "string",
+            "minLength": 1
+          },
+          "attribution_limit": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "scenario_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "supports_cause_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 0,
+            "uniqueItems": true
+          },
+          "excludes_cause_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 0,
+            "uniqueItems": true
+          },
+          "collection_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "id",
+          "question",
+          "positive_condition",
+          "negative_condition",
+          "unknown_behavior",
+          "attribution_limit",
+          "evidence_ids",
+          "scenario_ids",
+          "supports_cause_ids",
+          "excludes_cause_ids",
+          "collection_ids"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 0
+    },
+    "collections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1
+          },
+          "privileges": {
+            "type": "string",
+            "minLength": 1
+          },
+          "timing": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expected_output": {
+            "type": "string",
+            "minLength": 1
+          },
+          "safety": {
+            "type": "string",
+            "minLength": 1
+          },
+          "empty_or_failure_meaning": {
+            "type": "string",
+            "minLength": 1
+          },
+          "origin": {
+            "enum": [
+              "source_derived",
+              "unknown"
+            ]
+          },
+          "commands": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "language": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "language",
+                "text"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 0,
+            "uniqueItems": true
+          },
+          "execution": {
+            "const": "not_run"
+          }
+        },
+        "required": [
+          "id",
+          "purpose",
+          "target",
+          "privileges",
+          "timing",
+          "expected_output",
+          "safety",
+          "empty_or_failure_meaning",
+          "origin",
+          "commands",
+          "evidence_ids",
+          "execution"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 0
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expected_state_change": {
+            "type": "string",
+            "minLength": 1
+          },
+          "impact": {
+            "type": "string",
+            "minLength": 1
+          },
+          "permissions_and_owner": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rollback": {
+            "type": "string",
+            "minLength": 1
+          },
+          "failure_exit": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "scenario_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "cause_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "category": {
+            "enum": [
+              "recovery",
+              "workaround",
+              "durable_fix",
+              "prevention"
+            ]
+          },
+          "positive_preconditions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "exclusion_conditions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "semantic_invariants": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "verification": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "criterion": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "level": {
+                  "enum": [
+                    "detector",
+                    "business",
+                    "side_effect",
+                    "recurrence"
+                  ]
+                }
+              },
+              "required": [
+                "criterion",
+                "level"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 2
+          },
+          "execution": {
+            "const": "not_run"
+          }
+        },
+        "required": [
+          "id",
+          "expected_state_change",
+          "impact",
+          "permissions_and_owner",
+          "rollback",
+          "failure_exit",
+          "evidence_ids",
+          "scenario_ids",
+          "cause_ids",
+          "category",
+          "positive_preconditions",
+          "exclusion_conditions",
+          "operations",
+          "semantic_invariants",
+          "verification",
+          "execution"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 0
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "input": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expected_source_path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expected_outcome": {
+            "type": "string",
+            "minLength": 1
+          },
+          "derivation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "scenario_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "kind": {
+            "enum": [
+              "trigger",
+              "nearest_normal",
+              "competing_cause",
+              "failed_remedy"
+            ]
+          },
+          "execution": {
+            "const": "not_run"
+          },
+          "cause_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "id",
+          "input",
+          "expected_source_path",
+          "expected_outcome",
+          "derivation",
+          "evidence_ids",
+          "scenario_ids",
+          "kind",
+          "execution",
+          "cause_ids"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 0
+    },
+    "coverage": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "site_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "next_step": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "covered",
+              "open",
+              "out_of_scope"
+            ]
+          },
+          "cause_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 0,
+            "uniqueItems": true
+          },
+          "scenario_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 0,
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "site_id",
+          "next_step",
+          "status",
+          "cause_ids",
+          "scenario_ids"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "source_closure": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "contract",
+    "field_conclusion",
+    "identity",
+    "searches",
+    "sites",
+    "causes",
+    "scenarios",
+    "discriminators",
+    "collections",
+    "actions",
+    "cases",
+    "coverage"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:database-knowledge:unified-topic-extensions:v1",
+  "title": "Professional topic structures on a unified knowledge unit",
+  "type": "object",
+  "properties": {
+    "errors": {"$ref": "#/$defs/extension"},
+    "compatibility": {"$ref": "#/$defs/extension"},
+    "memory": {"$ref": "#/$defs/extension"},
+    "guc": {"$ref": "#/$defs/extension"},
+    "waits": {"$ref": "#/$defs/extension"},
+    "views": {"$ref": "#/$defs/extension"},
+    "tools": {"$ref": "#/$defs/extension"},
+    "decoding": {"$ref": "#/$defs/extension"}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "evidence": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^evidence:[0-9a-f]{32}$"}},
+    "coverage": {
+      "type": "object", "required": ["check", "status", "explanation"],
+      "properties": {
+        "check": {"type": "string", "minLength": 1},
+        "status": {"enum": ["answered", "open", "not_applicable"]},
+        "explanation": {"type": "string", "minLength": 1},
+        "evidence_refs": {"$ref": "#/$defs/evidence"},
+        "knowledge_refs": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "next_step": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {"if": {"properties": {"status": {"const": "answered"}}}, "then": {"anyOf": [{"required": ["evidence_refs"], "properties": {"evidence_refs": {"minItems": 1}}}, {"required": ["knowledge_refs"], "properties": {"knowledge_refs": {"minItems": 1}}}]}},
+        {"if": {"properties": {"status": {"const": "open"}}}, "then": {"required": ["next_step"]}}
+      ]
+    },
+    "extension": {
+      "type": "object", "required": ["contract", "depth", "scope", "coverage", "details"],
+      "properties": {
+        "contract": {"const": "unified-topic-extensions/v1"},
+        "depth": {"enum": ["reference", "mechanism", "survey"]},
+        "scope": {"type": "string", "minLength": 1},
+        "coverage": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/coverage"}},
+        "details": {"type": "object", "additionalProperties": {"type": ["object", "array"]}}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$comment": "The profile registry and unified_skill_methods.py additionally enforce depth-specific checks, required topic delivery and evidence/knowledge dependency registration. Existence, actual reads, scope freshness and semantic acceptance remain the unified engine's responsibility."
+}

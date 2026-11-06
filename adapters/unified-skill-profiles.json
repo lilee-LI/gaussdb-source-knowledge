@@ -1,0 +1,393 @@
+{
+  "protocol": "unified-skill/v1",
+  "extension_contract": "unified-topic-extensions/v1",
+  "common_methods": [
+    "references/unified-skill-protocol.md",
+    "references/unified-topic-contract.md",
+    "references/unified-kernel-research-checks.md",
+    "references/common/research-depth.md",
+    "SKILL.md",
+    "skills/source-repository-learning/SKILL.md",
+    "adapters/unified-skill-profiles.json",
+    "contracts/unified-topic-extensions-v1.schema.json",
+    "contracts/unified-knowledge-proposal-v1.schema.json"
+  ],
+  "core_checks": {
+    "algorithm_contract": "算法的前置、后置、不变量与物理属性是什么？",
+    "transactions_visibility": "事务、快照与提交回滚如何影响状态可见性？",
+    "concurrency": "共享状态的锁序、发布、唤醒和并发交错怎样成立？",
+    "durability_recovery": "持久化、WAL、失败与恢复分别在什么边界发生？",
+    "cache_invalidation": "哪些决定固化、哪些重算，何时必须失效或重建？",
+    "build_scope": "宏、编译、架构、插件和节点角色如何选择实际路径？"
+  },
+  "topics": {
+    "errors": {
+      "title": "错误与断言",
+      "skill": "engine/source-error-learning/SKILL.md",
+      "sections": [
+        "normal_and_failure",
+        "causes_and_cleanup",
+        "diagnosis_and_actions"
+      ],
+      "required_sections": {
+        "reference": [
+          "normal_and_failure"
+        ],
+        "mechanism": [
+          "normal_and_failure",
+          "causes_and_cleanup"
+        ],
+        "survey": [
+          "normal_and_failure",
+          "causes_and_cleanup",
+          "diagnosis_and_actions",
+          "scope_inventory"
+        ]
+      },
+      "methods": {
+        "reference": [
+          "engine/source-error-learning/SKILL.md",
+          "references/domains/errors.md"
+        ],
+        "mechanism": [
+          "engine/source-error-learning/SKILL.md",
+          "references/domains/errors.md",
+          "references/source-only/errors.md",
+          "engine/source-error-learning/references/error-causal-learning.md",
+          "engine/source-error-learning/references/error-learning-quality.md"
+        ],
+        "survey": [
+          "engine/source-error-learning/SKILL.md",
+          "references/domains/errors.md",
+          "references/source-only/errors.md",
+          "engine/source-error-learning/references/error-causal-learning.md",
+          "engine/source-error-learning/references/error-learning-quality.md",
+          "engine/source-error-learning/references/field-scenario-playbooks.md",
+          "references/error-source-closure.md",
+          "references/error-applicability.md",
+          "references/source-version-evidence.md"
+        ]
+      },
+      "preserved_structures": [
+        "error_analysis",
+        "error_applicability",
+        "source_closure"
+      ]
+    },
+    "compatibility": {
+      "title": "兼容语义",
+      "skill": "skills/source-compatibility-learning/SKILL.md",
+      "sections": [
+        "inputs_and_binding",
+        "conditions_and_branches",
+        "behavior_and_counterexamples"
+      ],
+      "required_sections": {
+        "reference": [
+          "inputs_and_binding"
+        ],
+        "mechanism": [
+          "inputs_and_binding",
+          "conditions_and_branches",
+          "behavior_and_counterexamples"
+        ],
+        "survey": [
+          "inputs_and_binding",
+          "conditions_and_branches",
+          "behavior_and_counterexamples",
+          "scope_inventory"
+        ]
+      },
+      "methods": {
+        "reference": [
+          "skills/source-compatibility-learning/SKILL.md",
+          "references/domains/compatibility.md"
+        ],
+        "mechanism": [
+          "skills/source-compatibility-learning/SKILL.md",
+          "references/domains/compatibility.md",
+          "references/source-only/compatibility.md"
+        ],
+        "survey": [
+          "skills/source-compatibility-learning/SKILL.md",
+          "references/domains/compatibility.md",
+          "references/source-only/compatibility.md",
+          "references/domains/compatibility-map.md"
+        ]
+      },
+      "preserved_structures": [
+        "semantic_decision_matrix"
+      ]
+    },
+    "memory": {
+      "title": "内存上下文",
+      "skill": "skills/source-memory-learning/SKILL.md",
+      "sections": [
+        "ownership_and_lifetime",
+        "allocation_and_cleanup",
+        "accounting_and_growth"
+      ],
+      "required_sections": {
+        "reference": [
+          "ownership_and_lifetime"
+        ],
+        "mechanism": [
+          "ownership_and_lifetime",
+          "allocation_and_cleanup"
+        ],
+        "survey": [
+          "ownership_and_lifetime",
+          "allocation_and_cleanup",
+          "accounting_and_growth",
+          "scope_inventory"
+        ]
+      },
+      "methods": {
+        "reference": [
+          "skills/source-memory-learning/SKILL.md",
+          "references/domains/memory.md"
+        ],
+        "mechanism": [
+          "skills/source-memory-learning/SKILL.md",
+          "references/domains/memory.md",
+          "references/source-only/memory.md"
+        ],
+        "survey": [
+          "skills/source-memory-learning/SKILL.md",
+          "references/domains/memory.md",
+          "references/source-only/memory.md"
+        ]
+      },
+      "preserved_structures": [
+        "ownership_table",
+        "lifetime_edges",
+        "metric_accounting"
+      ]
+    },
+    "waits": {
+      "title": "等待事件与耗时分析",
+      "skill": "skills/source-wait-learning/SKILL.md",
+      "sections": [
+        "state_lifecycle",
+        "timing_and_scope",
+        "cancellation_and_observation"
+      ],
+      "required_sections": {
+        "reference": [
+          "state_lifecycle"
+        ],
+        "mechanism": [
+          "state_lifecycle",
+          "timing_and_scope",
+          "cancellation_and_observation"
+        ],
+        "survey": [
+          "state_lifecycle",
+          "timing_and_scope",
+          "cancellation_and_observation",
+          "scope_inventory"
+        ]
+      },
+      "methods": {
+        "reference": [
+          "skills/source-wait-learning/SKILL.md",
+          "references/domains/waits.md"
+        ],
+        "mechanism": [
+          "skills/source-wait-learning/SKILL.md",
+          "references/domains/waits.md",
+          "references/source-only/waits.md"
+        ],
+        "survey": [
+          "skills/source-wait-learning/SKILL.md",
+          "references/domains/waits.md",
+          "references/source-only/waits.md"
+        ]
+      },
+      "preserved_structures": [
+        "state_lifecycle",
+        "timing_and_scope",
+        "cancellation_and_observation"
+      ]
+    },
+    "views": {
+      "title": "系统视图",
+      "skill": "skills/source-view-learning/SKILL.md",
+      "sections": [
+        "definition_and_lineage",
+        "visibility_and_consistency",
+        "field_semantics"
+      ],
+      "required_sections": {
+        "reference": [
+          "definition_and_lineage"
+        ],
+        "mechanism": [
+          "definition_and_lineage",
+          "visibility_and_consistency",
+          "field_semantics"
+        ],
+        "survey": [
+          "definition_and_lineage",
+          "visibility_and_consistency",
+          "field_semantics",
+          "scope_inventory"
+        ]
+      },
+      "methods": {
+        "reference": [
+          "skills/source-view-learning/SKILL.md",
+          "references/domains/views.md"
+        ],
+        "mechanism": [
+          "skills/source-view-learning/SKILL.md",
+          "references/domains/views.md",
+          "references/source-only/views.md"
+        ],
+        "survey": [
+          "skills/source-view-learning/SKILL.md",
+          "references/domains/views.md",
+          "references/source-only/views.md"
+        ]
+      },
+      "preserved_structures": [
+        "definition_and_lineage",
+        "visibility_and_consistency",
+        "field_semantics"
+      ]
+    },
+    "tools": {
+      "title": "外围工具",
+      "skill": "skills/source-tool-learning/SKILL.md",
+      "sections": [
+        "options_and_stages",
+        "consistency_and_dependencies",
+        "failure_and_verification"
+      ],
+      "required_sections": {
+        "reference": [
+          "options_and_stages"
+        ],
+        "mechanism": [
+          "options_and_stages",
+          "consistency_and_dependencies",
+          "failure_and_verification"
+        ],
+        "survey": [
+          "options_and_stages",
+          "consistency_and_dependencies",
+          "failure_and_verification",
+          "scope_inventory"
+        ]
+      },
+      "methods": {
+        "reference": [
+          "skills/source-tool-learning/SKILL.md",
+          "references/domains/tools.md"
+        ],
+        "mechanism": [
+          "skills/source-tool-learning/SKILL.md",
+          "references/domains/tools.md",
+          "references/source-only/tools.md"
+        ],
+        "survey": [
+          "skills/source-tool-learning/SKILL.md",
+          "references/domains/tools.md",
+          "references/source-only/tools.md"
+        ]
+      },
+      "preserved_structures": [
+        "options_and_stages",
+        "consistency_and_dependencies",
+        "failure_and_verification"
+      ]
+    },
+    "decoding": {
+      "title": "逻辑解码",
+      "skill": "skills/source-decoding-learning/SKILL.md",
+      "sections": [
+        "transaction_and_snapshot",
+        "positions_and_confirmation",
+        "resources_and_restart"
+      ],
+      "required_sections": {
+        "reference": [
+          "transaction_and_snapshot"
+        ],
+        "mechanism": [
+          "transaction_and_snapshot",
+          "positions_and_confirmation",
+          "resources_and_restart"
+        ],
+        "survey": [
+          "transaction_and_snapshot",
+          "positions_and_confirmation",
+          "resources_and_restart",
+          "scope_inventory"
+        ]
+      },
+      "methods": {
+        "reference": [
+          "skills/source-decoding-learning/SKILL.md",
+          "references/domains/decoding.md"
+        ],
+        "mechanism": [
+          "skills/source-decoding-learning/SKILL.md",
+          "references/domains/decoding.md",
+          "references/source-only/decoding.md"
+        ],
+        "survey": [
+          "skills/source-decoding-learning/SKILL.md",
+          "references/domains/decoding.md",
+          "references/source-only/decoding.md"
+        ]
+      },
+      "preserved_structures": [
+        "transaction_and_snapshot",
+        "positions_and_confirmation",
+        "resources_and_restart"
+      ]
+    },
+    "guc": {
+      "title": "GUC 与配置",
+      "skill": "skills/source-guc-learning/SKILL.md",
+      "sections": [
+        "parameter_definition",
+        "precedence_and_effective_time",
+        "consumers_and_observation"
+      ],
+      "required_sections": {
+        "reference": [
+          "parameter_definition"
+        ],
+        "mechanism": [
+          "parameter_definition",
+          "precedence_and_effective_time",
+          "consumers_and_observation"
+        ],
+        "survey": [
+          "parameter_definition",
+          "precedence_and_effective_time",
+          "consumers_and_observation",
+          "scope_inventory"
+        ]
+      },
+      "methods": {
+        "reference": [
+          "skills/source-guc-learning/SKILL.md"
+        ],
+        "mechanism": [
+          "skills/source-guc-learning/SKILL.md"
+        ],
+        "survey": [
+          "skills/source-guc-learning/SKILL.md"
+        ]
+      },
+      "preserved_structures": [
+        "parameter_definition",
+        "setting_precedence",
+        "effect_timeline"
+      ]
+    }
+  }
+}
