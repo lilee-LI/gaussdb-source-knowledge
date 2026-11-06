@@ -29,6 +29,8 @@ def symbol_dependency(store, run, symbol):
     proof = {"logical": value["logical"], "name": value["name"], "kind": value["kind"], "type": value.get("type"),
              "resolution": value["resolution"], "quote": evidence["quote_sha256"],
              "outgoing": sorted((e["kind"], e.get("target_logical", e["target"]), e["resolution"]) for e in outgoing)}
+    if value.get("type_observations"):
+        proof["type_observations"] = value["type_observations"]
     return {"type": "symbol", "ref": value["logical"], "fingerprint": digest(proof)}
 
 

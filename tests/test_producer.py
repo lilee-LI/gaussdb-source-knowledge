@@ -8,13 +8,39 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from unified_knowledge.assembly import integrate
+from unified_knowledge.assembly import integrate, merge_occurrences
 from unified_knowledge.indexer import _persist_payload, compiler_arguments
 from unified_knowledge.materials import ingest
 from unified_knowledge.store import Store, canonical, now
 
 
 class NativeProducerTests(unittest.TestCase):
+    def test_native_types_remain_bound_to_disjoint_contexts(self):
+        old = {"evidence":"same", "type":"void () noexcept", "contexts":["tu:1"]}
+        new = {"evidence":"same", "type":"void ()", "contexts":["tu:2"]}
+        merged = merge_occurrences(old, new, native=True)
+        self.assertIsNone(merged["type"])
+        self.assertEqual("context_dependent", merged["type_resolution"])
+        self.assertEqual(merged, merge_occurrences(new, old, native=True))
+        self.assertEqual(merged, merge_occurrences(merged, old, native=True))
+        self.assertEqual(["tu:1","tu:2"], merged["contexts"])
+        self.assertEqual(2, len(merged["type_observations"]))
+
+    def test_type_conflicts_within_one_context_are_rejected(self):
+        old = {"evidence":"same", "type":"void () noexcept", "contexts":["tu:1"]}
+        new = {"evidence":"same", "type":"void ()", "contexts":["tu:1"]}
+        with self.assertRaisesRegex(ValueError, "same TU context"):
+            merge_occurrences(old, new, native=True)
+        new["contexts"] = ["tu:2"]
+        with self.assertRaisesRegex(ValueError, "Conflicting symbol occurrences"):
+            merge_occurrences(old, new)
+
+    def test_native_evidence_conflicts_are_rejected(self):
+        old = {"evidence":"old", "type":"void ()", "contexts":["tu:1"]}
+        new = {"evidence":"new", "type":"void ()", "contexts":["tu:2"]}
+        with self.assertRaisesRegex(ValueError, "symbol evidence"):
+            merge_occurrences(old, new, native=True)
+
     def test_native_warning_suppression_flag(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()

@@ -7,6 +7,35 @@ from .graph_facts import link_calls
 from .store import canonical, digest, identity, now, require
 
 
+def merge_occurrences(old, incoming, *, native=False):
+    """Keep a physical occurrence's type observations bound to their TU contexts."""
+    require(old["evidence"] == incoming["evidence"],
+            "Conflicting symbol evidence in this build profile")
+    merged = dict(incoming)
+    merged["contexts"] = sorted(set(old["contexts"]) | set(incoming["contexts"]))
+    if old.get("type") == incoming.get("type") and not (
+            old.get("type_observations") or incoming.get("type_observations")):
+        return merged
+    require(native, "Conflicting symbol occurrences in this build profile")
+    observations = {}
+    context_types = {}
+    for item in (old, incoming):
+        for observation in item.get("type_observations") or [
+                {"type":item.get("type"), "contexts":item["contexts"]}]:
+            value = observation["type"]
+            for context in observation["contexts"]:
+                require(context not in context_types or context_types[context] == value,
+                        "Conflicting symbol types in the same TU context")
+                context_types[context] = value
+                observations.setdefault(value, set()).add(context)
+    merged["type"] = None
+    merged["type_resolution"] = "context_dependent"
+    merged["type_observations"] = sorted(
+        ({"type":kind,"contexts":sorted(contexts)} for kind,contexts in observations.items()),
+        key=canonical)
+    return merged
+
+
 def integrate(store, run_ids=(), profile=None, *, snapshot=None, retry_failed=False):
     if snapshot:
         plan = {"snapshot":snapshot,"profile":profile}
@@ -22,7 +51,9 @@ def integrate(store, run_ids=(), profile=None, *, snapshot=None, retry_failed=Fa
     inputs = [store.record("runs", k) for k in sorted(set(run_ids))]
     require(all(r["snapshot"] == plan["snapshot"] and r["profile"] == profile and r["status"] in {"ready", "partial"}
                 and r.get("mode") in {"selected", "full"} for r in inputs), "Incompatible module graph scope")
-    scope = ["assemble/v2", [(r["id"], r["facts_digest"]) for r in inputs]]
+    native = {r.get("native_facts") for r in inputs}
+    native_inputs = len(native)==1 and None not in native
+    scope = ["assemble/v3" if native_inputs else "assemble/v2", [(r["id"], r["facts_digest"]) for r in inputs]]
     if retry_failed:
         scope.append({"retry_failed":True})
     rid = identity("assembled", scope)
@@ -63,9 +94,7 @@ def integrate(store, run_ids=(), profile=None, *, snapshot=None, retry_failed=Fa
                 prior = store.db.execute("SELECT data FROM symbols WHERE run=? AND id=?", (rid, s["id"])).fetchone()
                 if prior:
                     old = json.loads(prior[0])
-                    require(old["evidence"] == s["evidence"] and old.get("type") == s.get("type"),
-                            "Conflicting symbol occurrences in this build profile")
-                    s["contexts"] = sorted(set(old["contexts"]) | set(s["contexts"]))
+                    s = merge_occurrences(old, s, native=native_inputs)
                 store.db.execute("INSERT OR REPLACE INTO symbols VALUES(?,?,?,?,?,?,?)",
                                  (rid, s["id"], s["logical"], s["name"], s["asset"], s["kind"], canonical(s)))
             store.db.execute("INSERT OR IGNORE INTO relations SELECT ?,id,source,target,kind,resolution,data FROM relations WHERE run=?", (rid, run["id"]))
@@ -84,8 +113,7 @@ def integrate(store, run_ids=(), profile=None, *, snapshot=None, retry_failed=Fa
                   "inputs": [r["id"] for r in inputs], "selected_files": sorted(files), "coverage": coverage,
                   "tu_results": [tu for _, tu in units.values()], "frontend_invocations": 0,
                   "facts_digest": digest([rid, links]), "database_execution": "not_run"}
-        native = {r.get("native_facts") for r in inputs}
-        if len(native)==1 and None not in native:
+        if native_inputs:
             record["native_facts"] = next(iter(native))
             record["evidence_assets"] = sorted({a for r in inputs for a in r["evidence_assets"]})
             record["coverage"]["source_evidence_files"] = len(record["evidence_assets"])
