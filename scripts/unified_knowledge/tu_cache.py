@@ -47,8 +47,10 @@ def guard(store, snapshot, source_key, arguments, originals, includes):
     closed_search = "-nostdinc" in arguments and not any(os.environ.get(k) for k in
         ("CPATH", "C_INCLUDE_PATH", "CPLUS_INCLUDE_PATH", "INCLUDE"))
     for i, value in enumerate(arguments):
-        if value in ("-I", "-iquote", "-isystem"):
+        if value in ("-I", "-iquote", "-isystem", "-idirafter"):
             roots.append(Path(arguments[i + 1]))
+        elif value == "-resource-dir":
+            roots.append(Path(arguments[i+1]) / "include")
         elif value.startswith("-I") and len(value) > 2:
             roots.append(Path(value[2:]))
     inputs = [{"asset": source_key}, *includes]

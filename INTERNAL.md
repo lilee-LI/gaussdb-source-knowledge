@@ -1,5 +1,9 @@
 # 内网协调与多人操作
 
+## ECS 首次产图
+
+在产品构建机按[从源码产图的操作](CALLGRAPH-REPLAY.md)生成交付目录，把整个目录复制给协调端。Windows 的 `index_db` 填其中的 `knowledge.sqlite3`。
+
 ## 协调端
 
 创建 `local/paths.json`，填写 `source`、`home` 和 `index_db`，可选 `design`、`manual`、`run_id`。默认只读引用交付图，`home` 保存学习状态及冻结材料，两个路径应分离。多源码仓以 `repository_roots` 补齐其他仓库 ID 的本地路径。`module_prefixes` 可列仓库 ID 开头的资产前缀，最长前缀优先。

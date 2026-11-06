@@ -1,4 +1,22 @@
-# 2.0 验证记录
+# 发布验证记录
+
+## 2.1 从真实 ECS 产图到 Windows 回放
+
+在 Linux x86_64 实验 ECS（Python 3.9.9、SQLite 3.37.2）上用本仓库的离线 libclang 18.1.1，从公开 openGauss 构建环境的真实 CMake 编译数据库开始。该构建目录没有可核实的 Git HEAD，验证绑定到源码内容摘要、编译库摘要和 run。产品使用 GCC 10.3，先加载其构建环境，再用仓内命令选择 GEQO 的 selection、copy、main 三个 TU 并发分析。
+
+| 实测项目 | 结果 |
+|---|---|
+| 编译库与本次范围 | 2,412 个编译上下文，选 3 个，干净解析 3 个，其余 2,409 个延后 |
+| 导出范围 | 4,796 个符号、1,046 条调用点关系、267 个证据源码文件；SQLite 36,634,624 字节 |
+| 跨文件调用点 | Windows 正向查询 `geqo_selection → geqo_copy` 和反向查询 `geqo_copy ← geqo_selection` 均返回第 72、73 行；`linear_rand` 调用点为第 56、57、69 行 |
+| Windows 学习 | 将同一份 ECS 单 run 交付传回后运行 `check/start/navigate/learn`，成功建优化器研究单；本地编译前端调用为 0，学习库的物理符号/边行数为 0/0 |
+| 交付 run | `index-scope:373badfc658c917304c941ec7604b89c` |
+
+这次覆盖包括真实的生成头符号链接、GCC 的 C++ 标准头搜索顺序，以及 ECS 和 Windows 不同的 SQLite 构建。仓库只分发工程和合成夹具。该次运行没有全量解析全部 2,412 个 TU，也没有运行商业 GaussDB。
+
+独立 Linux 回归入口 `scripts/verify_ecs_producer.py` 从真实 Make/G++ 调用采集编译数据库，经响应文件传入宏，验证两 TU 的跨文件调用、反向查询、重复运行复用、修改生成头后切换到备用函数，以及缺头时阻止交付和显式部分交付。Linux aarch64 的 wheel 依照 PyPI 摘要核验，实机运行验证覆盖 x86_64。
+
+## 2.0 协调端验证
 
 2026-11-06。验证分开使用完整公开源码、局部 ECS 上游图，以及可重复构造的合成协作数据。公司真实 GaussDB 的源码和 12 GB 索引未参加本次验证。
 

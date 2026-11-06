@@ -2,6 +2,8 @@
 /state/
 /dist/
 /.venv/
+/.venv-ecs/
+/.ruff_cache/
 **/__pycache__/
 *.py[cod]
 *.sqlite*

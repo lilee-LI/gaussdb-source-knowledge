@@ -1,1 +1,1 @@
-Existing knowledge.sqlite3 + run_id. Compilation is performed upstream.
+Linux ecs.sh builds the version-bound graph. The coordinator replays knowledge.sqlite3 + run_id.

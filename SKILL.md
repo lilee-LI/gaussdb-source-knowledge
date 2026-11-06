@@ -5,7 +5,7 @@ description: Learn a version-bound database source module from a completed ECS i
 
 # 数据库源码学习 · ECS 版
 
-研究协议采用 `unified-skill/v1`，2.0 的部署和证据边界见[技术设计](docs/DESIGN.md)。
+研究协议采用 `unified-skill/v1`。ECS 使用仓内 `ecs.sh capture/build` 从真实构建生成交付图，协调端通过 `kb.cmd` 回放。部署和证据边界见[技术设计](docs/DESIGN.md)。
 
 协调端从 `kb.cmd check` 和 `start` 得到计划，`learn` 返回一个研究 ID、MCP 配置和提示词。学习库持有已审知识与证据，读取 `index_db` 中的关系。提交测试依据时 `expected_from` 使用单个对象，例如 `{"kind":"contract","ref":"contract:example"}`；`finish_research` 成功后向审阅人传回任务 ID。人读的 HTML 与 Markdown 由 `wiki` 从已审修订生成。
 

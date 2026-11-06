@@ -1,7 +1,6 @@
 """Cross-translation-unit definition binding and bounded NetworkX traversals."""
 import json
 
-import networkx as nx
 
 from .store import canonical, identity
 
@@ -99,6 +98,7 @@ def link_calls(store, run, *, legacy_candidates=False):
 
 
 def traversal(relations, seeds, direction, algorithm, depth):
+    import networkx as nx
     """Operate only on the bounded, already fetched neighborhood."""
     graph = nx.DiGraph()
     graph.add_nodes_from(seeds)

@@ -26,13 +26,17 @@ def parse(request):
         return None
 
     index = c.Index.create()
+    calls_only = request.get("facts") == "calls"
     tu = index.parse(request["file"], args=request["arguments"],
-                     options=c.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
+                     options=0 if calls_only else c.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
     symbols, relations, includes = {}, [], {}
     functions = {"FUNCTION_DECL", "CXX_METHOD", "CONSTRUCTOR", "DESTRUCTOR", "FUNCTION_TEMPLATE", "CONVERSION_FUNCTION"}
     accepted = functions | {"STRUCT_DECL", "CLASS_DECL", "UNION_DECL", "CLASS_TEMPLATE", "FIELD_DECL",
                             "VAR_DECL", "PARM_DECL", "TYPEDEF_DECL", "ENUM_DECL", "ENUM_CONSTANT_DECL",
                             "MACRO_DEFINITION", "MACRO_INSTANTIATION"}
+    uses = {"CALL_EXPR", "DECL_REF_EXPR", "MEMBER_REF_EXPR", "TYPE_REF", "MACRO_INSTANTIATION"}
+    if calls_only:
+        accepted, uses = functions, {"CALL_EXPR"}
 
     def source_position(location, function):
         native = getattr(c.conf.lib, function)
@@ -89,7 +93,7 @@ def parse(request):
             continue  # Compiler/system headers are dependencies, not repository symbols.
         value = add(cur) if k in accepted else None
         next_owner = value["logical"] if value and (k in functions or (owner is None and k in {"VAR_DECL", "FIELD_DECL"})) else owner
-        if k in {"CALL_EXPR", "DECL_REF_EXPR", "MEMBER_REF_EXPR", "TYPE_REF", "MACRO_INSTANTIATION"} and asset:
+        if k in uses and asset:
             ref = target(cur)
             kind = {"CALL_EXPR": "CALLS", "MEMBER_REF_EXPR": "FIELD_REF",
                     "TYPE_REF": "TYPE_REF", "MACRO_INSTANTIATION": "EXPANDS"}.get(k, "REFERS_TO")
@@ -121,13 +125,14 @@ def parse(request):
                     sha = digest(path.read_bytes())
                 includes[str(path)] = {"asset": key, "sha": sha, "path": str(path)}
             source = locate(include.source)
-            if source:
+            if source and not calls_only:
                 relations.append({"source": identity("file", source),
                                   "target": identity("file", key) if key else identity("external", str(path)),
                                   "kind": "INCLUDES", "resolution": "resolved" if key else "external",
                                   "asset": source, "start": max(1, include.location.line),
                                   "end": max(1, include.location.line), "name": key or str(path)})
     diagnostics = [{"severity": d.severity, "message": d.spelling, "asset": locate(d.location.file),
+                    "file":str(d.location.file) if d.location.file else None,
                     "line": d.location.line} for d in tu.diagnostics]
     return {"symbols": list(symbols.values()), "relations": relations,
             "includes": list(includes.values()), "diagnostics": diagnostics,

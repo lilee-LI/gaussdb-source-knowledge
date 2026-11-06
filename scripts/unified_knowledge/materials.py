@@ -112,7 +112,8 @@ def _compile_entry(entry, root):
         require(isinstance(command, str), "Compile entry needs arguments or command")
         # Split only; these strings are never passed to a shell.
         arguments = shlex.split(command, posix=os.name != "nt")
-        arguments = [a.strip('"') for a in arguments]
+        if os.name == "nt":
+            arguments = [a[1:-1] if len(a) >= 2 and a.startswith('"') and a.endswith('"') else a for a in arguments]
     require(isinstance(arguments, list) and all(isinstance(a, str) for a in arguments), "Invalid compiler arguments")
     return {"file": file.relative_to(root).as_posix(), "directory": str(directory), "arguments": arguments}
 
@@ -148,7 +149,33 @@ def ingest(store, config, *, imported=None):
         before = []
         for p, excluded in walk(root):
             relative = p.relative_to(root).as_posix() if root.is_dir() else p.name
+            local_link = None
+            if entry.get("native_sources") and excluded == "linked_file":
+                try:
+                    target = p.resolve(strict=True)
+                    if target.is_relative_to(root) and target.is_file():
+                        local_link = {"link_target":target.relative_to(root).as_posix(),"link_text":os.readlink(p)}
+                        excluded = None
+                except (OSError,RuntimeError):
+                    pass
+            if entry.get("native_sources") and (excluded or not (
+                    p.suffix.lower() in CPP | {".inl",".ipp",".tpp",".tcc",".in",".def",".y",".l",".s",".asm",".cu",".cuh"}
+                    or (not p.suffix and "include" in relative.split("/")[:-1])
+                    or relative in entry.get("additional_files", []))):
+                continue
             known = upstream.pop(relative, None)
+            if known and known.get("link_target"):
+                # Git for Windows can check out a symlink as a file containing its target.
+                # Resolve only a source-proven link and verify the target by the upstream content hash.
+                placeholder = not excluded and p.is_file() and p.stat().st_size < 4096 and p.read_bytes() == os.fsencode(known["link_text"])
+                if excluded == "linked_file" or placeholder:
+                    local_target = (root / known["link_target"]).resolve()
+                    require(local_target.is_relative_to(root),"ECS symlink target escapes checkout")
+                    if excluded == "linked_file" and p.is_symlink():
+                        require(os.readlink(p) == known["link_text"] or p.resolve() == local_target,
+                                "Source symlink differs from ECS: "+relative)
+                    rows.append(imported.bind_asset(store,known,local_target if local_target.is_file() else None))
+                    continue
             if not excluded and entry.get("include") and not any(fnmatch.fnmatchcase(relative, rule) for rule in entry["include"]):
                 excluded = "declared_scope_exclusion"
             if not excluded and any(fnmatch.fnmatchcase(relative, rule) for rule in entry.get("exclude", [])):
@@ -162,6 +189,8 @@ def ingest(store, config, *, imported=None):
                 record["status"] = "failed"
             if binding_source:
                 record["inventory_origin"] = "checkout_only" if known is None else "checkout_and_ecs"
+            if local_link:
+                record.update(local_link)
             if excluded:
                 rows.append(record)
                 continue

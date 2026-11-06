@@ -60,8 +60,9 @@ class CompletedIndex:
         store.put_blob(raw)
 
     def source_assets(self, repository):
+        keys = set(self.run["evidence_assets"]) if "evidence_assets" in self.run else None
         return {asset["path"]: asset for asset in self.snapshot["assets"]
-                if asset["kind"] == "source" and asset["repo"] == repository}
+                if asset["kind"] == "source" and asset["repo"] == repository and (keys is None or asset["key"] in keys)}
 
     def bind_asset(self, store, asset, path):
         row = {**asset, "inventory_origin": "checkout_and_ecs" if path else "ecs_only",

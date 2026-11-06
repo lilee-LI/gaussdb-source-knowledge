@@ -36,7 +36,7 @@ def verify(package, *, allow_local_runtime=False):
                 allow_local_runtime
                 and (
                     d == "__pycache__"
-                    or (not rel.parts and d in {".venv", "local", "state"})
+                    or (not rel.parts and d in {".venv", ".venv-ecs", "local", "state"})
                 )
             )
         ]

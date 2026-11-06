@@ -8,7 +8,7 @@ import subprocess
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "2.0.0"
+from unified_knowledge import __version__ as VERSION
 
 
 def package(output):

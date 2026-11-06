@@ -1,12 +1,15 @@
-# GaussDB 源码知识工程设计 2.0
+# GaussDB 源码知识工程设计 2.1
 
 ## 使用目标与部署边界
 
-给定一个源码版本、一种构建配置和可选的设计文档、手册，团队要能回答三个问题：有哪些模块和待核实的特性，下一项由谁学，修改某项行为要同时核对哪些消费者及测试。公司 ECS 的并发 C++ 分析是上游。协调端和成员服务器使用 64 位 CPython 3.12、SQLite、Git、本地 Claude Code；NetworkX 和 pypdf 通过固定哈希的离线 wheel 安装。
+给定一个源码版本、一种构建配置和可选的设计文档、手册，团队要能回答三个问题：有哪些模块和待核实的特性，下一项由谁学，修改某项行为要同时核对哪些消费者及测试。仓内 Linux 生产端负责并发解析 C/C++。协调端和成员服务器使用 64 位 CPython 3.12、SQLite、Git 和本地 Claude Code。Linux 生产端单独支持 Python 3.9+。
 
 ~~~text
 ECS                                     Windows 协调端
-C++、原工具链、compile_commands.json      完整源码检出 + 设计 + 手册
+C++、产品构建环境                        完整源码检出 + 设计 + 手册
+  │                                                 │
+  ├─ ecs.sh capture / CMake → compile_commands.json │
+  └─ ecs.sh build → 各 TU 的 libclang → 跨 TU 绑定     │
             │                                       │
             └── 已完成的工程 SQLite + run_id ──────┤
                                                     ▼
@@ -24,11 +27,13 @@ C++、原工具链、compile_commands.json      完整源码检出 + 设计 + �
                                           └── 开发 / 测试 / 评审 / 运维上下文
 ~~~
 
-上游负责选哪些 TU 并发分析、宏如何取值及调用边如何解析。生产接口为单文件一致性备份，含 `runs`、`snapshots`、`symbols`、`relations`、`anchors`、`documents` 以及必要查询索引。接受 `ready` 和有摘要的 `partial` run；结果保留实际覆盖。自定义边表需先在上游适配。`check` 检查合同，`start` 继续核对快照、构建摘要和材料。缺表、多个 run 未选择或同名源码内容冲突都会返回可定位的错误。`graph_storage=reference` 是路径入口的默认值。协调端需要持续访问同一份上游文件，成员只使用自己的模块包。
+Linux 从实际编译命令展开响应文件，保留宏、语言、包含顺序和目标设置，记录驱动搜索目录及显式适配。控制器生成按摘要冻结的 VFS，一个工作子进程解析一个 TU，控制器独占写 SQLite。每 TU 的状态和依赖单独持久化，防止全仓每完成一项都重写所有头文件清单。调用按 Clang USR 和 linkage 连接声明与唯一定义；重名、无定义、间接调用及虚派发保留相应证据等级。默认仅产函数及调用，完整事实模式可额外记录引用、类型和宏。
+
+控制器将单个 run 的符号、关系、证据和快照投影到新的 SQLite，检查索引、锚点和完整性，一次性发布交付目录。实测接触的 TU 与头文件登记在 `evidence_assets`。未跟踪的被引用源码、生成头和源码链接随 `blobs/` 去重交付。原数据库的 TU 缓存留在 ECS。Windows 的 `check` 检查接口，`start` 核对快照、摘要和材料。旧版 `ready` 和有摘要的 `partial` run 继续兼容。协调端默认只读引用单文件 SQLite；成员只使用自己的模块包。
 
 ## 材料身份与覆盖
 
-Code Comprehensor 将静态 CodeGraph、分层文档 CodeScribe 和文码检索 CodeContrast 组合。这里借鉴其“从代码邻域解释行为，再按问题检索文码上下文”的分工。实现复用公司 ECS 的现有分析器和 SQLite 图，通过 MCP 提供证据与知识检索；2.0 的离线依赖中不含作者的 CodeScribe 或 CodeContrast 模型。[论文的系统设计](https://arxiv.org/html/2610.30016v2#S3)
+Code Comprehensor 将静态 CodeGraph、分层文档 CodeScribe 和文码检索 CodeContrast 组合。本工程借鉴其从代码邻域解释行为、按问题检索文码上下文的分工，使用仓内 libclang 提取器、SQLite 图和 MCP 证据接口。[论文的系统设计](https://arxiv.org/html/2610.30016v2#S3)
 
 1. 按配置遍历主仓与附加仓。保留排除项、失败原因和 SHA-256，源码与文档原文存入内容寻址的 `blobs`。Markdown、文本、HTML、DOCX、有文本层的 PDF 支持抽取；抽取失败保留缺口。CHM 应先转成 HTML 目录。
 2. 用“仓库 ID＋仓内相对路径”将完整检出与上游快照清单做并集。两边都有的冻结文件以 ECS 哈希校验本地内容；只有经 LF/CRLF 还原后哈希全等才采用还原版本。新快照即使能命中旧缓存也校验当前检出。检出缺失但 ECS 有记录的资产仅在能够从同摘要 blob 恢复时使用。两侧可取得 Git HEAD 时要求相同。图外文件由本地快照绑定，未证明的构建行为保留为未知。

@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 import importlib.metadata
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -82,7 +83,7 @@ def compiler_arguments(entry, profile, originals, roots):
     elif raw and Path(raw[0]).name.lower() in {"clang.exe", "clang++.exe", "gcc.exe", "g++.exe", "cl.exe"}:
         raw.pop(0)
     result, skipped, i = [], [], 0
-    path_options = {"-I", "-isystem", "-iquote", "-include", "-imacros", "-isysroot", "--sysroot"}
+    path_options = {"-I", "-isystem", "-idirafter", "-iquote", "-include", "-imacros", "-isysroot", "--sysroot", "-resource-dir"}
     pair_outputs = {"-o", "-MF", "-MT", "-MQ", "-MJ", "--serialize-diagnostics", "-L", "-l", "-Xlinker"}
 
     def remap(value):
@@ -128,7 +129,7 @@ def compiler_arguments(entry, profile, originals, roots):
             result.append("--sysroot=" + remap(arg.split("=", 1)[1]))
         elif arg.startswith(("-Xclang", "-fplugin", "-load", "@")) or arg in {"-cc1", "-mllvm"}:
             raise ValueError("Unsupported compiler plugin/response/internal flag: " + arg)
-        elif arg.startswith(("-D", "-U", "-std=", "-f", "-m", "-W", "-O", "-g", "-pthread", "--target=", "-target", "-x")):
+        elif arg in {"-nostdinc", "-nostdinc++", "-ansi", "-pedantic", "-pedantic-errors"} or arg.startswith(("-D", "-U", "-std=", "-f", "-m", "-W", "-O", "-g", "-pthread", "--target=", "-target", "-x")):
             result.append(arg)
             if arg in {"-x", "-target"}:
                 require(i + 1 < len(raw), "Missing frontend option value")
@@ -239,6 +240,10 @@ def parse_one(job, timeout):
     except (ValueError, OSError, subprocess.TimeoutExpired) as error:
         payload = {"symbols": [], "relations": [], "includes": [], "status": "failed",
                    "diagnostics": [], "error": str(error)}
+    finally:
+        if request.get("facts"):
+            incoming.unlink(missing_ok=True)
+            outgoing.unlink(missing_ok=True)
     return payload, round(time.monotonic() - started, 4)
 
 
@@ -284,13 +289,28 @@ def _persist_payload(store, run, snapshot, profile, payload, context):
                          (run, eid, edge["source"], edge["target"], edge["kind"], edge["resolution"], canonical(edge)))
 
 
-def build_index(store, snapshot, profile="unknown", *, timeout=120, resume=False, ctags=None, files=None, jobs=1):
-    require(type(jobs) is int and 1 <= jobs <= 8, "jobs must be from 1 to 8")
+def _receipts(store, run, value, native):
+    if not native:
+        return iter(value.get("tu_results", []))
+    return (json.loads(r[0]) for r in store.db.execute("SELECT data FROM native_tus WHERE run=? ORDER BY context",(run,)))
+
+
+def _brief(receipt):
+    return {k:v for k,v in receipt.items() if k not in {"includes","lookup_guard"}}
+
+
+def build_index(store, snapshot, profile="unknown", *, timeout=120, resume=False, ctags=None, files=None, jobs=1,
+                native_facts=None, progress=None, owns_producer_lock=False):
+    require(native_facts in {None,"calls","full"}, "Invalid native fact set")
+    require(type(jobs) is int and 1 <= jobs <= (128 if native_facts else 8), "Invalid job count")
     selected = None if files is None else sorted(set(files))
     require(selected is None or selected, "Select at least one file")
     require(type(timeout) is int and timeout > 0, "Invalid frontend timeout")
     binding = store.profile(snapshot, profile)
     tools = tool_identity()
+    if native_facts:
+        tools["native_facts"] = native_facts
+        store.db.execute("CREATE TABLE IF NOT EXISTS native_tus(run TEXT,context TEXT,data TEXT,PRIMARY KEY(run,context))")
     if ctags:
         binary = Path(ctags).resolve()
         require(binary.is_file(), "Ctags executable missing")
@@ -309,15 +329,26 @@ def build_index(store, snapshot, profile="unknown", *, timeout=120, resume=False
     rid = store.get_meta("current:" + scope_key, scope_key)
     # A snapshot fixes repository inputs; separately supplied system headers can change.
     previous = store.db.execute("SELECT data FROM runs WHERE id=?", (rid,)).fetchone()
+    stale_contexts = set()
     if previous:
         prior_run = json.loads(previous[0])
-        if prior_run["status"] != "building" and any(
+        if native_facts and prior_run["status"] == "building":
+            stale_contexts = {t["context"] for t in _receipts(store,rid,prior_run,True)
+                              if t["status"] == "parsed" and not tu_cache.valid(store,snapshot,t)}
+        elif prior_run["status"] != "building" and any(
                 t["status"] == "parsed" and not tu_cache.valid(store, snapshot, t)
-                for t in prior_run.get("tu_results", [])):
+                for t in _receipts(store, rid, prior_run, native_facts)):
+            rid = identity("index", [scope_key, uuid.uuid4().hex])
+        elif native_facts and resume and prior_run["status"] == "partial" and any(
+                t["status"] != "parsed" for t in prior_run["tu_results"]):
             rid = identity("index", [scope_key, uuid.uuid4().hex])
     old = store.db.execute("SELECT data FROM runs WHERE id=?", (rid,)).fetchone()
     old_value = json.loads(old[0]) if old else None
+    if native_facts and old_value and old_value["status"] == "building":
+        old_value["tu_results"] = [_brief(t) for t in _receipts(store, rid, old_value, native_facts)]
+        old_value["completed_tus"] = [t["context"] for t in old_value["tu_results"]]
     retry_contexts = {r["context"] for r in (old_value or {}).get("tu_results", []) if r["status"] != "parsed"}
+    retry_contexts.update(stale_contexts)
     if old_value and (old_value["status"] == "ready" or
                       (old_value["status"] == "partial" and (not resume or not retry_contexts))):
         return old_value
@@ -331,9 +362,10 @@ def build_index(store, snapshot, profile="unknown", *, timeout=120, resume=False
     lease = uuid.uuid4().hex
     with store.transaction():
         prior = store.get_meta("index_lease:" + rid)
-        require(not prior or prior["expires"] < time.time(), "Index run has an active lease")
+        require(not prior or prior["expires"] < time.time() or (native_facts and owns_producer_lock),
+                "Index run has an active lease")
         store.set_meta("index_lease:" + rid, {"token": lease, "expires": time.time() + timeout + 60})
-        run = json.loads(old[0]) if old else {
+        run = old_value if old_value is not None else {
             "id": rid, "snapshot": snapshot, "profile": profile, "profile_digest": binding["digest"],
             "created": now(), "status": "building", "tools": tools, "completed_tus": [],
             "syntax_complete": False, "diagnostics": [], "tu_results": [], "cache_hits": 0,
@@ -346,6 +378,8 @@ def build_index(store, snapshot, profile="unknown", *, timeout=120, resume=False
             run["completed_tus"] = [t for t in run["completed_tus"] if t not in retry_contexts]
             run["tu_results"] = [t for t in run["tu_results"] if t["context"] not in retry_contexts]
             for context in retry_contexts:
+                if native_facts:
+                    store.db.execute("DELETE FROM native_tus WHERE run=? AND context=?", (rid,context))
                 store.db.execute("DELETE FROM relations WHERE run=? AND json_extract(data,'$.context')=?", (rid, context))
             for row in store.db.execute("SELECT id,data FROM symbols WHERE run=?", (rid,)).fetchall():
                 item = json.loads(row["data"])
@@ -358,6 +392,9 @@ def build_index(store, snapshot, profile="unknown", *, timeout=120, resume=False
         store.db.execute("INSERT OR REPLACE INTO runs VALUES(?,?,?,?,?,?)",
                          (rid, snapshot, profile, run["created"], "building", canonical(run)))
     try:
+        if native_facts:
+            run["syntax_complete"] = True
+            run["native_facts"] = native_facts
         if not run["syntax_complete"]:
             for row in store.db.execute("SELECT data FROM assets WHERE snapshot=? AND kind='source' AND status='frozen'", (snapshot,)).fetchall():
                 item = json.loads(row[0])
@@ -415,6 +452,8 @@ def build_index(store, snapshot, profile="unknown", *, timeout=120, resume=False
                         require(source["status"] == "frozen", "Compilation unit not frozen: " + source_key)
                         normalized = compiler_arguments(entry, binding, originals, originals)
                         key = tu_cache.parse_key(binding["repository"], entry, normalized, binding, tools, source["sha"])
+                        if native_facts:
+                            key = digest([key, native_facts])
                         row = store.db.execute("SELECT data FROM tu_cache WHERE key=?", (key,)).fetchone()
                         if row:
                             value = json.loads(row[0])
@@ -426,8 +465,10 @@ def build_index(store, snapshot, profile="unknown", *, timeout=120, resume=False
                             request = {"file": str(roots[binding["repository"]] / entry["file"]),
                                        "arguments": [*args, "-ivfsoverlay", str(overlay)],
                                        "roots": {k: str(v) for k, v in roots.items()},
-                                       "home": str(store.home), "snapshot": snapshot, "unit_file": source_key}
-                            job = (work / (str(number) + ".request.json"), work / (str(number) + ".result.json"), request)
+                                       "home": str(store.home), "snapshot": snapshot, "unit_file": source_key,
+                                       "facts": native_facts}
+                            stem = str(number) + ("-" + lease if native_facts else "")
+                            job = (work / (stem + ".request.json"), work / (stem + ".result.json"), request)
                             pending = pool.submit(parse_one, job, timeout)
                             run["frontend_invocations"] += 1
                     except (ValueError, OSError) as error:
@@ -446,12 +487,18 @@ def build_index(store, snapshot, profile="unknown", *, timeout=120, resume=False
                         if pending and payload["status"] == "parsed" and payload.get("lookup_guard") is not None:
                             store.db.execute("INSERT OR REPLACE INTO tu_cache VALUES(?,?)", (key, canonical(payload)))
                         run["completed_tus"].append(context)
-                        run["tu_results"].append({"context": context, "asset": source_key, "status": payload["status"],
+                        receipt = {"context": context, "asset": source_key, "status": payload["status"],
                             "cache_key": key, "seconds": seconds, "error": payload.get("error"),
                             "diagnostics": payload.get("diagnostics", []), "includes": payload.get("includes", []),
-                            "lookup_guard": payload.get("lookup_guard")})
+                            "lookup_guard": payload.get("lookup_guard")}
+                        if native_facts:
+                            store.db.execute("INSERT OR REPLACE INTO native_tus VALUES(?,?,?)",(rid,context,canonical(receipt)))
+                        run["tu_results"].append(_brief(receipt) if native_facts else receipt)
                         store.set_meta("index_lease:" + rid, {"token": lease, "expires": time.time() + timeout + 60})
-                        store.db.execute("UPDATE runs SET data=? WHERE id=?", (canonical(run), rid))
+                        checkpoint = {**run,"tu_results":[],"completed_tus":[]} if native_facts else run
+                        store.db.execute("UPDATE runs SET data=? WHERE id=?", (canonical(checkpoint), rid))
+                    if progress:
+                        progress(len(run["completed_tus"]),len(commands),source_key,payload["status"])
         counts = Counter(r["status"] for r in run["tu_results"])
         run["status"] = "ready" if commands and counts["parsed"] == len(binding["commands"]) else "partial"
         run["coverage"] = {"assets": len(filenames), "translation_units": len(commands), "available_tus": len(binding["commands"]),
@@ -492,13 +539,25 @@ def build_index(store, snapshot, profile="unknown", *, timeout=120, resume=False
             if missing or audit["errors"]:
                 run["status"] = "partial"
             run["coverage"]["call_binding"] = link_calls(store, rid)
+            if native_facts:
+                observed = {r[0] for r in store.db.execute("SELECT DISTINCT asset FROM symbols WHERE run=?", (rid,))}
+                for receipt in _receipts(store,rid,run,True):
+                    observed.add(receipt["asset"])
+                    observed.update(dep["asset"] for dep in receipt["includes"] if dep.get("asset"))
+                run["evidence_assets"] = sorted(observed)
+                run["coverage"]["source_evidence_files"] = len(observed)
             if binding.get("unavailable_commands"):
                 run["status"] = "partial"
                 run["coverage"]["invalid_commands"] = len(binding["unavailable_commands"])
-            run["facts_digest"] = digest({
-                "symbols": [[r[0], digest(json.loads(r[1]))] for r in store.db.execute("SELECT id,data FROM symbols WHERE run=? ORDER BY id", (rid,))],
-                "relations": [[r[0], digest(json.loads(r[1]))] for r in store.db.execute("SELECT id,data FROM relations WHERE run=? ORDER BY id", (rid,))],
-                "profile": binding["digest"], "tu_results": run["tu_results"]})
+            if native_facts and isinstance(binding.get("toolchain"),dict) and binding["toolchain"].get("invalid"):
+                run["status"] = "partial"
+                run["coverage"]["invalid_commands"] = run["coverage"].get("invalid_commands",0)+len(binding["toolchain"]["invalid"])
+            hasher = hashlib.sha256()
+            for table in ("symbols","relations"):
+                hasher.update(table.encode())
+                for row in store.db.execute("SELECT id,data FROM "+table+" WHERE run=? ORDER BY id", (rid,)):
+                    hasher.update(canonical([row[0],row[1]]).encode()+b"\n")
+            run["facts_digest"] = digest([hasher.hexdigest(),binding["digest"],run["tu_results"],run.get("evidence_assets")])
             store.db.execute("UPDATE runs SET status=?,data=? WHERE id=?", (run["status"], canonical(run), rid))
             store.set_meta("index_head:" + snapshot + ":" + profile, rid)
             store.set_meta("index_lease:" + rid, None)
