@@ -43,12 +43,16 @@ static bool in_repository(const char* file) {
 }
 
 static std::string position(location_t loc, bool spelling = false) {
+    const line_map_ordinary* map = nullptr;
+    linemap_resolve_location(line_table, get_pure_location(loc),
+        spelling ? LRK_SPELLING_LOCATION : LRK_MACRO_EXPANSION_POINT, &map);
     expanded_location p = spelling ? expand_location_to_spelling_point(loc) : expand_location(expansion_point_location(loc));
     return "{\"file\":" + quote(p.file) + ",\"line\":" + std::to_string(p.line)
-        + ",\"column\":" + std::to_string(p.column) + "}";
+        + ",\"column\":" + std::to_string(p.column)
+        + ",\"map_line\":" + std::to_string(map ? LINEMAP_LINE(map) : 0) + "}";
 }
 
-static unsigned symbol(tree decl, bool definition = false, int end = 0) {
+static unsigned symbol(tree decl, bool definition = false, int end = 0, location_t end_loc = UNKNOWN_LOCATION) {
     if (!decl || TREE_CODE(decl) != FUNCTION_DECL) return 0;
     expanded_location loc = expand_location(DECL_SOURCE_LOCATION(decl));
     if (!in_repository(loc.file)) return 0;
@@ -89,14 +93,15 @@ static unsigned symbol(tree decl, bool definition = false, int end = 0) {
 #endif
     fprintf(output, "{\"event\":\"symbol\",\"uid\":%u,\"name\":%s,\"spelling\":%s,"
         "\"abi\":%s,\"type\":%s,\"kind\":%s,\"position\":%s,\"end\":%d,\"external\":%s,"
-        "\"definition\":%s,\"implicit\":%s}\n", uid, quote(human_name.c_str()).c_str(), spelling.c_str(),
+        "\"definition\":%s,\"implicit\":%s,\"end_position\":%s}\n", uid, quote(human_name.c_str()).c_str(), spelling.c_str(),
         abi.c_str(), type.c_str(), quote(kind).c_str(), position(DECL_SOURCE_LOCATION(decl)).c_str(),
         end > loc.line ? end : loc.line, TREE_PUBLIC(decl) ? "true" : "false",
-        definition ? "true" : "false", DECL_ARTIFICIAL(decl) ? "true" : "false");
+        definition ? "true" : "false", DECL_ARTIFICIAL(decl) ? "true" : "false",
+        position(end_loc == UNKNOWN_LOCATION ? DECL_SOURCE_LOCATION(decl) : end_loc).c_str());
     return uid;
 }
 
-struct context { tree owner; int end; const char* file; };
+struct context { tree owner; int end; const char* file; location_t end_loc; };
 static tree visit(tree* pointer, int* descend, void* data) {
     tree value = *pointer;
     if (!value) return NULL_TREE;
@@ -104,7 +109,10 @@ static tree visit(tree* pointer, int* descend, void* data) {
     if (DECL_P(value) || TYPE_P(value)) { *descend = 0; return NULL_TREE; }
     location_t loc = EXPR_P(value) ? EXPR_LOCATION(value) : UNKNOWN_LOCATION;
     expanded_location where = expand_location(loc);
-    if (where.file && ctx->file && !strcmp(where.file, ctx->file) && where.line > ctx->end) ctx->end = where.line;
+    if (where.file && ctx->file && !strcmp(where.file, ctx->file) && where.line > ctx->end) {
+        ctx->end = where.line;
+        ctx->end_loc = loc;
+    }
     tree target = NULL_TREE;
     bool call = TREE_CODE(value) == CALL_EXPR;
     bool indirect = false, virtual_call = false;
@@ -139,7 +147,7 @@ static void before_genericize(void* data, void*) {
     tree function = (tree)data;
     expanded_location loc = expand_location(DECL_SOURCE_LOCATION(function));
     if (!in_repository(loc.file)) return;
-    context ctx = {function, loc.line, loc.file};
+    context ctx = {function, loc.line, loc.file, DECL_SOURCE_LOCATION(function)};
     tree body = DECL_SAVED_TREE(function);
 #ifdef GAUSSKB_CXX
     cp_walk_tree_without_duplicates(&body, visit, &ctx);
@@ -148,9 +156,12 @@ static void before_genericize(void* data, void*) {
 #endif
     if (DECL_STRUCT_FUNCTION(function)) {
         expanded_location end = expand_location(DECL_STRUCT_FUNCTION(function)->function_end_locus);
-        if (end.file && !strcmp(end.file, loc.file) && end.line > ctx.end) ctx.end = end.line;
+        if (end.file && !strcmp(end.file, loc.file) && end.line > ctx.end) {
+            ctx.end = end.line;
+            ctx.end_loc = DECL_STRUCT_FUNCTION(function)->function_end_locus;
+        }
     }
-    symbol(function, true, ctx.end);
+    symbol(function, true, ctx.end, ctx.end_loc);
 }
 
 static void include_file(void* data, void*) {

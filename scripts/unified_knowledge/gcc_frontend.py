@@ -188,8 +188,9 @@ def decode(output, request, diagnostics, returncode=0):
         name = value.get("file")
         if not name or name.startswith("<") or value["line"] < 1:
             return None
-        matches = {(p,start+value["line"]-first) for first,last,p,start in line_maps.get(name,[])
-                   if first<=value["line"]<=last}
+        spans = [span for span in line_maps.get(name,[]) if span[0]<=value["line"]<=span[1]]
+        active = [span for span in spans if span[0]==value.get("map_line")]
+        matches = {(p,start+value["line"]-first) for first,last,p,start in active or spans}
         if len(matches)>1:
             unmapped.add(name+":"+str(value["line"]))
             return None
@@ -269,7 +270,7 @@ def decode(output, request, diagnostics, returncode=0):
             occurrence.append(request["unit_file"])
         logical = identity("symbol", occurrence)
         identities[uid] = logical
-        end = position({**item["position"],"line":item["end"]})
+        end = position(item.get("end_position",{**item["position"],"line":item["end"]}))
         values[logical] = {"logical":logical,"usr":"gcc-abi:"+item["abi"], "name":item["name"],
             "spelling":item["spelling"], "kind":item["kind"],"asset":pos["asset"], "type":item["type"],
             "start":pos["line"], "end":max(pos["line"],end["line"] if end and end["asset"]==pos["asset"] else pos["line"]), "offset":pos["offset"],
