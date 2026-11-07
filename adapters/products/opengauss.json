@@ -1,0 +1,8 @@
+{
+  "schema": "source-product-adapter/v1",
+  "id": "opengauss",
+  "version": "1",
+  "extends": "postgres-family",
+  "module_rules": [],
+  "notes": "Public validation profile. Module ownership and detected leads remain subject to source review."
+}

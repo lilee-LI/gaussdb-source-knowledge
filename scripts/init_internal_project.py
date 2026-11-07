@@ -26,6 +26,9 @@ def create(args):
         require(not args.compile_db, "ECS already supplied the index; configure the run ID instead of a compilation database")
     config = {"product": args.product, "revision": args.revision, "repositories": [repo], "materials": [],
               "methods": [], "profiles": [], "ownership": [], "module_prefixes": getattr(args, "module_prefix", [])}
+    if getattr(args, "product_adapter", None):
+        from unified_knowledge.product_adapter import load
+        config["product_adapter"] = load(args.product_adapter)
     if index_db:
         from unified_knowledge.graph_mount import inspect_input
         run_id = inspect_input(index_db,run_id)["run_id"]

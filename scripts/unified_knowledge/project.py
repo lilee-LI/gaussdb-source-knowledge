@@ -10,14 +10,14 @@ from . import study
 from .store import Store, atomic_write, canonical, digest, read_json, require
 
 ROOT = Path(__file__).resolve().parents[2]
-COMMANDS = {"start","check","modules","features","route","learn","review","wiki","ask"}
+COMMANDS = {"start","check","modules","features","route","learn","review","wiki","ask","plan-tasks","planning-feedback"}
 
 
 def settings(file):
     file = file.expanduser().resolve()
     require(file.is_file(),"将包内 paths.example.json 复制到 local/paths.json 并填写路径，或用 --paths 指定配置文件。")
     spec = read_json(file)
-    known = {"source","design","manual","home","index_db","run_id","graph_storage","output","module_prefixes","repository_roots","product","revision"}
+    known = {"source","design","manual","home","index_db","run_id","graph_storage","output","module_prefixes","repository_roots","product","revision","product_adapter"}
     require(isinstance(spec,dict) and not set(spec)-known,"paths.json 含未知字段："+str(sorted(set(spec)-known) if isinstance(spec,dict) else spec))
     def resolve(value):
         return (file.parent/Path(value).expanduser()).resolve()
@@ -27,6 +27,12 @@ def settings(file):
             spec[key]=str(resolve(spec[key]))
     spec.setdefault("home",str(resolve("workspace")))
     spec["repository_roots"]={k:str(resolve(v)) for k,v in spec.get("repository_roots",{}).items()}
+    if spec.get("product_adapter"):
+        from .product_adapter import load
+        value = spec["product_adapter"]
+        if isinstance(value, str) and ("/" in value or "\\" in value or value.endswith(".json")):
+            value = str(resolve(value))
+        spec["product_adapter"] = load(value)
     return spec
 
 
@@ -70,6 +76,7 @@ def start(spec, refresh):
          product=spec.get("product","GaussDB"),revision=spec.get("revision","content-addressed"),
          design=Path(spec["design"]) if spec.get("design") else None,manual=Path(spec["manual"]) if spec.get("manual") else None,
          compile_db=None,repository_roots=spec["repository_roots"],module_prefix=spec.get("module_prefixes",[]),
+         product_adapter=spec.get("product_adapter"),
          role="researcher",workspace_setup=True,source_only=not graph)
     result=create(args)
     with Store(home) as store:
@@ -132,6 +139,12 @@ def execute(args):
     require((home/"knowledge.sqlite3").is_file(),"请先在本工作区执行 start")
     with Store(home,readonly=args.action in {"ask","modules","features"}) as store:
         plan=study.current(store)
+        if args.action == "plan-tasks":
+            from .task_planning import construct
+            return construct(store, modules=args.module, max_tasks=args.max_tasks, files_per_task=args.files_per_task, apply=args.apply)
+        if args.action == "planning-feedback":
+            from .task_planning import propose
+            return propose(store, read_json(args.input))
         if args.action=="modules":
             return [{"module":k,"files":len(v["files"]),"candidate_documents":len(v["document_matches"]),
                      "graph_coverage":v.get("graph_coverage")} for k,v in sorted(plan["modules"].items())]
@@ -185,6 +198,13 @@ def main(argv):
         a.add_argument("--paths",type=Path,default=ROOT/"local/paths.json")
         if name=="start":
             a.add_argument("--refresh",action="store_true")
+        if name == "plan-tasks":
+            a.add_argument("--module", action="append")
+            a.add_argument("--max-tasks", type=int, default=20)
+            a.add_argument("--files-per-task", type=int, default=12)
+            a.add_argument("--apply", action="store_true")
+        if name == "planning-feedback":
+            a.add_argument("--input", type=Path, required=True)
         if name=="route":
             a.add_argument("--candidate",required=True); a.add_argument("--module",required=True)
         if name=="learn":

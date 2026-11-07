@@ -1,0 +1,8 @@
+{
+  "schema": "source-product-adapter/v1",
+  "id": "gaussdb-centralized",
+  "version": "1",
+  "extends": "postgres-family",
+  "module_rules": [],
+  "notes": "Initial migration profile, not a claim of validation on proprietary GaussDB. Override module_rules and detectors for the bound product version."
+}

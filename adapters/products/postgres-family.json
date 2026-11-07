@@ -1,0 +1,19 @@
+{
+  "schema": "source-product-adapter/v1",
+  "id": "postgres-family",
+  "version": "1",
+  "module_markers": ["gausskernel", "common", "include", "src"],
+  "expand_dirs": ["runtime", "storage"],
+  "module_rules": [],
+  "aliases": {"optimizer": ["优化器", "优化", "规划"], "executor": ["执行器", "执行计划"], "storage": ["存储"], "transaction": ["事务"], "parser": ["语法", "解析"]},
+  "test_directories": ["test", "tests", "regress", "regression"],
+  "detectors": [
+    {"id": "custom-guc", "kind": "registration", "topic": "guc", "scope": "candidate", "extensions": [".c", ".cpp", ".cc", ".cxx", ".h", ".hpp"], "pattern": "\\bDefineCustom(?:Bool|Int|Real|String|Enum)Variable\\s*\\(\\s*\"(?P<name>[A-Za-z_][A-Za-z0-9_.]+)\""},
+    {"id": "core-guc", "kind": "registration", "topic": "guc", "scope": "candidate", "extensions": [".c", ".cpp", ".cc", ".cxx", ".h", ".hpp"], "pattern": "\\{\\s*\"(?P<name>[A-Za-z_][A-Za-z0-9_.]+)\"\\s*,\\s*PGC_[A-Z_]+"},
+    {"id": "sql-statement", "kind": "grammar", "topic": "compatibility", "scope": "candidate", "extensions": [".y", ".yy"], "pattern": "(?m)^[ \\t]*(?P<name>[A-Za-z][A-Za-z0-9_]*Stmt)[ \\t]*:"},
+    {"id": "error-report", "kind": "error_site", "topic": "errors", "scope": "signal", "extensions": [".c", ".cpp", ".cc", ".cxx", ".h", ".hpp"], "pattern": "\\b(?P<name>ereport|elog|errcode|Assert)\\s*\\("},
+    {"id": "memory-context", "kind": "memory_site", "topic": "memory", "scope": "signal", "extensions": [".c", ".cpp", ".cc", ".cxx", ".h", ".hpp"], "pattern": "\\b(?P<name>MemoryContext[A-Za-z_0-9]*|AllocSetContextCreate|palloc0?|pfree|repalloc)\\s*\\("},
+    {"id": "compatibility-mode", "kind": "compatibility_site", "topic": "compatibility", "scope": "signal", "extensions": [".c", ".cpp", ".cc", ".cxx", ".h", ".hpp", ".y"], "pattern": "\\b(?P<name>DB_IS_CMPT|sql_compatibility|A_FORMAT|B_FORMAT|C_FORMAT|PG_FORMAT)\\b"},
+    {"id": "conditional-build", "kind": "macro_condition", "topic": "build", "scope": "signal", "extensions": [".c", ".cpp", ".cc", ".cxx", ".h", ".hpp"], "pattern": "(?m)^\\s*#\\s*(?P<name>if|ifdef|ifndef|elif)\\b"}
+  ]
+}

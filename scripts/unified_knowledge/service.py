@@ -34,6 +34,8 @@ QUERY_TOOLS = {
     "request_refresh": "Enqueue an idempotent concrete knowledge-gap task; does not execute a model or approve knowledge.",
 }
 WORK_TOOLS = {
+    "plan_tasks": "Preview or apply a bounded research-task batch using the bound product adapter; never accepts knowledge.",
+    "planning_feedback": "Record evidence-backed new, merged or split candidates and research gaps for subsequent task planning.",
     "focus_module": "Create a bounded module research task. ECS plans reuse indexed symbols and evidence.",
     "next_tasks": "Find research tasks whose dependencies are accepted.",
     "claim_task": "Claim a research task with a real lease.",
@@ -60,6 +62,9 @@ def tools(role="query"):
         "diff_ref": {"type": "string"},
     }
     schemas = {
+        "plan_tasks": ({"modules": {"type":"array","items":{"type":"string"}}, "max_tasks":{"type":"integer","minimum":1,"maximum":500},
+                         "files_per_task":{"type":"integer","minimum":1,"maximum":40},"apply":{"type":"boolean"}}, []),
+        "planning_feedback": ({"proposal":{"type":"object"}}, ["proposal"]),
         "study_plan": ({"module":{"type":"string"}}, []),
         "feature_candidates": ({"module":{"type":"string"},"state":{"type":"string"},
                                 "limit":{"type":"integer","minimum":1,"maximum":200},"offset":{"type":"integer","minimum":0}}, []),
@@ -114,7 +119,7 @@ def _validate(values, schema):
     require(isinstance(values, dict), "Tool arguments must be an object")
     require(set(schema.get("required", [])) <= set(values), "Required tool argument missing")
     require(not (set(values) - set(schema["properties"])), "Unknown tool argument")
-    types = {"string": str, "integer": int, "number": (int, float), "array": list, "object": dict, "null": type(None)}
+    types = {"string": str, "integer": int, "number": (int, float), "array": list, "object": dict, "null": type(None), "boolean": bool}
     for key, value in values.items():
         spec = schema["properties"][key]
         choices = spec["type"] if isinstance(spec["type"], list) else [spec["type"]]
@@ -132,6 +137,12 @@ def invoke(store, name, values, *, role="query"):
     specification = next((t for t in tools(role) if t["name"] == name), None)
     require(specification is not None, "Tool unavailable for this role")
     _validate(values, specification["inputSchema"])
+    if name == "plan_tasks":
+        from .task_planning import construct
+        return construct(store, **values)
+    if name == "planning_feedback":
+        from .task_planning import propose
+        return propose(store, values["proposal"])
     if name == "navigate_code":
         from .navigation import navigate
         p = study.current(store)

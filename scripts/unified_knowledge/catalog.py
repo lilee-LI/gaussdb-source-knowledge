@@ -8,12 +8,8 @@ import re
 import unicodedata
 
 from .store import identity, require
+from . import product_adapter
 
-CUSTOM = re.compile(
-    rb'\bDefineCustom(?:Bool|Int|Real|String|Enum)Variable\s*\(\s*"([A-Za-z_][A-Za-z0-9_.]+)"'
-)
-CORE = re.compile(rb'\{\s*"([A-Za-z_][A-Za-z0-9_.]+)"\s*,\s*PGC_[A-Z_]+')
-GRAMMAR = re.compile(rb"(?m)^[ \t]*([A-Za-z][A-Za-z0-9_]*Stmt)[ \t]*:")
 PRIORITY = {"design": 0, "manual": 1, "registration": 2, "grammar": 3, "test": 4}
 GENERIC = {
     "overview",
@@ -35,7 +31,9 @@ def normalize(text):
     return " ".join(unicodedata.normalize("NFKC", text).casefold().split())
 
 
-def discover(store, snapshot, groups, docs, aliases):
+def discover(store, snapshot, groups, docs, aliases, adapter=None):
+    adapter = adapter or product_adapter.load()
+    detectors = product_adapter.expressions(adapter, "candidate")
     leads = {}
     registrations = defaultdict(set)
     module_terms = {
@@ -80,28 +78,22 @@ def discover(store, snapshot, groups, docs, aliases):
             path = PurePosixPath(asset)
             ext = path.suffix.lower()
             if ext == ".sql" and any(
-                p.casefold() in {"test", "tests", "regress", "regression"}
+                p.casefold() in adapter.get("test_directories", [])
                 for p in path.parts
             ):
                 add(["test", asset], path.stem, "test", asset, 1, 1, module)
                 continue
-            if ext not in {".c", ".cpp", ".cc", ".cxx", ".y", ".yy"}:
+            selected = [(rule, exp) for rule, exp in detectors if ext in rule["extensions"]]
+            if not selected:
                 continue
-            raw = store.blob(assets[asset]["sha"])
-            if ext in {".y", ".yy"}:
-                matches = [(m, "grammar") for m in GRAMMAR.finditer(raw)]
-            else:
-                matches = []
-                if b"DefineCustom" in raw:
-                    matches.extend((m, "registration") for m in CUSTOM.finditer(raw))
-                if b"PGC_" in raw:
-                    matches.extend((m, "registration") for m in CORE.finditer(raw))
+            raw = store.blob(assets[asset]["sha"]).decode("utf-8", errors="replace")
+            matches = [(m, rule["kind"]) for rule, exp in selected for m in exp.finditer(raw)]
             if not matches:
                 continue
-            breaks = [m.start() for m in re.finditer(b"\n", raw)]
+            breaks = [m.start() for m in re.finditer("\n", raw)]
             for match, kind in matches:
-                name = match.group(1).decode("ascii")
-                line = bisect_right(breaks, match.start(1)) + 1
+                name = match.group("name")
+                line = bisect_right(breaks, match.start("name")) + 1
                 cid = add(
                     [kind, path.parts[0], normalize(name)],
                     name,

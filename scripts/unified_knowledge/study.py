@@ -5,7 +5,7 @@ import json
 import time
 
 from .indexer import build_index
-from . import catalog
+from . import catalog, product_adapter
 from .materials import CPP, ingest
 from .navigation import available, navigate
 from .planner import create_task, task_status
@@ -46,6 +46,7 @@ def material_signature(snap):
 
 def inventory(store, config, profile=None, snapshot=None, existing_run=None, module_queue=False, source_only=False):
     started = time.monotonic()
+    adapter = product_adapter.load(config.get("product_adapter"))
     snap = store.record("snapshots", snapshot) if snapshot else ingest(store, config)
     configured = [p["id"] for p in snap["profiles"] if p["id"] != "unknown"]
     profile = existing_run["profile"] if existing_run else profile or (configured[0] if configured else "unknown")
@@ -64,12 +65,14 @@ def inventory(store, config, profile=None, snapshot=None, existing_run=None, mod
         if asset["status"] == "excluded":
             continue
         module = next((p for p in prefixes if asset["key"] == p or asset["key"].startswith(p.rstrip("/") + "/")), None)
-        groups[module or default_module(asset["repo"], asset["path"])].append(asset["key"])
+        groups[module or product_adapter.module_for(adapter, asset["repo"], asset["path"])].append(asset["key"])
     docs = [json.loads(r[0]) for r in store.db.execute("SELECT data FROM documents WHERE snapshot=? ORDER BY id", (snap["id"],))]
     units = Counter(binding["repository"] + "/" + c["file"] for c in binding["commands"])
     by_key = {a["key"]: a for a in snap["assets"]}
-    candidates = catalog.discover(store, snap, groups, docs, ALIASES)
-    plan_id = identity("study-plan", [rid, sorted(prefixes)])
+    aliases = adapter.get("aliases", {})
+    candidates = catalog.discover(store, snap, groups, docs, aliases, adapter)
+    topic_signals, signal_gaps = product_adapter.signals(store, snap, groups, adapter)
+    plan_id = identity("study-plan", [rid, sorted(prefixes), adapter["digest"]])
     coverage = {"mode": "inventory", "assets": len(sources), "available_tus": len(binding["commands"]),
                 "translation_units": 0, "parsed_tus": 0, "partial_tus": 0, "failed_tus": 0,
                 "deferred_tus": len(binding["commands"]), "invalid_commands": len(binding.get("unavailable_commands", [])), "semantic_completeness": "not_certified"}
@@ -110,7 +113,7 @@ def inventory(store, config, profile=None, snapshot=None, existing_run=None, mod
         for module, keys in sorted(groups.items()):
             keys = sorted(keys)
             token = module.split("/")[-1].casefold()
-            terms = (token, *ALIASES.get(token, ()))
+            terms = (token, *aliases.get(token, ()))
             matches = [d for d in docs if any(t in (d["title"] + " " + d["asset"]).casefold() for t in terms)]
             # Only supply a bounded first source excerpt; deeper evidence is read on demand.
             example = next((k for k in keys if PurePosixPath(k).suffix.lower() in CPP and by_key[k].get("bytes")), None)
@@ -157,6 +160,7 @@ def inventory(store, config, profile=None, snapshot=None, existing_run=None, mod
                         "question": "将未归属的设计和手册章节映射到特性，保留文码差异。"})
         gaps = [a["key"] for a in snap["assets"] if a["status"] == "failed" or a.get("extraction_error")]
         plan = {"id": plan_id, "snapshot": snap["id"], "run": rid, "profile": profile,
+                "product_adapter": adapter, "topic_signals": topic_signals, "signal_gaps": signal_gaps,
                 "catalog_version":2,"candidates":candidates,"routes":routes,
                 "profiles": configured, "module_prefixes": sorted(prefixes), "material_signature": material_signature(snap),
                 "modules": modules, "documents": len(docs),

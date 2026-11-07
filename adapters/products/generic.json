@@ -1,0 +1,11 @@
+{
+  "schema": "source-product-adapter/v1",
+  "id": "generic-cpp",
+  "version": "1",
+  "module_markers": ["src"],
+  "expand_dirs": [],
+  "module_rules": [],
+  "aliases": {},
+  "test_directories": ["test", "tests"],
+  "detectors": []
+}
