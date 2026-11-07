@@ -1,0 +1,377 @@
+{
+  "schema": "knowledge-platform-implementation-plan/v1",
+  "date": "2026-11-07",
+  "status": "planned_not_implemented",
+  "objective": "在既有编译索引和知识审阅工程上交付可追溯、可评测、可增量维护的集中式 GaussDB 源码知识库",
+  "assumptions": [
+    "先复用现有 openGauss GCC/SQLite 资产",
+    "公司模型、构建与内网服务的实际可用性在 P0 核验",
+    "RAGFlow 是有验收门槛的首个集成基线",
+    "全仓知识审阅不计入 4–6 周平台试点完成承诺"
+  ],
+  "implementation_repository": "gaussdb-source-knowledge",
+  "design": "docs/plans/knowledge-platform-rollout-20261107.md",
+  "tasks": [
+    {
+      "id": "B00",
+      "phase": "P0",
+      "title": "冻结现有资产并建立发布及能力清单",
+      "owner": "工程 A",
+      "depends_on": [],
+      "status": "planned",
+      "reuse": [
+        "graph_mount.py",
+        "store.py",
+        "releases.py",
+        "既有 ECS run/coverage"
+      ],
+      "deliverables": [
+        "源码/编译库/图/知识身份清单",
+        "index_capabilities 与缺口表",
+        "目标 500 万行组成清单"
+      ],
+      "acceptance": [
+        "旧图与新图身份分开",
+        "不填入无法核实的 Git HEAD",
+        "可以只读回放代表符号及同版源码"
+      ]
+    },
+    {
+      "id": "B01",
+      "phase": "P1",
+      "title": "有界查询输出、分页与执行预算",
+      "owner": "工程 A",
+      "depends_on": [
+        "B00"
+      ],
+      "status": "planned",
+      "reuse": [
+        "indexer.query_graph",
+        "graph_mount.attach",
+        "现有源码证据读取"
+      ],
+      "deliverables": [
+        "紧凑响应合同",
+        "默认字段投影与按需 provenance",
+        "稳定分页、时间/字节/数量预算"
+      ],
+      "acceptance": [
+        "候选和未解析状态不丢失",
+        "截断和未覆盖显式返回",
+        "高扇出查询不无界物化",
+        "ExecSort 样例以及跨文件重载/宏样例可回归"
+      ]
+    },
+    {
+      "id": "B02",
+      "phase": "P1",
+      "title": "用官方 SDK 暴露标准远程 MCP",
+      "owner": "工程 A",
+      "depends_on": [
+        "B00",
+        "B01"
+      ],
+      "status": "planned",
+      "reuse": [
+        "service.py 的查询函数与工具合同",
+        "官方 MCP Python SDK",
+        "公司现有访问网关"
+      ],
+      "deliverables": [
+        "锁版本的 Streamable HTTP 服务",
+        "只读工具允许列表",
+        "受控证据 URL"
+      ],
+      "acceptance": [
+        "RAGFlow 和开发 Agent 均完成真实互通",
+        "查询端不包含 request_refresh 或研究写入工具",
+        "访问范围和 release 校验先于数据返回",
+        "不将现有 loopback HTTP 冒充 MCP HTTP"
+      ]
+    },
+    {
+      "id": "B03",
+      "phase": "P2",
+      "title": "正式知识到检索副本的发布同步",
+      "owner": "工程 B",
+      "depends_on": [
+        "B00"
+      ],
+      "status": "planned",
+      "reuse": [
+        "knowledge.py 的已审修订",
+        "releases.py",
+        "RAGFlow 文档/元数据 API"
+      ],
+      "deliverables": [
+        "按 unit_id/content_hash 幂等导出",
+        "staging 到 active 发布清单",
+        "重复执行与失败恢复记录"
+      ],
+      "acceptance": [
+        "正文与权威知识 hash 一致",
+        "解析/向量化完成后才激活",
+        "旧会话仍可回读",
+        "重试不重复生成正式条目"
+      ]
+    },
+    {
+      "id": "B04",
+      "phase": "P2",
+      "title": "部署 RAGFlow 试点并接入模型和检索",
+      "owner": "工程 B",
+      "depends_on": [
+        "B02",
+        "B03"
+      ],
+      "status": "planned",
+      "reuse": [
+        "RAGFlow 官方部署栈",
+        "现有模型服务",
+        "RAGFlow retrieval API/测试界面"
+      ],
+      "deliverables": [
+        "锁版配置与依赖清单",
+        "版本受限的知识集和工作流",
+        "统一 retrieval provider"
+      ],
+      "acceptance": [
+        "元数据/知识集过滤确实生效",
+        "知识 ID 与内容 hash 可回查",
+        "测试页参数与实际问答配置一致",
+        "不重复部署其他 RAG 产品"
+      ]
+    },
+    {
+      "id": "B05",
+      "phase": "P2-P3",
+      "title": "统一候选召回、源码补证与上下文组装",
+      "owner": "工程 A 与工程 B",
+      "depends_on": [
+        "B01",
+        "B04"
+      ],
+      "status": "planned",
+      "reuse": [
+        "retrieval.get_context",
+        "find_knowledge",
+        "read_evidence",
+        "query_graph"
+      ],
+      "deliverables": [
+        "RAGFlow provider 与本地基线显式切换",
+        "按必要证据组打包上下文",
+        "网页与 Agent 共享发布/检索配置"
+      ],
+      "acceptance": [
+        "检索命中后关键条件不在裁剪中静默丢失",
+        "不匹配的 unit/hash 拒绝作为正式知识",
+        "无答案与能力缺口可见",
+        "不把未解析调用变成确定链"
+      ]
+    },
+    {
+      "id": "B06",
+      "phase": "P3",
+      "title": "排序特性及四专题的实际研究与审阅",
+      "owner": "数据库维护者与研究执行者",
+      "depends_on": [
+        "B00",
+        "B13"
+      ],
+      "status": "planned",
+      "reuse": [
+        "现有排序材料",
+        "模块/特性任务与审阅",
+        "错误/内存/兼容/GUC 方法"
+      ],
+      "deliverables": [
+        "当前快照特性清单及状态",
+        "正式机制、契约、证据和反例",
+        "Wiki 与结构化知识修订"
+      ],
+      "acceptance": [
+        "不用其他 checkout 的证据填当前知识",
+        "每项专题有适用性判断",
+        "已发现项全部有处置状态",
+        "运行验证未执行时保留 not_run",
+        "关键开放问题不得伪装为已审结论"
+      ]
+    },
+    {
+      "id": "B07",
+      "phase": "P3",
+      "title": "建立分层金标和封存验收集",
+      "owner": "工程 B 与数据库维护者",
+      "depends_on": [
+        "B00",
+        "B06"
+      ],
+      "status": "planned",
+      "deliverables": [
+        "至少 200 道问题及必要证据组",
+        "80 调参/120 验收的分组清单",
+        "判定准则与来源记录"
+      ],
+      "acceptance": [
+        "同机制改写不跨调参和验收分组",
+        "包含无答案、跨版本及宏条件问题",
+        "人工核对关键金标",
+        "金标绑定实际发布身份"
+      ]
+    },
+    {
+      "id": "B08",
+      "phase": "P3-P4",
+      "title": "执行检索与回答效果对照",
+      "owner": "工程 B 与数据库维护者",
+      "depends_on": [
+        "B05",
+        "B07"
+      ],
+      "status": "planned",
+      "deliverables": [
+        "四组检索策略的同条件结果",
+        "按专题的召回/完整证据/正确性报告",
+        "失败案例、模型 token 与成本"
+      ],
+      "acceptance": [
+        "固定模型与上下文预算",
+        "报告每个专题的分母和不确定性",
+        "执行设计稿的初始准入目标",
+        "不得仅以 LLM 自评分验收"
+      ]
+    },
+    {
+      "id": "B09",
+      "phase": "P4",
+      "title": "增量更新、发布一致性与回滚",
+      "owner": "工程 A 与工程 B",
+      "depends_on": [
+        "B03",
+        "B05",
+        "B06",
+        "B13"
+      ],
+      "status": "planned",
+      "reuse": [
+        "changes.py",
+        "现有 TU 缓存与依赖失效",
+        "版本修订与发布"
+      ],
+      "deliverables": [
+        "四类变更回归",
+        "增量与全建事实对照",
+        "知识待复核与新版本发布",
+        "回滚演练"
+      ],
+      "acceptance": [
+        "叶子源文件/公共头/编译宏/生成文件均覆盖",
+        "旧事实不残留为当前事实",
+        "旧发布可完整回读",
+        "任一同步阶段失败时旧版本继续可用"
+      ]
+    },
+    {
+      "id": "B10",
+      "phase": "P4",
+      "title": "公司 500 万行代码的真实范围和容量验收",
+      "owner": "工程 A 与数据库维护者",
+      "depends_on": [
+        "B02",
+        "B05",
+        "B08",
+        "B09",
+        "B13"
+      ],
+      "status": "planned",
+      "deliverables": [
+        "目标库单一真实配置覆盖报告",
+        "宏与第二模块样例",
+        "冷建/更新/并发/空间/延迟报告"
+      ],
+      "acceptance": [
+        "不把 openGauss 成绩替代 GaussDB 验收",
+        "解析例外和未覆盖区域不从分母消失",
+        "性能目标在固定硬件与负载下测量",
+        "来源未核实或模型服务不适配时如实记录风险"
+      ]
+    },
+    {
+      "id": "B11",
+      "phase": "P5",
+      "title": "打包、交接与可重复部署验收",
+      "owner": "工程 B",
+      "depends_on": [
+        "B08",
+        "B09",
+        "B10"
+      ],
+      "status": "planned",
+      "deliverables": [
+        "部署与配置包",
+        "MCP/API 合同和工作流",
+        "数据发布清单、Wiki、评测报告",
+        "更新/备份/恢复/回滚操作手册"
+      ],
+      "acceptance": [
+        "独立环境按文档可运行",
+        "公司数据与程序包分别管理",
+        "公开样例和内部数据版本分开",
+        "用户问答、证据跳转、开发 Agent 三个入口读同一发布"
+      ]
+    },
+    {
+      "id": "B13",
+      "phase": "P1-P3",
+      "title": "任务规划器产品适配与研究缺口回流",
+      "owner": "工程 A 与数据库维护者",
+      "depends_on": [
+        "B00"
+      ],
+      "status": "planned",
+      "reuse": [
+        "project.py 的项目绑定",
+        "study.inventory 与模块盘点任务",
+        "catalog.discover 的候选登记",
+        "ecs.focus_existing 的候选建单与幂等复用",
+        "planner.create_task 与现有任务/依赖/执行/审阅机制"
+      ],
+      "deliverables": [
+        "独立且版本化的 openGauss/GaussDB 产品适配合同",
+        "模块归属与候选探测器配置/插件",
+        "有来源的候选归并、拆分与预算内建单",
+        "任务专题适用性、预期输出、验收和预算合同",
+        "研究缺口回流及变更重规划记录",
+        "计划/队列/覆盖缺口导出与可回放规划回执"
+      ],
+      "acceptance": [
+        "同一输入与策略重复规划不重复建单，中断可恢复，依赖无环",
+        "源码、profile、适配包及规划策略变化可区分，跨产品不继承知识批准状态",
+        "排序候选由材料产生，独立人工清单核对漏发现和错误归并",
+        "错误/内存/兼容/GUC 按适用性与共享机制建任务，不按函数或调用边机械扩张",
+        "未知规则、未解析调用及未覆盖宏分支保留缺口，任务扩展受预算限制",
+        "openGauss 产品规则调整无需修改通用规划核心，真实 GaussDB 迁移验收由 B10 完成"
+      ]
+    },
+    {
+      "id": "B12",
+      "phase": "持续建设",
+      "title": "按模块滚动扩展正式知识",
+      "owner": "各模块维护者",
+      "depends_on": [
+        "B11"
+      ],
+      "status": "planned",
+      "deliverables": [
+        "每批特性与共享机制增量",
+        "覆盖变化、缺口和回归结果"
+      ],
+      "acceptance": [
+        "按实际吞吐估算全仓周期",
+        "不按函数数或 Wiki 页数认定完成",
+        "新增真实问题进入同一研究/审阅流程"
+      ]
+    }
+  ]
+}
