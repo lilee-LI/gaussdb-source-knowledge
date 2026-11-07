@@ -198,7 +198,8 @@ def decode(output, request, diagnostics, returncode=0):
                 starts.append(starts[-1]+len(chunk))
             files[path] = starts
         starts = files[path]
-        require(1<=line<len(starts), "GCC returned an out-of-range source location: "+name+":"+str(value["line"]))
+        require(1<=line<len(starts), "GCC returned an out-of-range source location: "+name+":"+str(value["line"])+
+                " -> "+str(path)+":"+str(line)+" / "+str(len(starts)-1))
         result = {"asset":asset,"line":line,"column":value["column"],
                   "offset":starts[line-1] + max(0,value["column"]-1)}
         if name!=value["physical_file"] or line!=value["line"]:

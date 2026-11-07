@@ -23,7 +23,6 @@ static std::vector<std::string> roots;
 static std::unordered_map<unsigned, bool> emitted;
 struct source_origin { std::string file; long physical; unsigned logical; };
 static std::vector<source_origin> origins;
-static std::vector<unsigned> includers;
 
 static std::string quote(const char* value) {
     std::string result = "\"";
@@ -48,18 +47,25 @@ static const source_origin& physical_origin(const line_map_ordinary* map) {
     for (unsigned i = origins.size(); i < LINEMAPS_ORDINARY_USED(line_table); ++i) {
         const auto* current = LINEMAPS_ORDINARY_MAP_AT(line_table, i);
         source_origin value = {LINEMAP_FILE(current), (long)LINEMAP_LINE(current), LINEMAP_LINE(current)};
-        if (current->reason == LC_ENTER) {
-            if (i) includers.push_back(i - 1);
-        } else if (current->reason == LC_LEAVE && !includers.empty()) {
-            value = origins[includers.back()];
-            includers.pop_back();
-            value.physical += (long)LINEMAP_LINE(current) - value.logical;
-            value.logical = LINEMAP_LINE(current);
-        } else if (i) {
+        if (current->reason == LC_LEAVE && i) {
+            const auto* parent = linemap_included_from_linemap(line_table, LINEMAPS_ORDINARY_MAP_AT(line_table, i - 1));
+            if (parent) {
+                value = origins[parent - LINEMAPS_ORDINARY_MAPS(line_table)];
+                value.physical += (long)LINEMAP_LINE(current) - value.logical;
+                value.logical = LINEMAP_LINE(current);
+            }
+        } else if (current->reason == LC_RENAME_VERBATIM && i) {
             const auto* previous = LINEMAPS_ORDINARY_MAP_AT(line_table, i - 1);
             value = origins.back();
             value.physical += (long)SOURCE_LINE(previous, current->start_location - 1) - value.logical;
             value.logical = LINEMAP_LINE(current);
+        } else if (current->reason == LC_RENAME && i) {
+            const auto* previous = LINEMAPS_ORDINARY_MAP_AT(line_table, i - 1);
+            if (!strcmp(LINEMAP_FILE(previous),LINEMAP_FILE(current))) {
+                value = origins.back();
+                value.physical += (long)LINEMAP_LINE(current) - value.logical;
+                value.logical = LINEMAP_LINE(current);
+            }
         }
         origins.push_back(value);
     }
