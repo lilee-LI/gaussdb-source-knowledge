@@ -1,5 +1,7 @@
 # GaussDB 源码知识工程 2.2
 
+**当前实施建议：** 先完成[源码知识效果试点](docs/plans/knowledge-effectiveness-pilot-20261107.md)：复用 CodeWiki 学习流程与已有 Agent，保留本仓编译证据能力，优先修正旧试点接入假设和评测分母，再完成 openGauss 排序的真实学习、问答对照及增量验证。该计划尚待执行，不代表主平台选型或知识效果已验收。
+
 **2026-11-07 选型复核：** 后续优先验证完整开源主工程，暂停扩展本仓的通用平台功能。OpenDeepWiki、CodeWiki 和 Potpie 作为替代路线比较；现有代码和源码索引保留作资产。具体证据、限制和验证准入见[完整开源工程选型复核](docs/plans/integrated-platform-audit-20261107.md)。候选尚未完成本机效果验收。
 
 效果依据见[DeepWiki 论文与业界实践复核](docs/plans/deepwiki-effectiveness-evidence-20261107.md)：文档评分、实际问答与源码机制召回分别衡量；原版 DeepWiki 与开源复刻不共享成绩，目前不预设某个候选效果最佳。
