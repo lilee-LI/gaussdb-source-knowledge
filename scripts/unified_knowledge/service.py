@@ -31,9 +31,9 @@ QUERY_TOOLS = {
     "knowledge_graph": "Read the responsibility/feature trees and semantic relations.",
     "status": "Read implementation, material and task state.",
     "knowledge_delta": "Compare semantic content and source bindings across frozen knowledge revisions.",
-    "request_refresh": "Enqueue an idempotent concrete knowledge-gap task; does not execute a model or approve knowledge.",
 }
 WORK_TOOLS = {
+    "request_refresh": "Enqueue an idempotent concrete knowledge-gap task; does not execute a model or approve knowledge.",
     "plan_tasks": "Preview or apply a bounded research-task batch using the bound product adapter; never accepts knowledge.",
     "planning_feedback": "Record evidence-backed new, merged or split candidates and research gaps for subsequent task planning.",
     "focus_module": "Create a bounded module research task. ECS plans reuse indexed symbols and evidence.",

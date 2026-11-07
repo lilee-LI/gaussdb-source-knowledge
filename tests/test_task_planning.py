@@ -9,7 +9,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from make_fixture import build_fixture
-from unified_knowledge import ecs, study, product_adapter, task_planning, service
+from unified_knowledge import ecs, study, product_adapter, task_planning, service, catalog
 from unified_knowledge.store import Store
 
 
@@ -67,6 +67,8 @@ class TaskPlanningTests(unittest.TestCase):
     def test_feedback_deduplicates_and_preserves_dependencies(self):
         first = task_planning.propose(self.store, self.proposal())
         self.assertEqual(first, task_planning.propose(self.store, self.proposal()))
+        listed = catalog.listing(self.store, study.current(self.store))
+        self.assertIn(first["candidates"][0]["id"], {r["id"] for r in listed["items"]})
         next_proposal = self.proposal("Cross-module consumer")
         next_proposal["candidates"][0]["depends_on"] = [first["candidates"][0]["id"]]
         second = task_planning.propose(self.store, next_proposal)

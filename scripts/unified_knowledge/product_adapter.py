@@ -99,7 +99,7 @@ def signals(store, snapshot, groups, adapter, *, per_topic=12, max_bytes=2_000_0
                     if len(topic["evidence"]) >= per_topic:
                         topic["sample_limited"] = True
                         break
-                    line = text.count("\n", 0, found.start()) + 1
+                    line = text.count("\n", 0, found.start("name")) + 1
                     topic["evidence"].append({"asset": key, "start": line, "end": line, "detector": rule["id"], "name": found.group("name")})
         for topic in topics.values():
             topic["reason"] = "Lexical leads require source verification" if topic["evidence"] else "No sampled lead; absence has not been established"

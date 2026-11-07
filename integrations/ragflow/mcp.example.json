@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "gaussdb_source_knowledge": {
+      "url": "http://127.0.0.1:8765/mcp",
+      "type": "streamable-http",
+      "headers": {"Authorization": "Bearer REPLACE_AT_DEPLOYMENT"}
+    }
+  }
+}

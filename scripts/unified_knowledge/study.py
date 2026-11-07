@@ -204,7 +204,7 @@ def route(store, cid, module):
     with store.transaction():
         plan = current(store)
         require(not plan.get("worker_scope") and module in plan["modules"],"请在协调端选择一个有效模块")
-        lead = catalog.candidate(plan,cid)
+        lead = catalog.candidate(plan,cid,store)
         active = store.db.execute("SELECT 1 FROM tasks WHERE snapshot=? AND json_extract(data,'$.bundle.plan_id')=? "
                                   "AND json_extract(data,'$.bundle.candidate_id')=?",(plan["snapshot"],plan["id"],cid)).fetchone()
         require(not active or lead["owner_module"]==module,"该候选已有研究任务，请先处理现有任务")
@@ -212,6 +212,9 @@ def route(store, cid, module):
         lead["owner_basis"] = "coordinator"
         lead["modules"] = sorted(set(lead["modules"]) | {module})
         plan.setdefault("routes",{})[cid] = module
+        extra = store.get_meta("planning-candidates:" + plan["id"], [])
+        if any(c["id"] == cid for c in extra):
+            store.set_meta("planning-candidates:" + plan["id"], [lead if c["id"] == cid else c for c in extra])
         docs = plan["modules"][module]["document_matches"]
         docs.extend(d for d in dict.fromkeys(r.get("document") for r in lead["evidence"]) if d and d not in docs)
         store.set_meta(plan["id"],plan)
@@ -371,7 +374,7 @@ def focus(store, module=None, *, files=(), limit=12, jobs=2, extend=None, questi
     plan = current(store)
     lead = None
     if candidate_id:
-        lead = catalog.candidate(plan,candidate_id)
+        lead = catalog.candidate(plan,candidate_id,store)
         module = module or lead["owner_module"]
         require(module,"该候选待归属，请用 --module 指定责任模块")
         require(not lead["owner_module"] or module==lead["owner_module"],"该候选属于 "+str(lead["owner_module"]))

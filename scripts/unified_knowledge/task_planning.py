@@ -181,7 +181,8 @@ def construct(store, *, modules=None, max_tasks=20, files_per_task=12, apply=Fal
                 continue
             anchors = []
             for ref in item["evidence_seeds"]:
-                anchors.append(store.anchor(plan["snapshot"], ref["asset"], ref["start"], ref["end"])["id"])
+                asset = store.asset(plan["snapshot"], ref["asset"])
+                anchors.append(store.anchor(plan["snapshot"], ref["asset"], ref["start"], ref["end"], text_sha=asset.get("text_sha"))["id"])
             if not anchors:
                 for key in item["selected_files"][:3]:
                     asset = store.asset(plan["snapshot"], key)

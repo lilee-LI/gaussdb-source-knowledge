@@ -155,7 +155,7 @@ def execute(args):
             return study.route(store,args.candidate,args.module)
         if args.action=="learn":
             from .catalog import candidate
-            lead=candidate(plan,args.candidate) if args.candidate else None
+            lead=candidate(plan,args.candidate,store) if args.candidate else None
             require(lead or (args.module and args.question),"使用 --candidate，或提供 --module 和 --question")
             module=args.module
             module=module or lead["owner_module"]

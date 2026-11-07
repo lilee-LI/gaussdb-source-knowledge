@@ -5,6 +5,9 @@ from unified_knowledge import project
 
 if __name__ == "__main__":
     args = sys.argv[1:]
+    if args and args[0] == "platform":
+        from unified_knowledge.platform_cli import main as platform_main
+        raise SystemExit(platform_main(args[1:]))
     if not args or args in (["-h"],["--help"]):
         raise SystemExit(project.main(["--help"]))
     if args == ["--version"]:

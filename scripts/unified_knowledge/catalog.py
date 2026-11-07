@@ -183,6 +183,11 @@ def discover(store, snapshot, groups, docs, aliases, adapter=None):
     )
 
 
+def all_candidates(store, plan):
+    rows = [*plan.get("candidates", []), *store.get_meta("planning-candidates:" + plan["id"], [])]
+    return list({r["id"]:r for r in rows}.values())
+
+
 def entries(store, plan):
     tasks = defaultdict(list)
     for row in store.db.execute(
@@ -213,7 +218,7 @@ def entries(store, plan):
         "queued": 1,
         "deferred": 0,
     }
-    for base in plan.get("candidates", []):
+    for base in all_candidates(store, plan):
         rows = tasks[base["id"]]
         chosen = max(
             rows,
@@ -255,7 +260,8 @@ def listing(store, plan, *, module=None, state=None, limit=30, offset=0):
     }
 
 
-def candidate(plan, cid):
-    row = next((r for r in plan.get("candidates", []) if r["id"] == cid), None)
+def candidate(plan, cid, store=None):
+    rows = all_candidates(store, plan) if store is not None else plan.get("candidates", [])
+    row = next((r for r in rows if r["id"] == cid), None)
     require(row is not None, "当前计划中没有这一候选特性，运行 features 查看。")
     return row

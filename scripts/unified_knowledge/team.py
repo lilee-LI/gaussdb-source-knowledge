@@ -301,7 +301,7 @@ def receive(store, path, jobs=2):
         cid = data.get("candidate_id")
         if cid:
             from .catalog import candidate
-            lead = candidate(plan,cid)
+            lead = candidate(plan,cid,store)
             require(lead["owner_module"] in (None,ticket["module"]),"Candidate belongs to a different module")
             other = store.db.execute("SELECT id,status,attempt,data FROM tasks WHERE snapshot=? AND json_extract(data,'$.bundle.plan_id')=? "
                         "AND json_extract(data,'$.bundle.candidate_id')=?",(snapshot,plan["id"],cid)).fetchone()

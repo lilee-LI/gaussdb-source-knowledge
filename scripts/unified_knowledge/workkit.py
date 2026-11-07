@@ -23,6 +23,8 @@ def file_hash(path):
 
 
 def make_shard(hub, shard, plan, ticket, additions):
+    from .catalog import all_candidates
+    leads = all_candidates(hub, plan)
     module = ticket["module"]
     info = plan["modules"][module]
     source_run = hub.record("runs", plan["run"])
@@ -89,7 +91,7 @@ def make_shard(hub, shard, plan, ticket, additions):
             db.execute("INSERT OR IGNORE INTO owned SELECT DISTINCT asset FROM symbols")
             db.execute("INSERT OR IGNORE INTO owned SELECT DISTINCT json_extract(data,'$.asset') FROM relations")
             db.execute("INSERT OR IGNORE INTO owned SELECT key FROM hub.assets WHERE snapshot=? AND kind='method'", (sid,))
-            candidate_assets = {r["asset"] for c in plan.get("candidates",[]) if c["owner_module"]==module
+            candidate_assets = {r["asset"] for c in leads if c["owner_module"]==module
                                 for r in c["evidence"]}
             db.executemany("INSERT OR IGNORE INTO owned VALUES(?)",((asset,) for asset in candidate_assets))
             for did in info["document_matches"]:
@@ -132,7 +134,7 @@ def make_shard(hub, shard, plan, ticket, additions):
                 shard.set_meta("coordinator-history:"+plan["id"], {"tasks":history["tasks"],"truncated":history["truncated"]})
             local_task = create_task(shard,snapshot=sid,run=kit_run,profile=run["profile"],kind="module_survey",bundle=task["bundle"])
             member_leads = [{**c,"evidence":[e for e in c["evidence"] if e["asset"] in visible]}
-                            for c in plan.get("candidates",[]) if c["owner_module"]==module]
+                            for c in leads if c["owner_module"]==module]
             view = {**plan,"run":kit_run,"modules":{module:{**info,"task":local_task}},"worker_scope":module,
                     "candidates":member_leads,"routes":{c["id"]:module for c in member_leads},
                     "gaps":[k for k in plan["gaps"] if db.execute("SELECT 1 FROM assets WHERE snapshot=? AND key=?", (sid,k)).fetchone()],

@@ -251,7 +251,7 @@ def focus_existing(store, plan, module, files, limit, question, symbol, profile,
         if lead:
             from .catalog import candidate
             require(store.get_meta("study_head")==plan["id"],"学习计划已换版，请重新选择候选")
-            require(candidate(store.get_meta(plan["id"]),lead["id"])["owner_module"] in (None,module),
+            require(candidate(store.get_meta(plan["id"]),lead["id"],store)["owner_module"] in (None,module),
                     "候选责任模块已变更，请刷新清单")
             prior = store.db.execute("SELECT id,data FROM tasks WHERE snapshot=? AND json_extract(data,'$.bundle.plan_id')=? "
                 "AND json_extract(data,'$.bundle.candidate_id')=? ORDER BY rowid LIMIT 1",

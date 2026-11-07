@@ -45,13 +45,15 @@ def analyze_change(store, base, target, *, base_run, target_run, revision=None, 
         if targets & set(stale):
             dependents.append(uid)
     moved = []
-    old_symbols = {r["logical"]: json.loads(r["data"]) for r in store.db.execute("SELECT logical,data FROM symbols WHERE run=?", (base_run,))}
-    new_symbols = {r["logical"]: json.loads(r["data"]) for r in store.db.execute("SELECT logical,data FROM symbols WHERE run=?", (target_run,))}
     # Missing stable identity remains a candidate mapping, never an automatic equivalence.
-    for logical in set(old_symbols) - set(new_symbols):
-        matches = [v for v in new_symbols.values() if v["name"] == old_symbols[logical]["name"] and v["kind"] == old_symbols[logical]["kind"]]
-        moved.append({"old": old_symbols[logical]["id"], "candidate_targets": [v["id"] for v in matches],
-                      "resolution": "candidate" if matches else "unresolved"})
+    # Compare indexed identities in SQL. Never decode both whole symbol tables (including all TU contexts).
+    missing = store.db.execute("SELECT o.id,o.name,o.kind FROM symbols o WHERE o.run=? AND NOT EXISTS "
+        "(SELECT 1 FROM symbols n WHERE n.run=? AND n.logical=o.logical) ORDER BY o.id LIMIT 201", (base_run,target_run)).fetchall()
+    for item in missing[:200]:
+        matches = store.db.execute("SELECT id FROM symbols WHERE run=? AND name=? AND kind=? ORDER BY id LIMIT 51",
+                                   (target_run,item["name"],item["kind"])).fetchall()
+        moved.append({"old":item["id"],"candidate_targets":[r["id"] for r in matches[:50]],
+                      "resolution":"candidate" if matches else "unresolved","truncated":len(matches)>50})
     patch = None
     if diff_text is not None:
         require(isinstance(diff_text, str) and len(diff_text) <= 2_000_000, "Invalid patch material")
@@ -61,6 +63,7 @@ def analyze_change(store, base, target, *, base_run, target_run, revision=None, 
               "base_run": base_run, "target_run": target_run, "knowledge_revision": revision,
               "changed_assets": changed, "profile_changed": profile_changed, "affected_tus": affected_tus,
               "stale_units": stale, "dependent_units": sorted(dependents), "symbol_mapping_candidates": moved,
+              "symbol_mapping_truncated": len(missing)>200,
               "new_unexplained_assets": [r["asset"] for r in changed if r["kind"] == "added"],
               "patch": patch, "semantic_verdict": "requires_research", "database_execution": "not_run"}
     cid = identity("change", change)
