@@ -27,7 +27,7 @@ CodeWiki 是学习流水线，不将它描述成已经具备完整团队问答�
 
 ## 已查到的具体差距
 
-- `scripts/codewiki_learning.py` 的准备阶段要求已有 baseline、预设 module_tree 等材料；专题提示还有旧试点的 `driver/fitness/population/erx/contracts` 页面名。它是有界试验适配器，不能直接称为任意模块的原生全流程。
+- 独立 `scripts/codewiki_learning.py` 要求 baseline、预设 module_tree 等材料；`worker.py` 包装层在没有已审知识时会创建范围占位 baseline，因此不要求用户必须先写旧 Wiki。但包装层默认模块树与提示函数期待的形状不一致，本轮复现了 `AttributeError`；专题提示还有旧试点的 `driver/fitness/population/erx/contracts` 页面名。它不能直接称为任意模块的原生全流程。详见[本仓实际能力核对](../OPENGAUSS-LEARNING-STATUS.md)。
 - `scripts/unified_knowledge/evaluation.py` 要求金标 knowledge ID 已存在于发布集。它能测已入库知识是否召回，不能独立发现应学但未入库的机制。现有检查继续保留，另补从原始源码定义分母的覆盖评估。
 - 当前答案语义正确性明确为待另行审阅；默认本地检索为词法基线。不能从软件测试结果推导真实问答通过。
 

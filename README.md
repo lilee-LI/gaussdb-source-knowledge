@@ -1,5 +1,7 @@
 # GaussDB 源码知识工程 2.2
 
+**当前实际能力：** [仅基于本仓库的 openGauss 学习流程与实现状态](docs/OPENGAUSS-LEARNING-STATUS.md)对应实际命令和代码，区分宿主 Agent 执行、已实现软件流程、CodeWiki 适配缺口与尚未验收的领域效果。`learn` 建单，`ask` 返回证据上下文，均不等于自动完成学习或回答。
+
 **当前目标架构：** 见[完整工程架构](docs/ARCHITECTURE.md)：CodeWiki 学习流水线、数据库专题与证据适配、同版知识和源码查询、独立效果评估。文档逐项区分已有实现与待完成闭环；调用关系仍保存在源码索引，Wiki 是知识阅读视图。
 
 **当前实施建议：** 先完成[源码知识效果试点](docs/plans/knowledge-effectiveness-pilot-20261107.md)：复用 CodeWiki 学习流程与已有 Agent，保留本仓编译证据能力，优先修正旧试点接入假设和评测分母，再完成 openGauss 排序的真实学习、问答对照及增量验证。该计划尚待执行，不代表主平台选型或知识效果已验收。
