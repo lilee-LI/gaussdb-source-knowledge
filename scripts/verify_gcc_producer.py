@@ -51,7 +51,7 @@ int unicode_line(int x) { /* 汉字 */ return target(x); }
         body = 'int '+name+'(int x) { return target(x); }\n'
         (parser/"grammar.y").write_text(body,encoding="utf-8")
         label = str(parser/"grammar.y") if absolute else "grammar.y"
-        (parser/"grammar.cpp").write_text('#include "../shared.h"\n#line 1 '+json.dumps(label)+'\n'+body,encoding="utf-8")
+        (parser/"grammar.cpp").write_text('#include "../shared.h"\n#line '+('2153' if absolute else '1')+' '+json.dumps(label)+'\n'+body,encoding="utf-8")
     entries = [{"file":str(source/name),"directory":str(source),
                 "arguments":[args.cc if name.endswith(".c") else args.cxx,"-std=c11" if name.endswith(".c") else "-std=c++14",
                              "-I"+str(source),"-c",name,"-o",name+".o"]}
@@ -87,7 +87,8 @@ int unicode_line(int x) { /* 汉字 */ return target(x); }
         assert utf and (source/"first.cpp").read_bytes()[utf[0]["offset"]:utf[0]["offset"]+1]==b"("
         for folder,name in (("parser-a","generated_a"),("parser-b","generated_b")):
             mapped = named(name,"target")
-            assert mapped and mapped[0]["asset"]=="server/"+folder+"/grammar.y" and mapped[0]["start"]==1
+            assert mapped and mapped[0]["asset"]=="server/"+folder+"/grammar.cpp" and mapped[0]["start"]==3
+            assert mapped[0]["expansion_location"]["presumed_location"]["line"]==(2153 if folder=="parser-b" else 1)
     repeated = run("repeat")
     assert repeated["run_id"]==first["run_id"],"Unchanged input failed to reuse its native run"
     file = source/"first.cpp"

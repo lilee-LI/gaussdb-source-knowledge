@@ -155,7 +155,7 @@ def decode(output, request, diagnostics, returncode=0):
     roots = {key:Path(value).resolve() for key,value in request["roots"].items()}
     originals = {key:Path(value).resolve() for key,value in request["original_roots"].items()}
     files, symbols, calls, include_paths = {}, {}, [], set()
-    line_aliases, unmapped = {}, set()
+    line_aliases, line_maps, unmapped = {}, {}, set()
 
     @lru_cache(maxsize=8192)
     def resolved(name):
@@ -185,25 +185,37 @@ def decode(output, request, diagnostics, returncode=0):
         return None
 
     def position(value):
-        asset = locate(value.get("file"))
-        if value.get("file") and not Path(value["file"]).is_absolute() and not asset:
-            unmapped.add(value["file"])
-        if not asset or value["line"] < 1:
+        name = value.get("file")
+        if not name or name.startswith("<") or value["line"] < 1:
             return None
-        path = frozen_path(value["file"])
+        matches = {(p,start+value["line"]-first) for first,last,p,start in line_maps.get(name,[])
+                   if first<=value["line"]<=last}
+        if len(matches)>1:
+            unmapped.add(name+":"+str(value["line"]))
+            return None
+        if matches:
+            path,line = next(iter(matches))
+        else:
+            path,line = frozen_path(name),value["line"]
+        asset = locate(str(path)) if path else None
+        if not asset:
+            if not Path(name).is_absolute():
+                unmapped.add(name)
+            return None
         include_paths.add(path)
         if path not in files:
             raw = path.read_bytes()
             starts = [0]
-            for line in raw.splitlines(keepends=True):
-                starts.append(starts[-1]+len(line))
+            for chunk in raw.splitlines(keepends=True):
+                starts.append(starts[-1]+len(chunk))
             files[path] = starts
         starts = files[path]
-        require(value["line"] <= len(starts), "GCC returned an out-of-range source location")
-        result = {"asset":asset,"line":value["line"],"column":value["column"],
-                  "offset":starts[value["line"]-1] + max(0,value["column"]-1)}
-        if not Path(value["file"]).is_absolute():
-            result.update(source_mapping="gcc-line-directive",presumed_file=value["file"])
+        require(line < len(starts), "GCC returned an out-of-range source location: "+name+":"+str(value["line"]))
+        result = {"asset":asset,"line":line,"column":value["column"],
+                  "offset":starts[line-1] + max(0,value["column"]-1)}
+        if matches:
+            result.update(source_mapping="gcc-line-directive",presumed_location={"file":name,"asset":locate(name),
+                          "line":value["line"],"column":value["column"]})
         return result
 
     with output.open(encoding="utf-8") as stream:
@@ -222,21 +234,30 @@ def decode(output, request, diagnostics, returncode=0):
     include_paths.add(Path(request["file"]).resolve())
     # Resolve only explicit #line labels, relative to their own frozen file.
     # Do not guess by basename across the repository (several parsers use gram.y).
-    directive = re.compile(rb'^\s*#\s*(?:line\s+)?\d+\s+("(?:\\.|[^"\\])*")',re.M)
+    directive = re.compile(rb'^[ \t]*#[ \t]*(?:line[ \t]+)?(\d+)[ \t]+("(?:\\.|[^"\\])*")',re.M)
     for file in sorted(include_paths):
         physical = frozen_path(str(file))
         if physical is None or not physical.is_file():
             continue
-        for match in directive.finditer(physical.read_bytes()):
+        raw = physical.read_bytes()
+        markers,previous,number = [],0,1
+        for match in directive.finditer(raw):
+            number += raw.count(b'\n',previous,match.start())
+            previous = match.start()
             try:
-                label = json.loads(match[1].decode("utf-8"))
+                label = json.loads(match[2].decode("utf-8"))
             except (ValueError,UnicodeError):
                 continue
-            if Path(label).is_absolute():
-                continue
-            candidate = frozen_path(str((physical.parent/label).resolve()))
-            if candidate and candidate.is_file():
-                line_aliases.setdefault(label,set()).add(candidate)
+            markers.append((number,int(match[1]),label))
+            if not Path(label).is_absolute():
+                candidate = frozen_path(str((physical.parent/label).resolve()))
+                if candidate and candidate.is_file():
+                    line_aliases.setdefault(label,set()).add(candidate)
+        length = raw.count(b'\n')+int(bool(raw) and not raw.endswith(b'\n'))
+        for i,(physical_line,first,label) in enumerate(markers):
+            last_physical = markers[i+1][0]-1 if i+1<len(markers) else length
+            if physical_line<last_physical:
+                line_maps.setdefault(label,[]).append((first,first+last_physical-physical_line-1,physical,physical_line+1))
     # No lookups occurred before the explicit directive table was complete.
     values, identities = {}, {}
     for uid, item in symbols.items():
@@ -248,9 +269,10 @@ def decode(output, request, diagnostics, returncode=0):
             occurrence.append(request["unit_file"])
         logical = identity("symbol", occurrence)
         identities[uid] = logical
+        end = position({**item["position"],"line":item["end"]})
         values[logical] = {"logical":logical,"usr":"gcc-abi:"+item["abi"], "name":item["name"],
             "spelling":item["spelling"], "kind":item["kind"],"asset":pos["asset"], "type":item["type"],
-            "start":pos["line"], "end":max(pos["line"],item["end"]), "offset":pos["offset"],
+            "start":pos["line"], "end":max(pos["line"],end["line"] if end and end["asset"]==pos["asset"] else pos["line"]), "offset":pos["offset"],
             "linkage":"EXTERNAL" if item["external"] else "INTERNAL", "definition":item["definition"],
             "resolution":"resolved", "frontend_selected":True, "frontend":"gcc-pre-genericize",
             "implicit":item["implicit"], "spelling_location":pos,"expansion_location":pos}
