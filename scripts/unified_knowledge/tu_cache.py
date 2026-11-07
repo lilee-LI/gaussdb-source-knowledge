@@ -54,7 +54,11 @@ def guard(store, snapshot, source_key, arguments, originals, includes):
         elif value.startswith("-I") and len(value) > 2:
             roots.append(Path(value[2:]))
     inputs = [{"asset": source_key}, *includes]
-    for item in inputs:
+    records = []
+    # Reject unsupported input syntax before constructing any filesystem probes.
+    # SDK headers often contain include_next; inspect them first without weakening
+    # the conservative cache policy or doing thousands of doomed lookups per TU.
+    for item in sorted(inputs,key=lambda item:bool(item.get("asset"))):
         if item.get("asset"):
             key = item["asset"]
             repo, path = key.split("/", 1)
@@ -66,24 +70,31 @@ def guard(store, snapshot, source_key, arguments, originals, includes):
         text = raw.decode("utf-8", errors="replace").replace("\\\n", "").replace("\\\r\n", "")
         if re.search(r"__TIMESTAMP__|__TIME__|__DATE__|#\s*(?:include_next|import)\b", text):
             return None
+        optional = []
         if "__has_include" in text:
             if not closed_search:
                 return None
             parts = list(re.finditer(r'__has_include\s*\(\s*[<"]([^">]+)[>"]\s*\)', text))
             if len(parts) != text.count("__has_include"):
                 return None
-            for match in parts:
-                for directory in [parent, *roots]:
-                    key = locator(directory / match[1], originals)
-                    probes[key] = present(store, snapshot, key)
+            optional = [match[1] for match in parts]
+        literal = []
         for directive in re.findall(r"(?m)^\s*#\s*include\s*([^\n]+)", text):
-            m = re.match(r'\s*[<"]([^>"]+)[>"]', directive)
-            if not m:
+            match = re.match(r'\s*[<"]([^>"]+)[>"]', directive)
+            if not match:
                 return None
-            for directory in [parent, *roots]:
-                key = locator(directory / m[1], originals)
+            literal.append(match[1])
+        records.append((parent,optional,literal))
+    for parent, optional, literal in records:
+        for name in optional:
+            for directory in [parent,*roots]:
+                key = locator(directory / name, originals)
+                probes[key] = present(store,snapshot,key)
+        for name in literal:
+            for directory in [parent,*roots]:
+                key = locator(directory / name, originals)
                 if key not in probes:
-                    probes[key] = present(store, snapshot, key)
+                    probes[key] = present(store,snapshot,key)
     return probes
 
 

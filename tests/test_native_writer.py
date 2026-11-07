@@ -83,6 +83,14 @@ class NativeWriterTests(unittest.TestCase):
         self.assertEqual(0,self.store.db.execute("SELECT count(*) FROM native_memberships").fetchone()[0])
         self.assertEqual(0,self.store.db.execute("SELECT count(*) FROM symbols").fetchone()[0])
 
+    def test_compiler_cannot_publish_different_frozen_header_bytes(self):
+        writer=NativeWriter(self.store,"run",self.snapshot,"native")
+        payload=self.payload()
+        payload["includes"]=[{"asset":"server/unit.cpp","sha":"0"*64}]
+        with self.assertRaisesRegex(ValueError,"frozen input contract"):
+            with self.store.transaction():writer.persist(payload,"tu:changed")
+        self.assertEqual(0,self.store.db.execute("SELECT count(*) FROM symbols").fetchone()[0])
+
 
 if __name__=="__main__":
     unittest.main()
