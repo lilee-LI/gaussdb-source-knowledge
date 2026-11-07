@@ -1,0 +1,391 @@
+{
+  "schema": "gausskb-public-benchmark/v1",
+  "date": "2026-11-07",
+  "status": "ecs_verified_windows_pending",
+  "engine_commit": "9e515e9b2b98b7a31c0088f0a590331a8c801143",
+  "jobs": 8,
+  "tu_timeout_seconds": 300,
+  "facts": "calls",
+  "frontend": "gcc",
+  "allow_partial": false,
+  "compiler_database_entries": 2412,
+  "compile_database_sha256": "9801db4945a1e5b3621a760b74507275d25d18280d621ba811321fc41a2226af",
+  "architecture": "x86_64",
+  "python": "3.9.9",
+  "logical_cpus": 16,
+  "os_page_cache": "not_cleared",
+  "tu_cache": "new_empty_work_directory",
+  "wall_seconds": 1929.701,
+  "peak_tree_rss_kib": 2891496,
+  "run_id": "index-scope:97b82f3bee952bbcc84f99c1198dde7c",
+  "coverage": {
+    "assets": 6406,
+    "translation_units": 2412,
+    "available_tus": 2412,
+    "deferred_tus": 0,
+    "parsed_tus": 2412,
+    "partial_tus": 0,
+    "failed_tus": 0,
+    "unknown_profile": false,
+    "semantic_completeness": "not_certified",
+    "symbols": 382078,
+    "relations": 2508564,
+    "ctags": {
+      "configured": false,
+      "candidates": 0,
+      "unmatched": [],
+      "retained_as_candidates": 0,
+      "errors": [],
+      "semantic_completeness": "not_certified"
+    },
+    "call_binding": {
+      "linked_definitions": 855919,
+      "declaration_only": 53293,
+      "ambiguous_definitions": 205252,
+      "legacy_usr_candidate": 0
+    },
+    "source_evidence_files": 4126
+  },
+  "tu_status": {
+    "parsed": 2412
+  },
+  "tu_seconds_sum": 2295.961,
+  "dependency_discovery_seconds": 219.063,
+  "relations_by_resolution": [
+    [
+      "candidate",
+      292260
+    ],
+    [
+      "resolved",
+      1740385
+    ],
+    [
+      "unresolved",
+      475919
+    ]
+  ],
+  "directed_call_pairs": 753726,
+  "physical_call_locations": 629502,
+  "graph_rows": {
+    "symbols": 382078,
+    "relations": 2508564,
+    "anchors": 500698,
+    "assets": 6408
+  },
+  "sqlite_objects_bytes": [
+    [
+      "relations",
+      3449397248
+    ],
+    [
+      "symbols",
+      599187456
+    ],
+    [
+      "anchors",
+      343588864
+    ],
+    [
+      "relation_source",
+      312549376
+    ],
+    [
+      "relation_target",
+      311541760
+    ],
+    [
+      "sqlite_autoindex_relations_1",
+      269066240
+    ],
+    [
+      "anchor_asset",
+      59543552
+    ],
+    [
+      "sqlite_autoindex_symbols_1",
+      44122112
+    ],
+    [
+      "symbol_logical",
+      40448000
+    ],
+    [
+      "symbol_file",
+      40411136
+    ],
+    [
+      "symbol_name",
+      31883264
+    ],
+    [
+      "sqlite_autoindex_anchors_1",
+      28872704
+    ],
+    [
+      "snapshots",
+      8331264
+    ],
+    [
+      "profiles",
+      6098944
+    ],
+    [
+      "assets",
+      3878912
+    ],
+    [
+      "runs",
+      1249280
+    ],
+    [
+      "sqlite_autoindex_assets_1",
+      774144
+    ],
+    [
+      "asset_scope",
+      774144
+    ],
+    [
+      "sqlite_schema",
+      12288
+    ],
+    [
+      "vectors",
+      4096
+    ]
+  ],
+  "storage_metrics": {
+    "anchors_inserted": 500707,
+    "format": "append-memberships/v1",
+    "relations_inserted": 2508564,
+    "symbol_base_inserts": 382078,
+    "symbol_base_upgrades": 0,
+    "symbol_context_memberships": 2141920,
+    "symbol_json_finalizations": 382078
+  },
+  "frontend_invocations": 2412,
+  "cache_hits": 0,
+  "delivery_db_bytes": 5551919104,
+  "delivery_total_bytes": 5699415208,
+  "work_db_bytes": 6528786432,
+  "code_unchanged": true,
+  "controller_io": {
+    "rchar": 292316934619,
+    "wchar": 166661274362,
+    "syscr": 59218774,
+    "syscw": 55195738,
+    "read_bytes": 9260838912,
+    "write_bytes": 139699019776,
+    "cancelled_write_bytes": 4730966016
+  },
+  "audit": {
+    "status": "passed",
+    "baseline_source_assets": 6317,
+    "current_source_assets": 6406,
+    "common_source_assets": 6317,
+    "changed_common_source_assets": [],
+    "missing_baseline_source_assets": [],
+    "external_dependency_paths": 2571,
+    "external_dependency_content_drift": [],
+    "run_status": "ready",
+    "quick_check": "ok",
+    "native_auxiliary_tables_in_delivery": [],
+    "calls_by_dispatch": [
+      [
+        "direct",
+        2421556
+      ],
+      [
+        "indirect",
+        72279
+      ],
+      [
+        "virtual",
+        14729
+      ]
+    ],
+    "relation_json_bytes": [
+      2448865834,
+      976.2022551547419
+    ],
+    "symbol_context_bytes": [
+      81775038,
+      1954
+    ],
+    "generated_byte_position_examples": [
+      {
+        "asset": "server/src/common/backend/parser/scan.inc",
+        "line": 16373,
+        "offset": 1051886,
+        "byte": "(",
+        "presumed": {
+          "asset": "server/src/common/backend/parser/scan.l",
+          "column": 13,
+          "file": "scan.l",
+          "line": 460
+        }
+      },
+      {
+        "asset": "server/src/common/backend/parser/scan.inc",
+        "line": 16393,
+        "offset": 1052337,
+        "byte": "(",
+        "presumed": {
+          "asset": "server/src/common/backend/parser/scan.l",
+          "column": 13,
+          "file": "scan.l",
+          "line": 477
+        }
+      },
+      {
+        "asset": "server/src/common/backend/parser/scan.inc",
+        "line": 16406,
+        "offset": 1052586,
+        "byte": "(",
+        "presumed": {
+          "asset": "server/src/common/backend/parser/scan.l",
+          "column": 13,
+          "file": "scan.l",
+          "line": 487
+        }
+      },
+      {
+        "asset": "server/src/common/backend/parser/scan.inc",
+        "line": 16421,
+        "offset": 1052824,
+        "byte": "(",
+        "presumed": {
+          "asset": "server/src/common/backend/parser/scan.l",
+          "column": 13,
+          "file": "scan.l",
+          "line": 499
+        }
+      },
+      {
+        "asset": "server/src/common/backend/parser/scan.inc",
+        "line": 16436,
+        "offset": 1053137,
+        "byte": "(",
+        "presumed": {
+          "asset": "server/src/common/backend/parser/scan.l",
+          "column": 13,
+          "file": "scan.l",
+          "line": 510
+        }
+      }
+    ],
+    "additional_source_asset_count": 89
+  },
+  "verification": {
+    "gcc_fixture": {
+      "status": "passed",
+      "translation_units": 5,
+      "checks": [
+        "C and C++",
+        "overload ABI identity",
+        "cross-TU definition",
+        "cross-language linkage",
+        "static isolation",
+        "virtual and indirect candidates",
+        "macro spelling and expansion",
+        "UTF-8 byte location",
+        "repeat reuse",
+        "__FILE__ and __TIMESTAMP__ preservation",
+        "relative and absolute #line sources",
+        "inactive and repeated #line sources",
+        "missing header gate"
+      ]
+    },
+    "generated_pilot": {
+      "status": "passed",
+      "coverage": {
+        "assets": 6317,
+        "translation_units": 11,
+        "available_tus": 2412,
+        "deferred_tus": 2401,
+        "parsed_tus": 11,
+        "partial_tus": 0,
+        "failed_tus": 0,
+        "unknown_profile": false,
+        "semantic_completeness": "not_certified",
+        "symbols": 3758,
+        "relations": 36603,
+        "ctags": {
+          "configured": false,
+          "candidates": 0,
+          "unmatched": [],
+          "retained_as_candidates": 0,
+          "errors": [],
+          "semantic_completeness": "not_certified"
+        },
+        "call_binding": {
+          "linked_definitions": 0,
+          "declaration_only": 20446,
+          "ambiguous_definitions": 10,
+          "legacy_usr_candidate": 0
+        },
+        "source_evidence_files": 513
+      },
+      "mapped_symbols": 1011
+    },
+    "legacy_clang": {
+      "status": "passed",
+      "coverage": {
+        "assets": 6317,
+        "translation_units": 3,
+        "available_tus": 2412,
+        "deferred_tus": 2409,
+        "parsed_tus": 3,
+        "partial_tus": 0,
+        "failed_tus": 0,
+        "unknown_profile": false,
+        "semantic_completeness": "not_certified",
+        "symbols": 4796,
+        "relations": 1046,
+        "ctags": {
+          "configured": false,
+          "candidates": 0,
+          "unmatched": [],
+          "retained_as_candidates": 0,
+          "errors": [],
+          "semantic_completeness": "not_certified"
+        },
+        "call_binding": {
+          "linked_definitions": 3,
+          "declaration_only": 539,
+          "ambiguous_definitions": 0,
+          "legacy_usr_candidate": 0
+        },
+        "source_evidence_files": 267
+      },
+      "unchanged_legacy_clang_counts": true
+    },
+    "synthetic_collaboration": {
+      "status": "passed",
+      "steps": 58,
+      "validation": "v1.1 synthetic Clang index; coordinator and two isolated worker directories on one machine",
+      "external_model_calls": 0,
+      "database_execution": "not_run"
+    },
+    "cache_guard": {
+      "before": {
+        "wall_seconds": 0.635072,
+        "path_probes": 7884,
+        "guard_is_none": true
+      },
+      "after": {
+        "wall_seconds": 0.018957,
+        "path_probes": 0,
+        "guard_is_none": true
+      },
+      "same_outcome": true
+    }
+  },
+  "pending": [
+    "Windows replay of the new full graph",
+    "New Windows plan and task counts",
+    "Real full-graph module-kit size measurement",
+    "New migration archive and GitHub Release"
+  ]
+}
