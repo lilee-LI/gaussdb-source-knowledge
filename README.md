@@ -4,6 +4,8 @@
 
 当前 `main` 为 2.2 开发版本，已完成 ECS 全量产图验证；新图的 Windows 验收和新迁移包尚未完成。已发布迁移包仍为 `v2.1.1`，其验证结果与当前代码分别记录。
 
+`feat/knowledge-platform-20261107` 分支已增加本地知识平台：产品适配、任务批次规划与研究反馈、带预算的源码查询、版本化检索发布、完整证据上下文、官方 SDK 的 HTTP MCP，以及可选的 RAGFlow 客户端。本地流程可独立运行；没有配置模型时，代码理解由连接研究工具的 Agent 完成。实际入口见[本地实现与运行](docs/LOCAL-PLATFORM.md)，测试和大索引回放范围见[本地验收报告](docs/LOCAL-VALIDATION-20261107.md)。
+
 ## 先在 ECS 生成调用图
 
 解压发布 ZIP 或克隆本仓库，进入含 `ecs.sh` 的目录。在能正常编译产品的 Linux 环境中执行。ECS 需要 Git、64 位 Python 3.9+（含 venv、ensurepip）以及产品本身的编译环境。GCC 工程还需该工具链匹配的插件开发头文件；工程会自动编译随包提供的插件源码。Clang 使用包内 x86_64 / aarch64 的 libclang 和内置头文件。
@@ -24,7 +26,7 @@ sh ecs.sh capture --source /srv/GaussDB --output /srv/export/compile_commands.js
 
 把产图命令输出的**整个** `build-01/` 复制到 Windows，例如 `E:/ecs-export/build-01/`。其中 `knowledge.sqlite3` 是调用图，`run.json` 记录 run、编译覆盖和校验值，`blobs/` 保存回放所需的生成头或其他未跟踪材料。已有符合旧版合同的 ECS 索引可以直接接入。
 
-Windows 担任协调端时，需要在可访问的文件路径保留完整交付图。`graph_storage=reference` 通过 SQLite 只读挂接，避免在学习库重复存图；当前没有远程 ECS 图查询 API。成员使用按模块生成的材料包。模块包包含整个指定模块及一跳邻居，目前没有包大小上限，共享模块可能较大。
+Windows 担任协调端时，需要在可访问的文件路径保留完整交付图。`graph_storage=reference` 通过 SQLite 只读挂接，避免在学习库重复存图。本分支可以在持有图的主机运行标准 HTTP MCP 查询服务，客户端按符号、调用关系和证据范围分页读取。成员也可使用按模块生成的材料包；模块包包含整个指定模块及一跳邻居，目前没有包大小上限，共享模块可能较大。
 
 ## 在 Windows 第一次使用
 
@@ -95,3 +97,5 @@ python scripts/package_release.py
 ~~~
 
 打包命令从当前 Git 暂存区生成 `dist/gaussdb-source-knowledge-2.2.0.zip` 和 SHA-256 清单。发布物包含两端代码、GCC 插件源码、测试、研究方法和离线 Python 依赖。产品源码、工具链及其插件开发头文件、用户已有的 Claude 使用各自环境。GCC 实机回归入口为 `python scripts/verify_gcc_producer.py --output /tmp/new-gcc-acceptance --cc /path/gcc --cxx /path/g++`。原 Make 采集及 Clang 回放回归仍用 `python3.12 scripts/verify_ecs_producer.py --output /tmp/new-kb-acceptance`；输出目录须为新路径。
+
+新增 HTTP MCP / RAGFlow 扩展的依赖需另按 `requirements-platform.lock` 安装；现有核心离线 wheel 包不包含这些扩展。RAGFlow 客户端的协议测试不代表已部署 RAGFlow 或验证语义检索效果。

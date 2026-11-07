@@ -1,7 +1,7 @@
 {
   "schema": "knowledge-platform-implementation-plan/v1",
   "date": "2026-11-07",
-  "status": "planned_not_implemented",
+  "status": "local_engineering_validated_domain_acceptance_pending",
   "objective": "在既有编译索引和知识审阅工程上交付可追溯、可评测、可增量维护的集中式 GaussDB 源码知识库",
   "assumptions": [
     "先复用现有 openGauss GCC/SQLite 资产",
@@ -18,7 +18,7 @@
       "title": "冻结现有资产并建立发布及能力清单",
       "owner": "工程 A",
       "depends_on": [],
-      "status": "planned",
+      "status": "partially_validated",
       "reuse": [
         "graph_mount.py",
         "store.py",
@@ -34,7 +34,9 @@
         "旧图与新图身份分开",
         "不填入无法核实的 Git HEAD",
         "可以只读回放代表符号及同版源码"
-      ]
+      ],
+      "implementation_evidence": "source_manifest 输出快照、profile、run、能力和来源；既有 4.914 GiB 图完成只读回放。",
+      "remaining_acceptance": "历史 product 默认标签和适配摘要缺口已记录；目标 GaussDB 输入组成另验。"
     },
     {
       "id": "B01",
@@ -44,7 +46,7 @@
       "depends_on": [
         "B00"
       ],
-      "status": "planned",
+      "status": "implemented_local_validated",
       "reuse": [
         "indexer.query_graph",
         "graph_mount.attach",
@@ -60,7 +62,9 @@
         "截断和未覆盖显式返回",
         "高扇出查询不无界物化",
         "ExecSort 样例以及跨文件重载/宏样例可回归"
-      ]
+      ],
+      "implementation_evidence": "query_api 实现索引定位、稳定分页、时间/字节/数量预算；ExecSort 8 并发 80 请求已测。",
+      "remaining_acceptance": "更广泛高扇出、宏和跨文件重载的实际产品验收。"
     },
     {
       "id": "B02",
@@ -71,7 +75,7 @@
         "B00",
         "B01"
       ],
-      "status": "planned",
+      "status": "implemented_local_validated",
       "reuse": [
         "service.py 的查询函数与工具合同",
         "官方 MCP Python SDK",
@@ -87,7 +91,9 @@
         "查询端不包含 request_refresh 或研究写入工具",
         "访问范围和 release 校验先于数据返回",
         "不将现有 loopback HTTP 冒充 MCP HTTP"
-      ]
+      ],
+      "implementation_evidence": "官方 MCP SDK 的 Streamable HTTP 已用官方客户端连接实际本地服务；只读和发布范围检查已测。",
+      "remaining_acceptance": "真实 RAGFlow 与公司开发 Agent 接入验收。"
     },
     {
       "id": "B03",
@@ -97,7 +103,7 @@
       "depends_on": [
         "B00"
       ],
-      "status": "planned",
+      "status": "implemented_local_validated",
       "reuse": [
         "knowledge.py 的已审修订",
         "releases.py",
@@ -113,7 +119,9 @@
         "解析/向量化完成后才激活",
         "旧会话仍可回读",
         "重试不重复生成正式条目"
-      ]
+      ],
+      "implementation_evidence": "本地发布 prepare/sync/activate、CAS、旧版回读和回滚已测；RAGFlow 同步协议已有模拟测试。",
+      "remaining_acceptance": "真实服务的解析、Embedding 完成状态和失败恢复演练。"
     },
     {
       "id": "B04",
@@ -124,7 +132,7 @@
         "B02",
         "B03"
       ],
-      "status": "planned",
+      "status": "deferred_no_services",
       "reuse": [
         "RAGFlow 官方部署栈",
         "现有模型服务",
@@ -140,7 +148,9 @@
         "知识 ID 与内容 hash 可回查",
         "测试页参数与实际问答配置一致",
         "不重复部署其他 RAG 产品"
-      ]
+      ],
+      "implementation_evidence": "RAGFlow 客户端与配置模板已实现；用户当前没有 RAGFlow 或模型服务。",
+      "remaining_acceptance": "部署真实服务并锁定模型，执行真实效果准入。"
     },
     {
       "id": "B05",
@@ -151,7 +161,7 @@
         "B01",
         "B04"
       ],
-      "status": "planned",
+      "status": "implemented_local_validated",
       "reuse": [
         "retrieval.get_context",
         "find_knowledge",
@@ -168,7 +178,9 @@
         "不匹配的 unit/hash 拒绝作为正式知识",
         "无答案与能力缺口可见",
         "不把未解析调用变成确定链"
-      ]
+      ],
+      "implementation_evidence": "本地或可选 RAGFlow 候选归并、权威回读、完整证据组、无答案及跨版本拒绝已测。",
+      "remaining_acceptance": "真实领域召回率与外部检索端到端验证。"
     },
     {
       "id": "B06",
@@ -179,7 +191,7 @@
         "B00",
         "B13"
       ],
-      "status": "planned",
+      "status": "domain_research_pending",
       "reuse": [
         "现有排序材料",
         "模块/特性任务与审阅",
@@ -196,7 +208,9 @@
         "已发现项全部有处置状态",
         "运行验证未执行时保留 not_run",
         "关键开放问题不得伪装为已审结论"
-      ]
+      ],
+      "implementation_evidence": "工程有四专题方法、候选、研究与审阅承载。",
+      "remaining_acceptance": "当前绑定下排序特性和四专题的实际研究、审阅及缺口闭合。"
     },
     {
       "id": "B07",
@@ -207,7 +221,7 @@
         "B00",
         "B06"
       ],
-      "status": "planned",
+      "status": "domain_gold_pending",
       "deliverables": [
         "至少 200 道问题及必要证据组",
         "80 调参/120 验收的分组清单",
@@ -218,7 +232,9 @@
         "包含无答案、跨版本及宏条件问题",
         "人工核对关键金标",
         "金标绑定实际发布身份"
-      ]
+      ],
+      "implementation_evidence": "evaluation 验证题库版本、必要知识集合和机制分组隔离；合成样例仅作软件测试。",
+      "remaining_acceptance": "至少 200 道真实领域问题及独立人工核对、封存。"
     },
     {
       "id": "B08",
@@ -229,7 +245,7 @@
         "B05",
         "B07"
       ],
-      "status": "planned",
+      "status": "evaluation_engine_implemented",
       "deliverables": [
         "四组检索策略的同条件结果",
         "按专题的召回/完整证据/正确性报告",
@@ -240,7 +256,9 @@
         "报告每个专题的分母和不确定性",
         "执行设计稿的初始准入目标",
         "不得仅以 LLM 自评分验收"
-      ]
+      ],
+      "implementation_evidence": "已实现 Recall@k、完整上下文、无答案与按专题分母报告。",
+      "remaining_acceptance": "固定真实模型执行多策略对照和回答正确性核对；不使用合成样例冒充准确率。"
     },
     {
       "id": "B09",
@@ -253,7 +271,7 @@
         "B06",
         "B13"
       ],
-      "status": "planned",
+      "status": "partially_validated",
       "reuse": [
         "changes.py",
         "现有 TU 缓存与依赖失效",
@@ -270,7 +288,9 @@
         "旧事实不残留为当前事实",
         "旧发布可完整回读",
         "任一同步阶段失败时旧版本继续可用"
-      ]
+      ],
+      "implementation_evidence": "复用变更失效与旧修订；发布冲突、重试、回滚、导出篡改拒绝已有软件测试。",
+      "remaining_acceptance": "实际产品叶子源、公共头、宏、生成文件增量与全建对照。"
     },
     {
       "id": "B10",
@@ -284,7 +304,7 @@
         "B09",
         "B13"
       ],
-      "status": "planned",
+      "status": "deferred_target_environment",
       "deliverables": [
         "目标库单一真实配置覆盖报告",
         "宏与第二模块样例",
@@ -295,7 +315,9 @@
         "解析例外和未覆盖区域不从分母消失",
         "性能目标在固定硬件与负载下测量",
         "来源未核实或模型服务不适配时如实记录风险"
-      ]
+      ],
+      "implementation_evidence": "通用适配合同及 GaussDB 起始规则包已实现。",
+      "remaining_acceptance": "目标内部源码、工具链、配置、500 万行规模与第二模块实测。"
     },
     {
       "id": "B11",
@@ -307,7 +329,7 @@
         "B09",
         "B10"
       ],
-      "status": "planned",
+      "status": "local_delivery_ready",
       "deliverables": [
         "部署与配置包",
         "MCP/API 合同和工作流",
@@ -319,7 +341,9 @@
         "公司数据与程序包分别管理",
         "公开样例和内部数据版本分开",
         "用户问答、证据跳转、开发 Agent 三个入口读同一发布"
-      ]
+      ],
+      "implementation_evidence": "本地运行手册、依赖锁、合成流程验收脚本、大图回放脚本及 Git 打包工具可用。",
+      "remaining_acceptance": "生产交接、独立目标环境部署及平台扩展离线依赖安装验收。"
     },
     {
       "id": "B13",
@@ -329,7 +353,7 @@
       "depends_on": [
         "B00"
       ],
-      "status": "planned",
+      "status": "implemented_local_validated",
       "reuse": [
         "project.py 的项目绑定",
         "study.inventory 与模块盘点任务",
@@ -352,7 +376,9 @@
         "错误/内存/兼容/GUC 按适用性与共享机制建任务，不按函数或调用边机械扩张",
         "未知规则、未解析调用及未覆盖宏分支保留缺口，任务扩展受预算限制",
         "openGauss 产品规则调整无需修改通用规划核心，真实 GaussDB 迁移验收由 B10 完成"
-      ]
+      ],
+      "implementation_evidence": "版本化产品规则、证据反馈、合并拆分、去重、依赖和有预算任务批次已实现并测试。",
+      "remaining_acceptance": "实际排序人工清单的发现率核对；真实 GaussDB 适配验收。"
     },
     {
       "id": "B12",
@@ -362,7 +388,7 @@
       "depends_on": [
         "B11"
       ],
-      "status": "planned",
+      "status": "continuous_domain_work_pending",
       "deliverables": [
         "每批特性与共享机制增量",
         "覆盖变化、缺口和回归结果"
@@ -371,7 +397,16 @@
         "按实际吞吐估算全仓周期",
         "不按函数数或 Wiki 页数认定完成",
         "新增真实问题进入同一研究/审阅流程"
-      ]
+      ],
+      "implementation_evidence": "按模块持续研究与审阅的任务队列及变更流程已有工程承载。",
+      "remaining_acceptance": "使用真实任务吞吐持续扩展知识，不将平台实现等同于全仓知识完成。"
     }
-  ]
+  ],
+  "scope_decision": {
+    "date": "2026-11-07",
+    "user_instruction": "暂时没有，先完成本地工程",
+    "external_services": "deferred",
+    "local_runbook": "docs/LOCAL-PLATFORM.md",
+    "validation": "docs/LOCAL-VALIDATION-20261107.md"
+  }
 }

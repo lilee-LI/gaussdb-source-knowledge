@@ -70,6 +70,35 @@ def _binding(store, run):
             "facts_digest": index.get("facts_digest"), "index_status": index["status"]}, index
 
 
+def _sources(store, table, run):
+    sources = [("main", run)]
+    if store.graph_path:
+        row = store.db.execute("SELECT upstream FROM main.graph_bindings WHERE study=?", (run,)).fetchone()
+        if row:
+            sources.append(("source_graph", row[0]))
+    return sources
+
+
+def _seek_index(store, schema, table, column):
+    # ORDER BY id otherwise tempts SQLite to scan the whole run's primary key,
+    # instead of seeking name/source first. Handoffs may use different index names.
+    cache = getattr(store, "_query_seek_indexes", {})
+    key = (schema, table, column)
+    if key not in cache:
+        indexes = store.db.execute("PRAGMA " + schema + ".index_list(" + table + ")").fetchall()
+        chosen = None
+        for item in indexes:
+            name = item["name"]
+            columns = [row["name"] for row in store.db.execute("PRAGMA " + schema + '.index_info("' + name.replace('"','""') + '")')]
+            if columns[:2] == ["run", column]:
+                chosen = name
+                break
+        require(chosen, "Source index lacks bounded lookup index for " + table + "." + column)
+        cache[key] = ' INDEXED BY "' + chosen.replace('"','""') + '"'
+        store._query_seek_indexes = cache
+    return cache[key]
+
+
 def lookup_symbols(store, run, query, *, limit=30, cursor=None, max_bytes=32768, timeout_ms=2000):
     require(type(max_bytes) is int and 2048 <= max_bytes <= 262144, "max_bytes must be 2048..262144")
     require(isinstance(query, str) and 1 <= len(query) <= 2000, "Exact symbol ID or name required")
@@ -80,10 +109,16 @@ def lookup_symbols(store, run, query, *, limit=30, cursor=None, max_bytes=32768,
     projection = ("id,logical,substr(name,1,500) name,asset,kind,json_extract(data,'$.definition') definition,"
                   "json_extract(data,'$.start') start,json_extract(data,'$.end') end,json_extract(data,'$.evidence') evidence")
     with execution_budget(store, timeout_ms):
-        rows = store.db.execute("SELECT " + projection + " FROM symbols WHERE run=? AND name=? AND id>? "
-            "UNION SELECT " + projection + " FROM symbols WHERE run=? AND id=? AND id>? ORDER BY id LIMIT ?",
-            (run, query, after, run, query, after, limit + 1)).fetchall()
-    result = _page([dict(r) for r in rows], scope, limit, max_bytes - 512)
+        found = {}
+        for schema, physical_run in _sources(store, "symbols", run):
+            for column in ("name", "id"):
+                hint = _seek_index(store, schema, "symbols", column)
+                rows = store.db.execute("SELECT " + projection + " FROM " + schema + ".symbols" + hint +
+                    " WHERE run=? AND " + column + "=? AND id>? ORDER BY id LIMIT ?", (physical_run, query, after, limit + 1))
+                for row in rows:
+                    found.setdefault(row["id"], dict(row))
+    rows = [found[key] for key in sorted(found)[:limit + 1]]
+    result = _page(rows, scope, limit, max_bytes - 512)
     return {**result, **binding, "match": "exact_name_or_id", "budget": {"timeout_ms":timeout_ms,"max_bytes":max_bytes}}
 
 
@@ -100,14 +135,19 @@ def neighbors(store, run, symbol, *, direction="forward", kinds=None, limit=60, 
     columns = ["source", "target"] if direction == "both" else ["source" if direction == "forward" else "target"]
     fields = ("id,source,target,kind,resolution,json_extract(data,'$.evidence') evidence,"
               "json_extract(data,'$.target_binding') target_binding,json_extract(data,'$.call_form') call_form")
-    parts, params = [], []
-    for column in columns:
-        parts.append("SELECT " + fields + " FROM relations WHERE run=? AND " + column + "=? AND id>? AND kind IN (" + ",".join("?" for _ in kinds) + ")")
-        params.extend([run, symbol, after, *kinds])
     with execution_budget(store, timeout_ms):
         found = store.db.execute("SELECT 1 FROM symbols WHERE run=? AND id=? LIMIT 1", (run, symbol)).fetchone()
         require(found, "Symbol ID not found in bound index")
-        rows = [dict(r) for r in store.db.execute(" UNION ".join(parts) + " ORDER BY id LIMIT ?", [*params, limit + 1])]
+        selected = {}
+        for schema, physical_run in _sources(store, "relations", run):
+            for column in columns:
+                hint = _seek_index(store, schema, "relations", column)
+                rows = store.db.execute("SELECT " + fields + " FROM " + schema + ".relations" + hint +
+                    " WHERE run=? AND " + column + "=? AND id>? AND kind IN (" + ",".join("?" for _ in kinds) + ") ORDER BY id LIMIT ?",
+                    [physical_run, symbol, after, *kinds, limit + 1])
+                for row in rows:
+                    selected.setdefault(row["id"], dict(row))
+        rows = [selected[key] for key in sorted(selected)[:limit + 1]]
     legacy = index.get("graph_storage") == "reference" and "call_binding" not in index.get("coverage", {})
     for row in rows:
         if legacy and row["kind"] == "CALLS":
