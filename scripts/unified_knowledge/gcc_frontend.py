@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 import json
 import os
+import re
 import signal
 from pathlib import Path
 import shlex
@@ -118,7 +119,8 @@ def parse(request):
     output = Path(request["gcc_output"])
     args = [request["gcc_driver"], *request["arguments"], "-fsyntax-only", "-fdiagnostics-format=json",
             "-fplugin=" + request["gcc_plugin"], "-fplugin-arg-gausskb_gcc-output=" + str(output)]
-    args.extend("-fplugin-arg-gausskb_gcc-root=" + root for root in request["roots"].values())
+    args.extend("-fplugin-arg-gausskb_gcc-root=" + root
+                for group in (request["roots"],request["original_roots"]) for root in group.values())
     # Rebase builtin __FILE__/__BASE_FILE__ values while parsing immutable copies.
     args.extend("-ffile-prefix-map="+root+"="+request["original_roots"][repo]
                 for repo,root in request["roots"].items())
@@ -151,27 +153,45 @@ def parse(request):
 
 def decode(output, request, diagnostics, returncode=0):
     roots = {key:Path(value).resolve() for key,value in request["roots"].items()}
+    originals = {key:Path(value).resolve() for key,value in request["original_roots"].items()}
     files, symbols, calls, include_paths = {}, {}, [], set()
+    line_aliases, unmapped = {}, set()
 
     @lru_cache(maxsize=8192)
     def resolved(name):
         return Path(name).resolve()
 
     @lru_cache(maxsize=8192)
-    def locate(name):
+    def frozen_path(name):
         if not name or name.startswith("<"):
             return None
+        if not Path(name).is_absolute():
+            candidates = line_aliases.get(name,set())
+            return next(iter(candidates)) if len(candidates)==1 else None
         path = resolved(name)
-        for repo, root in roots.items():
-            if path.is_relative_to(root):
-                return repo + "/" + path.relative_to(root).as_posix()
+        for group in (roots,originals):
+            for repo,root in group.items():
+                if path.is_relative_to(root):
+                    return roots[repo]/path.relative_to(root)
+        return None
+
+    @lru_cache(maxsize=8192)
+    def locate(name):
+        path = frozen_path(name)
+        if path:
+            for repo,root in roots.items():
+                if path.is_relative_to(root):
+                    return repo+"/"+path.relative_to(root).as_posix()
         return None
 
     def position(value):
         asset = locate(value.get("file"))
+        if value.get("file") and not Path(value["file"]).is_absolute() and not asset:
+            unmapped.add(value["file"])
         if not asset or value["line"] < 1:
             return None
-        path = resolved(value["file"])
+        path = frozen_path(value["file"])
+        include_paths.add(path)
         if path not in files:
             raw = path.read_bytes()
             starts = [0]
@@ -180,8 +200,11 @@ def decode(output, request, diagnostics, returncode=0):
             files[path] = starts
         starts = files[path]
         require(value["line"] <= len(starts), "GCC returned an out-of-range source location")
-        return {"asset":asset,"line":value["line"],"column":value["column"],
-                "offset":starts[value["line"]-1] + max(0,value["column"]-1)}
+        result = {"asset":asset,"line":value["line"],"column":value["column"],
+                  "offset":starts[value["line"]-1] + max(0,value["column"]-1)}
+        if not Path(value["file"]).is_absolute():
+            result.update(source_mapping="gcc-line-directive",presumed_file=value["file"])
+        return result
 
     with output.open(encoding="utf-8") as stream:
         for line in stream:
@@ -196,6 +219,25 @@ def decode(output, request, diagnostics, returncode=0):
                     symbols[item["uid"]] = item
             else:
                 calls.append(item)
+    include_paths.add(Path(request["file"]).resolve())
+    # Resolve only explicit #line labels, relative to their own frozen file.
+    # Do not guess by basename across the repository (several parsers use gram.y).
+    directive = re.compile(rb'^\s*#\s*(?:line\s+)?\d+\s+("(?:\\.|[^"\\])*")',re.M)
+    for file in sorted(include_paths):
+        physical = frozen_path(str(file))
+        if physical is None or not physical.is_file():
+            continue
+        for match in directive.finditer(physical.read_bytes()):
+            try:
+                label = json.loads(match[1].decode("utf-8"))
+            except (ValueError,UnicodeError):
+                continue
+            if Path(label).is_absolute():
+                continue
+            candidate = frozen_path(str((physical.parent/label).resolve()))
+            if candidate and candidate.is_file():
+                line_aliases.setdefault(label,set()).add(candidate)
+    # No lookups occurred before the explicit directive table was complete.
     values, identities = {}, {}
     for uid, item in symbols.items():
         pos = position(item["position"])
@@ -224,8 +266,9 @@ def decode(output, request, diagnostics, returncode=0):
             "kind":"CALLS","resolution":"candidate" if dispatch!="direct" else "resolved" if target else "unresolved",
             "dispatch":dispatch, "implicit":call["implicit"], "frontend":"gcc-pre-genericize",
             "spelling_location":position(call["spelling_location"]),"expansion_location":pos})
-    include_paths.add(Path(request["file"]).resolve())
     includes = [{"path":str(path),"asset":locate(str(path)),"sha":digest(path.read_bytes())} for path in sorted(include_paths)]
+    if unmapped:
+        diagnostics.append({"severity":3,"message":"Unmapped or ambiguous GCC #line labels: "+", ".join(sorted(unmapped)),"line":0})
     for diagnostic in diagnostics:
         diagnostic["asset"] = locate(diagnostic.get("file"))
     return {"symbols":list(values.values()),"relations":relations,"includes":includes,"diagnostics":diagnostics,

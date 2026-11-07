@@ -33,7 +33,10 @@ static std::string quote(const char* value) {
 }
 
 static bool in_repository(const char* file) {
-    if (!file) return false;
+    if (!file || file[0] == '<') return false;
+    // Generated parsers use relative #line labels. Python accepts these only
+    // when an explicit directive in this TU's frozen inputs maps them uniquely.
+    if (file[0] != '/') return true;
     for (const auto& root : roots)
         if (!strncmp(file, root.c_str(), root.size()) && file[root.size()] == '/') return true;
     return false;
