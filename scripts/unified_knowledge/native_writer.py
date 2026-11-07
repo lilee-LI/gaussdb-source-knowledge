@@ -78,7 +78,8 @@ class NativeWriter:
             return cached,end
         lines = self.source_lines(asset)
         end = min(end,len(lines))
-        require(1<=start<=end, "Out-of-range native source evidence")
+        require(1<=start<=end, "Out-of-range native source evidence: "+asset+
+                " lines "+str(start)+".."+str(end)+" / "+str(len(lines)))
         key = (asset,start,end)
         if key not in self.anchors:
             sha = self.assets[asset]["sha"]
