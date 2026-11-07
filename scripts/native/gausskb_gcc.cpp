@@ -21,6 +21,9 @@ int plugin_is_GPL_compatible;
 static FILE* output;
 static std::vector<std::string> roots;
 static std::unordered_map<unsigned, bool> emitted;
+struct source_origin { std::string file; long physical; unsigned logical; };
+static std::vector<source_origin> origins;
+static std::vector<unsigned> includers;
 
 static std::string quote(const char* value) {
     std::string result = "\"";
@@ -34,12 +37,40 @@ static std::string quote(const char* value) {
 
 static bool in_repository(const char* file) {
     if (!file || file[0] == '<') return false;
-    // Generated parsers use relative #line labels. Python accepts these only
-    // when an explicit directive in this TU's frozen inputs maps them uniquely.
-    if (file[0] != '/') return true;
     for (const auto& root : roots)
         if (!strncmp(file, root.c_str(), root.size()) && file[root.size()] == '/') return true;
     return false;
+}
+
+// Line-map transitions retain the active physical input even when #line
+// changes its displayed name, repeats line numbers, or skips inactive branches.
+static const source_origin& physical_origin(const line_map_ordinary* map) {
+    for (unsigned i = origins.size(); i < LINEMAPS_ORDINARY_USED(line_table); ++i) {
+        const auto* current = LINEMAPS_ORDINARY_MAP_AT(line_table, i);
+        source_origin value = {LINEMAP_FILE(current), (long)LINEMAP_LINE(current), LINEMAP_LINE(current)};
+        if (current->reason == LC_ENTER) {
+            if (i) includers.push_back(i - 1);
+        } else if (current->reason == LC_LEAVE && !includers.empty()) {
+            value = origins[includers.back()];
+            includers.pop_back();
+            value.physical += (long)LINEMAP_LINE(current) - value.logical;
+            value.logical = LINEMAP_LINE(current);
+        } else if (i) {
+            const auto* previous = LINEMAPS_ORDINARY_MAP_AT(line_table, i - 1);
+            value = origins.back();
+            value.physical += (long)SOURCE_LINE(previous, current->start_location - 1) - value.logical;
+            value.logical = LINEMAP_LINE(current);
+        }
+        origins.push_back(value);
+    }
+    unsigned index = map - LINEMAPS_ORDINARY_MAPS(line_table);
+    return origins[index];
+}
+
+static bool repository_location(location_t loc) {
+    const line_map_ordinary* map = nullptr;
+    linemap_resolve_location(line_table, get_pure_location(loc), LRK_MACRO_EXPANSION_POINT, &map);
+    return map && in_repository(physical_origin(map).file.c_str());
 }
 
 static std::string position(location_t loc, bool spelling = false) {
@@ -47,15 +78,17 @@ static std::string position(location_t loc, bool spelling = false) {
     linemap_resolve_location(line_table, get_pure_location(loc),
         spelling ? LRK_SPELLING_LOCATION : LRK_MACRO_EXPANSION_POINT, &map);
     expanded_location p = spelling ? expand_location_to_spelling_point(loc) : expand_location(expansion_point_location(loc));
+    source_origin origin = map ? physical_origin(map) : source_origin{"",0,0};
     return "{\"file\":" + quote(p.file) + ",\"line\":" + std::to_string(p.line)
         + ",\"column\":" + std::to_string(p.column)
-        + ",\"map_line\":" + std::to_string(map ? LINEMAP_LINE(map) : 0) + "}";
+        + ",\"physical_file\":" + quote(origin.file.c_str())
+        + ",\"physical_line\":" + std::to_string(origin.physical + (long)p.line - origin.logical) + "}";
 }
 
 static unsigned symbol(tree decl, bool definition = false, int end = 0, location_t end_loc = UNKNOWN_LOCATION) {
     if (!decl || TREE_CODE(decl) != FUNCTION_DECL) return 0;
     expanded_location loc = expand_location(DECL_SOURCE_LOCATION(decl));
-    if (!in_repository(loc.file)) return 0;
+    if (!repository_location(DECL_SOURCE_LOCATION(decl))) return 0;
     unsigned uid = DECL_UID(decl);
     auto old = emitted.find(uid);
     if (old != emitted.end() && (old->second || !definition)) return uid;
@@ -131,7 +164,7 @@ static tree visit(tree* pointer, int* descend, void* data) {
         indirect = target == NULL_TREE;
     }
 #endif
-    if (!call || loc == UNKNOWN_LOCATION || !in_repository(where.file)) return NULL_TREE;
+    if (!call || loc == UNKNOWN_LOCATION || !repository_location(loc)) return NULL_TREE;
     unsigned callee = symbol(target);
     fprintf(output, "{\"event\":\"call\",\"owner\":%u,\"target\":%u,\"name\":%s,"
         "\"spelling_location\":%s,\"expansion_location\":%s,\"dispatch\":%s,\"implicit\":%s}\n",
@@ -146,7 +179,7 @@ static tree visit(tree* pointer, int* descend, void* data) {
 static void before_genericize(void* data, void*) {
     tree function = (tree)data;
     expanded_location loc = expand_location(DECL_SOURCE_LOCATION(function));
-    if (!in_repository(loc.file)) return;
+    if (!repository_location(DECL_SOURCE_LOCATION(function))) return;
     context ctx = {function, loc.line, loc.file, DECL_SOURCE_LOCATION(function)};
     tree body = DECL_SAVED_TREE(function);
 #ifdef GAUSSKB_CXX
@@ -156,9 +189,10 @@ static void before_genericize(void* data, void*) {
 #endif
     if (DECL_STRUCT_FUNCTION(function)) {
         expanded_location end = expand_location(DECL_STRUCT_FUNCTION(function)->function_end_locus);
+        if (DECL_STRUCT_FUNCTION(function)->function_end_locus != UNKNOWN_LOCATION)
+            ctx.end_loc = DECL_STRUCT_FUNCTION(function)->function_end_locus;
         if (end.file && !strcmp(end.file, loc.file) && end.line > ctx.end) {
             ctx.end = end.line;
-            ctx.end_loc = DECL_STRUCT_FUNCTION(function)->function_end_locus;
         }
     }
     symbol(function, true, ctx.end, ctx.end_loc);

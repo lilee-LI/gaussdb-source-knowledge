@@ -3,7 +3,6 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 import json
 import os
-import re
 import signal
 from pathlib import Path
 import shlex
@@ -155,7 +154,6 @@ def decode(output, request, diagnostics, returncode=0):
     roots = {key:Path(value).resolve() for key,value in request["roots"].items()}
     originals = {key:Path(value).resolve() for key,value in request["original_roots"].items()}
     files, symbols, calls, include_paths = {}, {}, [], set()
-    line_aliases, line_maps, unmapped = {}, {}, set()
 
     @lru_cache(maxsize=8192)
     def resolved(name):
@@ -166,8 +164,7 @@ def decode(output, request, diagnostics, returncode=0):
         if not name or name.startswith("<"):
             return None
         if not Path(name).is_absolute():
-            candidates = line_aliases.get(name,set())
-            return next(iter(candidates)) if len(candidates)==1 else None
+            return None
         path = resolved(name)
         for group in (roots,originals):
             for repo,root in group.items():
@@ -188,20 +185,10 @@ def decode(output, request, diagnostics, returncode=0):
         name = value.get("file")
         if not name or name.startswith("<") or value["line"] < 1:
             return None
-        spans = [span for span in line_maps.get(name,[]) if span[0]<=value["line"]<=span[1]]
-        active = [span for span in spans if span[0]==value.get("map_line")]
-        matches = {(p,start+value["line"]-first) for first,last,p,start in active or spans}
-        if len(matches)>1:
-            unmapped.add(name+":"+str(value["line"]))
-            return None
-        if matches:
-            path,line = next(iter(matches))
-        else:
-            path,line = frozen_path(name),value["line"]
+        require("physical_file" in value and "physical_line" in value,"Missing GCC physical source mapping")
+        path,line = frozen_path(value["physical_file"]),value["physical_line"]
         asset = locate(str(path)) if path else None
         if not asset:
-            if not Path(name).is_absolute():
-                unmapped.add(name)
             return None
         include_paths.add(path)
         if path not in files:
@@ -211,11 +198,12 @@ def decode(output, request, diagnostics, returncode=0):
                 starts.append(starts[-1]+len(chunk))
             files[path] = starts
         starts = files[path]
-        require(line < len(starts), "GCC returned an out-of-range source location: "+name+":"+str(value["line"]))
+        require(1<=line<len(starts), "GCC returned an out-of-range source location: "+name+":"+str(value["line"]))
         result = {"asset":asset,"line":line,"column":value["column"],
                   "offset":starts[line-1] + max(0,value["column"]-1)}
-        if matches:
-            result.update(source_mapping="gcc-line-directive",presumed_location={"file":name,"asset":locate(name),
+        if name!=value["physical_file"] or line!=value["line"]:
+            presumed = frozen_path(name) if Path(name).is_absolute() else frozen_path(str((path.parent/name).resolve()))
+            result.update(source_mapping="gcc-line-map",presumed_location={"file":name,"asset":locate(str(presumed)) if presumed and presumed.is_file() else None,
                           "line":value["line"],"column":value["column"]})
         return result
 
@@ -233,33 +221,6 @@ def decode(output, request, diagnostics, returncode=0):
             else:
                 calls.append(item)
     include_paths.add(Path(request["file"]).resolve())
-    # Resolve only explicit #line labels, relative to their own frozen file.
-    # Do not guess by basename across the repository (several parsers use gram.y).
-    directive = re.compile(rb'^[ \t]*#[ \t]*(?:line[ \t]+)?(\d+)[ \t]+("(?:\\.|[^"\\])*")',re.M)
-    for file in sorted(include_paths):
-        physical = frozen_path(str(file))
-        if physical is None or not physical.is_file():
-            continue
-        raw = physical.read_bytes()
-        markers,previous,number = [],0,1
-        for match in directive.finditer(raw):
-            number += raw.count(b'\n',previous,match.start())
-            previous = match.start()
-            try:
-                label = json.loads(match[2].decode("utf-8"))
-            except (ValueError,UnicodeError):
-                continue
-            markers.append((number,int(match[1]),label))
-            if not Path(label).is_absolute():
-                candidate = frozen_path(str((physical.parent/label).resolve()))
-                if candidate and candidate.is_file():
-                    line_aliases.setdefault(label,set()).add(candidate)
-        length = raw.count(b'\n')+int(bool(raw) and not raw.endswith(b'\n'))
-        for i,(physical_line,first,label) in enumerate(markers):
-            last_physical = markers[i+1][0]-1 if i+1<len(markers) else length
-            if physical_line<last_physical:
-                line_maps.setdefault(label,[]).append((first,first+last_physical-physical_line-1,physical,physical_line+1))
-    # No lookups occurred before the explicit directive table was complete.
     values, identities = {}, {}
     for uid, item in symbols.items():
         pos = position(item["position"])
@@ -290,8 +251,6 @@ def decode(output, request, diagnostics, returncode=0):
             "dispatch":dispatch, "implicit":call["implicit"], "frontend":"gcc-pre-genericize",
             "spelling_location":position(call["spelling_location"]),"expansion_location":pos})
     includes = [{"path":str(path),"asset":locate(str(path)),"sha":digest(path.read_bytes())} for path in sorted(include_paths)]
-    if unmapped:
-        diagnostics.append({"severity":3,"message":"Unmapped or ambiguous GCC #line labels: "+", ".join(sorted(unmapped)),"line":0})
     for diagnostic in diagnostics:
         diagnostic["asset"] = locate(diagnostic.get("file"))
     return {"symbols":list(values.values()),"relations":relations,"includes":includes,"diagnostics":diagnostics,
