@@ -1,5 +1,6 @@
 """Read original GCC language semantics through a locally built, version-checked plugin."""
 from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
 import json
 import os
 import signal
@@ -152,10 +153,15 @@ def decode(output, request, diagnostics, returncode=0):
     roots = {key:Path(value).resolve() for key,value in request["roots"].items()}
     files, symbols, calls, include_paths = {}, {}, [], set()
 
+    @lru_cache(maxsize=8192)
+    def resolved(name):
+        return Path(name).resolve()
+
+    @lru_cache(maxsize=8192)
     def locate(name):
         if not name or name.startswith("<"):
             return None
-        path = Path(name).resolve()
+        path = resolved(name)
         for repo, root in roots.items():
             if path.is_relative_to(root):
                 return repo + "/" + path.relative_to(root).as_posix()
@@ -165,7 +171,7 @@ def decode(output, request, diagnostics, returncode=0):
         asset = locate(value.get("file"))
         if not asset or value["line"] < 1:
             return None
-        path = Path(value["file"]).resolve()
+        path = resolved(value["file"])
         if path not in files:
             raw = path.read_bytes()
             starts = [0]
@@ -218,6 +224,7 @@ def decode(output, request, diagnostics, returncode=0):
             "kind":"CALLS","resolution":"candidate" if dispatch!="direct" else "resolved" if target else "unresolved",
             "dispatch":dispatch, "implicit":call["implicit"], "frontend":"gcc-pre-genericize",
             "spelling_location":position(call["spelling_location"]),"expansion_location":pos})
+    include_paths.add(Path(request["file"]).resolve())
     includes = [{"path":str(path),"asset":locate(str(path)),"sha":digest(path.read_bytes())} for path in sorted(include_paths)]
     for diagnostic in diagnostics:
         diagnostic["asset"] = locate(diagnostic.get("file"))

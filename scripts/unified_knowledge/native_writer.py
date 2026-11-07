@@ -92,6 +92,11 @@ class NativeWriter:
         return self.anchors[key],end
 
     def persist(self, payload, context):
+        for include in payload.get("includes",[]):
+            if include.get("asset"):
+                asset = self.assets.get(include["asset"])
+                require(asset and asset["status"]=="frozen" and asset["sha"]==include["sha"],
+                        "Compiler read a file outside the frozen input contract: "+include["asset"])
         cursor = self.db.execute("INSERT INTO native_contexts(run,context) VALUES(?,?)", (self.run,context))
         context_id = cursor.lastrowid
         memberships = []
