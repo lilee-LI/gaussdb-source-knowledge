@@ -187,7 +187,7 @@ def build(args):
                     "id": "server",
                     "root": str(source),
                     "native_sources": True,
-                    "additional_files": args.include_file,
+                    "additional_files": sorted(set(args.include_file) | set(audit.get("additional_source_files",[]))),
                 }
             ],
             "profiles": [
@@ -195,12 +195,14 @@ def build(args):
                     "id": args.profile,
                     "repository": "server",
                     "compile_commands": str(adapted),
-                    "toolchain": audit,
+                    "toolchain": {k:v for k,v in audit.items() if k!="phase_seconds"},
                 }
             ],
         }
         with Store(work) as store:
             require(not store.graph_path, "Use a dedicated ECS work directory")
+            store.db.execute("PRAGMA cache_size=-131072")
+            store.db.execute("PRAGMA wal_autocheckpoint=16384")
             snapshot = ingest(store, cfg)
             run = build_index(
                 store,
@@ -263,6 +265,8 @@ def main():
         help="One repo-relative TU; repeat for a pilot, omit for the whole database",
     )
     make.add_argument("--facts", choices=["calls", "full"], default="calls")
+    make.add_argument("--frontend",choices=["auto","gcc","clang"],default="auto",
+                      help="Match the configured build compiler; GCC needs its matching plugin headers")
     make.add_argument("--extra-arg", action="append", default=[])
     make.add_argument("--drop-arg", action="append", default=[])
     make.add_argument("--no-driver-includes", action="store_true")

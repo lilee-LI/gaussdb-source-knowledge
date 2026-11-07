@@ -1,7 +1,8 @@
 """Build-profile-aware, resumable code facts with independent syntax accounting."""
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, deque
+from itertools import islice
 from concurrent.futures import ThreadPoolExecutor
 import importlib.metadata
 import hashlib
@@ -31,6 +32,8 @@ def tool_identity():
     versions["clang_worker"] = digest(Path(__file__).with_name("clang_worker.py").read_bytes())
     versions["graph_adapter"] = digest(Path(__file__).with_name("graph_facts.py").read_bytes())
     versions["cache_policy"] = digest(Path(__file__).with_name("tu_cache.py").read_bytes())
+    versions["native_writer"] = digest(Path(__file__).with_name("native_writer.py").read_bytes())
+    versions["gcc_frontend"] = digest(Path(__file__).with_name("gcc_frontend.py").read_bytes())
     return versions
 
 
@@ -49,6 +52,8 @@ def materialize(store, snapshot):
             require(p.is_file() and digest(p.read_bytes()) == item["sha"], "Frozen analysis checkout was modified")
         else:
             atomic_write(p, store.blob(item["sha"]))
+        if item.get("source_mtime_ns") is not None:
+            os.utime(p,ns=(item["source_mtime_ns"],item["source_mtime_ns"]))
     return roots
 
 
@@ -234,7 +239,7 @@ def parse_one(job, timeout):
         atomic_write(incoming, canonical(request))
         proc = subprocess.run([sys.executable, "-X", "utf8", "-m", "unified_knowledge.clang_worker",
                                str(incoming), str(outgoing)], cwd=Path(__file__).resolve().parents[1],
-                              capture_output=True, timeout=timeout)
+                              capture_output=True, timeout=timeout + (45 if request.get("frontend")=="gcc" else 0))
         require(proc.returncode == 0 and outgoing.is_file(), "Clang worker exited without a result")
         payload = json.loads(outgoing.read_text(encoding="utf-8"))
     except (ValueError, OSError, subprocess.TimeoutExpired) as error:
@@ -309,6 +314,8 @@ def build_index(store, snapshot, profile="unknown", *, timeout=120, resume=False
     binding = store.profile(snapshot, profile)
     tools = tool_identity()
     if native_facts:
+        from .native_writer import NativeWriter, prepare as prepare_native, prune as prune_native
+        prepare_native(store)
         tools["native_facts"] = native_facts
         store.db.execute("CREATE TABLE IF NOT EXISTS native_tus(run TEXT,context TEXT,data TEXT,PRIMARY KEY(run,context))")
     if ctags:
@@ -356,7 +363,12 @@ def build_index(store, snapshot, profile="unknown", *, timeout=120, resume=False
     snap = store.record("snapshots", snapshot)
     roots = {r["id"]: store.home / "vfs" / snapshot.replace(":", "-") / r["id"]
              for r in snap["materials"] if r["kind"] == "source"}
-    overlay = frozen_view(store, snapshot, roots) if commands else None
+    chain = binding.get("toolchain")
+    frontend = chain.get("frontend",{}).get("name","clang") if isinstance(chain,dict) else "clang"
+    if frontend=="gcc":
+        require(native_facts=="calls","The GCC frontend exports native calls only")
+        roots = materialize(store,snapshot)
+    overlay = frozen_view(store, snapshot, roots) if commands and frontend!="gcc" else None
     ctags_roots = materialize(store, snapshot) if ctags else {}
     originals = {r["id"]: Path(r["root"]) for r in snap["materials"] if r["kind"] == "source"}
     lease = uuid.uuid4().hex
@@ -377,11 +389,14 @@ def build_index(store, snapshot, profile="unknown", *, timeout=120, resume=False
             run["syntax_complete"] = False
             run["completed_tus"] = [t for t in run["completed_tus"] if t not in retry_contexts]
             run["tu_results"] = [t for t in run["tu_results"] if t["context"] not in retry_contexts]
+            if native_facts:
+                prune_native(store,rid,retry_contexts)
             for context in retry_contexts:
                 if native_facts:
                     store.db.execute("DELETE FROM native_tus WHERE run=? AND context=?", (rid,context))
-                store.db.execute("DELETE FROM relations WHERE run=? AND json_extract(data,'$.context')=?", (rid, context))
-            for row in store.db.execute("SELECT id,data FROM symbols WHERE run=?", (rid,)).fetchall():
+                else:
+                    store.db.execute("DELETE FROM relations WHERE run=? AND json_extract(data,'$.context')=?", (rid, context))
+            for row in ([] if native_facts else store.db.execute("SELECT id,data FROM symbols WHERE run=?", (rid,)).fetchall()):
                 item = json.loads(row["data"])
                 contexts = [c for c in item.get("contexts", []) if c not in retry_contexts]
                 if contexts:
@@ -392,6 +407,7 @@ def build_index(store, snapshot, profile="unknown", *, timeout=120, resume=False
         store.db.execute("INSERT OR REPLACE INTO runs VALUES(?,?,?,?,?,?)",
                          (rid, snapshot, profile, run["created"], "building", canonical(run)))
     try:
+        writer = NativeWriter(store,rid,snapshot,profile) if native_facts else None
         if native_facts:
             run["syntax_complete"] = True
             run["native_facts"] = native_facts
@@ -441,64 +457,80 @@ def build_index(store, snapshot, profile="unknown", *, timeout=120, resume=False
         remaining = [(n, e) for n, e in enumerate(commands)
                      if identity("tu", [binding["repository"], e]) not in completed]
         with ThreadPoolExecutor(max_workers=jobs) as pool:
-            for start in range(0, len(remaining), jobs):
-                batch = []
-                for number, entry in remaining[start:start + jobs]:
-                    context = identity("tu", [binding["repository"], entry])
-                    source_key = binding["repository"] + "/" + entry["file"]
-                    key, cached, pending, normalized = None, None, None, []
-                    try:
-                        source = store.asset(snapshot, source_key)
-                        require(source["status"] == "frozen", "Compilation unit not frozen: " + source_key)
-                        normalized = compiler_arguments(entry, binding, originals, originals)
-                        key = tu_cache.parse_key(binding["repository"], entry, normalized, binding, tools, source["sha"])
-                        if native_facts:
-                            key = digest([key, native_facts])
-                        row = store.db.execute("SELECT data FROM tu_cache WHERE key=?", (key,)).fetchone()
-                        if row:
-                            value = json.loads(row[0])
-                            if tu_cache.valid(store, snapshot, value):
-                                cached = value
-                                run["cache_hits"] += 1
-                        if cached is None:
-                            args = compiler_arguments(entry, binding, originals, roots)
-                            request = {"file": str(roots[binding["repository"]] / entry["file"]),
-                                       "arguments": [*args, "-ivfsoverlay", str(overlay)],
-                                       "roots": {k: str(v) for k, v in roots.items()},
-                                       "home": str(store.home), "snapshot": snapshot, "unit_file": source_key,
-                                       "facts": native_facts}
-                            stem = str(number) + ("-" + lease if native_facts else "")
-                            job = (work / (stem + ".request.json"), work / (stem + ".result.json"), request)
-                            pending = pool.submit(parse_one, job, timeout)
-                            run["frontend_invocations"] += 1
-                    except (ValueError, OSError) as error:
-                        cached = {"symbols": [], "relations": [], "includes": [], "status": "failed",
-                                  "diagnostics": [], "error": str(error)}
-                    batch.append((context, source_key, key, normalized, cached, pending))
-                for context, source_key, key, normalized, payload, pending in batch:
-                    seconds = 0.0
-                    if pending:
-                        payload, seconds = pending.result()
-                        if payload["status"] == "parsed":
-                            payload["lookup_guard"] = tu_cache.guard(store, snapshot, source_key, normalized, originals, payload["includes"])
-                    with store.transaction():
-                        require(store.get_meta("index_lease:" + rid)["token"] == lease, "Index lease lost")
+            def submit(number, entry):
+                context = identity("tu", [binding["repository"], entry])
+                source_key = binding["repository"] + "/" + entry["file"]
+                key, cached, pending, normalized = None, None, None, []
+                try:
+                    source = store.asset(snapshot, source_key)
+                    require(source["status"] == "frozen", "Compilation unit not frozen: " + source_key)
+                    normalized = compiler_arguments(entry, binding, originals, originals)
+                    key = tu_cache.parse_key(binding["repository"], entry, normalized, binding, tools, source["sha"])
+                    if native_facts:
+                        key = digest([key, native_facts])
+                    row = store.db.execute("SELECT data FROM tu_cache WHERE key=?", (key,)).fetchone()
+                    if row:
+                        value = json.loads(row[0])
+                        if tu_cache.valid(store, snapshot, value):
+                            cached = value
+                            run["cache_hits"] += 1
+                    if cached is None:
+                        args = compiler_arguments(entry, binding, originals, roots)
+                        request = {"file": str(roots[binding["repository"]] / entry["file"]),
+                                   "arguments": args if frontend=="gcc" else [*args, "-ivfsoverlay", str(overlay)],
+                                   "roots": {k: str(v) for k, v in roots.items()},
+                                   "original_roots":{k:str(v) for k,v in originals.items()},
+                                   "home": str(store.home), "snapshot": snapshot, "unit_file": source_key,
+                                   "facts": native_facts,"frontend":frontend,"timeout":timeout}
+                        stem = str(number) + ("-" + lease if native_facts else "")
+                        if frontend=="gcc":
+                            from .gcc_frontend import is_cpp
+                            cpp = is_cpp(entry)
+                            language = "c++" if cpp else "c"
+                            adapter = binding["toolchain"]["frontend"]
+                            request.update(gcc_driver=adapter["drivers"][language],
+                                           gcc_plugin=adapter["plugins"][language]["path"],
+                                           gcc_output=str(work/(stem+".gcc.jsonl")))
+                        job = (work / (stem + ".request.json"), work / (stem + ".result.json"), request)
+                        pending = pool.submit(parse_one, job, timeout)
+                        run["frontend_invocations"] += 1
+                except (ValueError, OSError) as error:
+                    cached = {"symbols": [], "relations": [], "includes": [], "status": "failed",
+                              "diagnostics": [], "error": str(error)}
+                return context, source_key, key, normalized, cached, pending
+            iterator = iter(remaining)
+            queue = deque(submit(number,entry) for number,entry in islice(iterator,jobs))
+            while queue:
+                context, source_key, key, normalized, payload, pending = queue.popleft()
+                seconds = 0.0
+                if pending:
+                    payload, seconds = pending.result()
+                    if payload["status"] == "parsed":
+                        payload["lookup_guard"] = tu_cache.guard(store, snapshot, source_key, normalized, originals, payload["includes"])
+                with store.transaction():
+                    require(store.get_meta("index_lease:" + rid)["token"] == lease, "Index lease lost")
+                    if writer:
+                        writer.persist(payload,context)
+                    else:
                         _persist_payload(store, rid, snapshot, profile, payload, context)
-                        if pending and payload["status"] == "parsed" and payload.get("lookup_guard") is not None:
-                            store.db.execute("INSERT OR REPLACE INTO tu_cache VALUES(?,?)", (key, canonical(payload)))
-                        run["completed_tus"].append(context)
-                        receipt = {"context": context, "asset": source_key, "status": payload["status"],
-                            "cache_key": key, "seconds": seconds, "error": payload.get("error"),
-                            "diagnostics": payload.get("diagnostics", []), "includes": payload.get("includes", []),
-                            "lookup_guard": payload.get("lookup_guard")}
-                        if native_facts:
-                            store.db.execute("INSERT OR REPLACE INTO native_tus VALUES(?,?,?)",(rid,context,canonical(receipt)))
-                        run["tu_results"].append(_brief(receipt) if native_facts else receipt)
-                        store.set_meta("index_lease:" + rid, {"token": lease, "expires": time.time() + timeout + 60})
-                        checkpoint = {**run,"tu_results":[],"completed_tus":[]} if native_facts else run
-                        store.db.execute("UPDATE runs SET data=? WHERE id=?", (canonical(checkpoint), rid))
-                    if progress:
-                        progress(len(run["completed_tus"]),len(commands),source_key,payload["status"])
+                    if pending and payload["status"] == "parsed" and payload.get("lookup_guard") is not None:
+                        store.db.execute("INSERT OR REPLACE INTO tu_cache VALUES(?,?)", (key, canonical(payload)))
+                    run["completed_tus"].append(context)
+                    receipt = {"context": context, "asset": source_key, "status": payload["status"],
+                        "cache_key": key, "seconds": seconds, "error": payload.get("error"),
+                        "diagnostics": payload.get("diagnostics", []), "includes": payload.get("includes", []),
+                        "lookup_guard": payload.get("lookup_guard")}
+                    if native_facts:
+                        store.db.execute("INSERT OR REPLACE INTO native_tus VALUES(?,?,?)",(rid,context,canonical(receipt)))
+                    run["tu_results"].append(_brief(receipt) if native_facts else receipt)
+                    store.set_meta("index_lease:" + rid, {"token": lease, "expires": time.time() + timeout + 60})
+                    checkpoint = {**run,"tu_results":[],"completed_tus":[]} if native_facts else run
+                    store.db.execute("UPDATE runs SET data=? WHERE id=?", (canonical(checkpoint), rid))
+                if progress:
+                    progress(len(run["completed_tus"]),len(commands),source_key,payload["status"])
+                following = next(iterator,None)
+                if following is not None:
+                    queue.append(submit(*following))
         counts = Counter(r["status"] for r in run["tu_results"])
         run["status"] = "ready" if commands and counts["parsed"] == len(binding["commands"]) else "partial"
         run["coverage"] = {"assets": len(filenames), "translation_units": len(commands), "available_tus": len(binding["commands"]),
@@ -506,6 +538,8 @@ def build_index(store, snapshot, profile="unknown", *, timeout=120, resume=False
                            "parsed_tus": counts["parsed"], "partial_tus": counts["partial"], "failed_tus": counts["failed"],
                            "unknown_profile": profile == "unknown", "semantic_completeness": "not_certified"}
         with store.transaction():
+            if writer:
+                run["storage_metrics"] = writer.finish()
             # Remove duplicate syntax candidates only where a real frontend definition overlaps them.
             candidates = store.db.execute("SELECT id,asset,data FROM symbols WHERE run=? AND kind='candidate_function'", (rid,)).fetchall()
             for candidate in candidates:

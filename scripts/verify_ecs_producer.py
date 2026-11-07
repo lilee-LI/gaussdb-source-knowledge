@@ -63,6 +63,7 @@ def verify(output):
     assert len(rows) == 2 and all("-DENABLE_FEATURE=1" in r["arguments"] for r in rows)
     common = [
         "build",
+        "--frontend", "clang",
         "--source",
         src,
         "--compile-db",
@@ -82,6 +83,7 @@ def verify(output):
     # Stop the real controller after its first committed TU. The OS releases the work lock.
     resume_args = [
         "build",
+        "--frontend", "clang",
         "--source",
         src,
         "--compile-db",

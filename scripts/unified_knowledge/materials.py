@@ -147,6 +147,7 @@ def ingest(store, config, *, imported=None):
         binding_source = imported is not None and entry["kind"] == "source"
         upstream = imported.source_assets(entry["id"]) if binding_source else {}
         before = []
+        native_times = []
         for p, excluded in walk(root):
             relative = p.relative_to(root).as_posix() if root.is_dir() else p.name
             local_link = None
@@ -201,6 +202,10 @@ def ingest(store, config, *, imported=None):
                 raw = p.read_bytes()
                 sha = store.put_blob(raw)
                 record.update(sha=sha, status="frozen", bytes=len(raw))
+                if entry.get("native_sources"):
+                    stamp = p.stat().st_mtime_ns
+                    record["source_mtime_ns"] = stamp
+                    native_times.append((p,stamp))
                 before.append((p, sha))
                 if entry["kind"] == "document":
                     require(p.suffix.lower() in TEXT_DOCS, "Unsupported material format")
@@ -233,6 +238,8 @@ def ingest(store, config, *, imported=None):
         # Detect an input modified while this material was being captured.
         require(all(p.is_file() and digest(p.read_bytes()) == sha for p, sha in before),
                 "Material changed during snapshot; retry from a stable checkout")
+        require(all(p.stat().st_mtime_ns==stamp for p,stamp in native_times),
+                "Native source timestamps changed during snapshot")
     if imported:
         extra, inherited_assets, blocks = imported.inherited_documents(store, ids)
         supplied.extend(extra)

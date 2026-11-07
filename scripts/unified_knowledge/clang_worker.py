@@ -11,6 +11,9 @@ from .store import Store, atomic_write, canonical, digest, identity
 
 
 def parse(request):
+    if request.get("frontend")=="gcc":
+        from .gcc_frontend import parse as gcc_parse
+        return gcc_parse(request)
     from clang import cindex as c
     roots = {key: Path(value).resolve() for key, value in request["roots"].items()}
 
