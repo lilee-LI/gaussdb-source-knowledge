@@ -1,6 +1,8 @@
 # 迁移到 GaussDB：一条可执行的使用路径
 
-本手册对应 **2.3.0 全仓持续学习代码包**，入口固定为：Linux ECS 产图 → Windows 协调端 → 本机 Claude Code 通过 stdio MCP 研究 → 两步审阅 → SQLite 知识与 Wiki → 开发/测试/review 查询。无需部署 HTTP 网关、RAGFlow 或 CodeWiki vendor；Claude Code 与其模型配置使用你现有的环境，不随包提供。
+本手册对应 **2.3.1 全仓持续学习代码包**。推荐在已有 Claude Code 中使用[启动提示词或 `/gauss-knowledge`](CLAUDE-START.md)：配置材料路径 → 自动规划 → 当前会话研究 → 真实审阅 → SQLite 知识与 Wiki → 开发/测试/review 查询。不需要工程另起 Claude，也不必先配置 MCP。源码和手册即可开始；ECS 编译调用图可选。下文仍保留 ECS 与命令行/MCP 的完整操作路径。
+
+无需部署 HTTP 网关、RAGFlow 或 CodeWiki vendor；Claude Code 与其模型配置使用你现有的环境，不随包提供。
 
 ## 能直接用到什么程度
 

@@ -1,10 +1,24 @@
-# GaussDB 源码知识工程 2.3
+# GaussDB 源码知识工程 2.3.1
 
 从完整源码、设计文档、用户手册和可选的 ECS 编译调用图，建立版本绑定的学习计划、经审阅的结构化知识和 Wiki。支持模块持续学习、不同服务器离线协作、覆盖验收和开发／测试／review 上下文查询。
 
 **操作手册：[迁移到 GaussDB](MIGRATE-GAUSSDB.md)。工程合同：[全仓持续学习](docs/WHOLE-REPOSITORY.md)。验证范围：[2.3 验证报告](docs/VALIDATION-2.3.md)。**
 
+**在已有 Claude 会话中使用：[直接粘贴提示词／`/gauss-knowledge`](CLAUDE-START.md)。无需从外面调用 Claude，也无需先配 MCP。[2.3.1 入口验证](docs/VALIDATION-2.3.1.md)。**
+
 直接看 [openGauss实际输出](assets/examples/opengauss-2.3/README.md)：全仓计划、Wiki、结构化知识和三类使用上下文；试点未覆盖范围保留为未完成。
+
+## 直接在 Claude 中学习
+
+在工程目录打开 Claude Code，即可使用项目 skill：
+
+```text
+/gauss-knowledge 源码=E:/GaussDB/source 手册=E:/corpus/manual 工作区=E:/knowledge/gaussdb。先规划全仓，再学习优化器一个小子模块。
+```
+
+也可在任意 Claude Code 会话中粘贴 [启动提示词](CLAUDE-START.md)，让当前会话直接读取 skill。仅需 Python 3.12、Git、已有 Claude 和完整工程；Python 依赖首次从包内 wheels 离线安装。源码和手册模式不需要 ECS、设计文档或编译调用图。
+
+当前会话负责分析，工程脚本保存原有任务、冻结证据、覆盖报告和知识；默认提交后待审。明确要求同会话审阅入库时保留 `self_reviewed`，知识正文仍经过研究和知识两步审阅。SQLite、Wiki、多人汇总与下述 CLI 共用一套状态。本入口首版用于 paths 配置的协调端工作区；已解开的成员包仍使用既有 MCP/whole 协议。
 
 ## 输入和输出
 
@@ -16,7 +30,7 @@
 
 完整图只读挂接到协调端；学习库不复制图。成员材料包包含本模块、证据文件和一跳图，成员不需要共享协调端 SQLite，不需要每人搬完整图。大公共模块的包仍可能较大；按自然目录细分或调整归属后分派。
 
-## 配置后启动
+## 命令行配置后启动（也可使用上面的 Claude 入口）
 
 Windows 准备 Python 3.12、Git 和已登录的 Claude Code。发行 ZIP 包含基础依赖的离线 wheel；源码克隆需同时取得仓内 wheelhouse。Claude、认证和产品源码不打包。Linux 对应使用 `sh kb.sh`。
 
@@ -45,7 +59,7 @@ notepad local/paths.json
 .\kb.cmd review --task '<任务ID>' --reviewer reviewer-a --accept '<研究digest>' --notes '实际核对意见'
 ```
 
-`run` 使用本机已有的原生 Claude CLI，每项任务一个独立会话。先做模块盘点、分批提交机制提案；盘点通过后，`advance` 生成下一批任务。也可用 `learn --candidate` 或 `learn --module ... --question ...` 获得手动 Claude 命令和提示词。
+上述 `run` 用于从命令行发起本机原生 Claude CLI，每项任务一个独立会话。希望在已有 Claude 中执行时使用上面的 `/gauss-knowledge`，它不调用 `run`。两种入口都先做模块盘点、分批提交机制提案；盘点通过后，`advance` 生成下一批任务。`learn --candidate` 或 `learn --module ... --question ...` 保留原有手动 MCP 会话用法。
 
 有知识正文的任务还需第二次知识审阅：上一条命令返回新的提案 digest 后，核对提案和源码，再执行同一 `review --accept <提案digest>`。纯盘点任务只经过研究审阅。程序不会替审阅人自动批准。
 
