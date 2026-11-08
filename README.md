@@ -6,6 +6,8 @@
 
 **在已有 Claude 会话中使用：[直接粘贴提示词／`/gauss-knowledge`](CLAUDE-START.md)。无需从外面调用 Claude，也无需先配 MCP。[2.3.1 入口验证](docs/VALIDATION-2.3.1.md)。**
 
+针对“四输入、模块/特性课程、全源码覆盖、子Agent并行与Agent前置知识”的[论文复核与改造设计](docs/plans/module-feature-learning-redesign-20261108.md)已单列。该文是待实施提案；历史特性清单导入、原始编译数据库贯通高级入口、原生子Agent调度及四角色专门内容合同，不能当成2.3.1已经完成的能力。
+
 直接看 [openGauss实际输出](assets/examples/opengauss-2.3/README.md)：全仓计划、Wiki、结构化知识和三类使用上下文；试点未覆盖范围保留为未完成。
 
 ## 直接在 Claude 中学习
