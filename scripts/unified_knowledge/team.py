@@ -303,7 +303,13 @@ def receive(store, path, jobs=2):
             require(a["sha"] == (expected or asset["sha"]), "Evidence view mismatch")
             mapped = store.anchor(snapshot, a["asset"], a["start"], a["end"], text_sha=expected)
             require(mapped["quote_sha256"] == a["quote_sha256"], "Evidence excerpt mismatch")
-            mapping[ref] = mapped["id"]
+            # Kits share the coordinator snapshot/global ECS origin. Preserve an
+            # already valid content-addressed anchor identity so round-trip
+            # reference hashes do not change merely because of canonicalization.
+            if store.evidence_in_scope(a,snapshot) and identity('evidence',{k:v for k,v in a.items() if k!='id'})==ref:
+                store.db.execute('INSERT OR IGNORE INTO main.anchors VALUES(?,?,?,?,?,?,?)',(ref,a['snapshot'],a['asset'],a['sha'],a['start'],a['end'],canonical(a)))
+                mapping[ref]=ref
+            else:mapping[ref] = mapped["id"]
         for sid, logical in data["symbols"].items():
             if plan.get("source_index"):
                 # A module kit keeps ECS instance IDs. One logical symbol may have multiple definitions or declarations.

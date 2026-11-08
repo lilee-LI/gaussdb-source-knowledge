@@ -16,12 +16,15 @@ class WholeLearningTests(unittest.TestCase):
         self.hub,self.plan,_=workspace(self.root);self.addCleanup(self.hub.close)
         self.program=whole.ensure(self.hub,'generic')
 
-    def research(self,store,module,*,propose=False,task=None,worker='learner',publish=True):
+    def research(self,store,module,*,propose=False,task=None,worker='learner',publish=True,legacy_evidence=False):
         plan=study.current(store);task=task or plan['modules'][module]['task']
         lease=planner.lease(store,task,worker);token=lease['token'];refs=[];assets=[];draft=None
         for key in plan['modules'][module]['files']:
             read=whole.read_source(store,task,worker,token,key,1,400);refs.append(read['id'])
             assets.append({'asset':key,'disposition':'studied','reason':'Synthetic full-file protocol research','evidence_refs':[read['id']],'unit_ids':['mechanism:'+module]})
+        if legacy_evidence:
+            symbol=next(json.loads(r['data']) for r in store.lookup_symbols(plan['run'],'cg_compute',limit=4) if json.loads(r['data']).get('definition'))
+            planner.read_for_task(store,task,worker,token,symbol['evidence']);refs.append(symbol['evidence'])
         unit={'id':'mechanism:'+module,'kind':'mechanism','title':module+' fixture mechanism','body':'The frozen synthetic fixture was read; this is a protocol test.',
               'source_refs':refs,'conditions':['Synthetic fixture only'],'counterexamples':['No real database semantics certified'],'symbol_refs':[]}
         draft=planner.stage_research_unit(store,task,worker,token,unit)
@@ -92,7 +95,7 @@ class WholeLearningTests(unittest.TestCase):
         module='server/optimizer';order=self.root/'order.json';kit=self.root/'kit.zip';worker=self.root/'member'
         team.assign(self.hub,module,'member',order);workkit.pack(self.hub,order,kit);workkit.open_kit(worker,kit)
         with Store(worker) as local:
-            t,finished,_=self.research(local,module,worker='member',publish=False)
+            t,finished,_=self.research(local,module,worker='member',publish=False,legacy_evidence=True)
             packet=self.root/'result-1.gz';team.export_result(local,worker/'order.json',t,packet)
             received=team.receive(self.hub,packet);self.assertEqual(received['task'],self.plan['modules'][module]['task'])
             self.assertTrue(team.receive(self.hub,packet)['replayed'])
