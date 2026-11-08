@@ -28,12 +28,13 @@ def make_shard(hub, shard, plan, ticket, additions):
     module = ticket["module"]
     info = plan["modules"][module]
     source_run = hub.record("runs", plan["run"])
-    origin = ticket["source_index"]
+    origin = ticket["source_index"] or {'provider':'workspace-sqlite/v1','run_id':source_run['id'],'snapshot':source_run['snapshot'],
+                                          'profile_digest':source_run['profile_digest'],'facts_digest':source_run['facts_digest']}
     native = (plan.get("reuse_index") and origin.get("provider") == "workspace-sqlite/v1" and
               all(source_run[field] == origin[key] for field,key in (("id","run_id"),("snapshot","snapshot"),
                   ("profile_digest","profile_digest"),("facts_digest","facts_digest"))))
-    require(not plan.get("worker_scope") and (source_run.get("mode") == "ecs" or native),
-            "Export a worker kit from the coordinator's completed index")
+    require(not plan.get("worker_scope") and (source_run.get("mode") in {'ecs','inventory','source_only'} or native),
+            "Export a worker kit from the coordinator's inventory or completed index")
     sid = plan["snapshot"]
     kit_run = identity("ecs-module", [source_run["id"], module, sorted(additions), ticket["id"]])
     db = shard.db
@@ -100,6 +101,11 @@ def make_shard(hub, shard, plan, ticket, additions):
                     db.execute("INSERT OR IGNORE INTO owned VALUES(?)", (row[0],))
             for reference in ticket["references"].values():
                 db.executemany("INSERT OR IGNORE INTO owned VALUES(?)", ((c["asset"],) for c in reference["citations"]))
+            for r in hub.db.execute("SELECT data FROM tasks WHERE snapshot=? AND json_extract(data,'$.bundle.plan_id')=? AND json_extract(data,'$.bundle.module')=?",(sid,plan['id'],module)):
+                b=json.loads(r[0])['bundle']
+                extra=set(b.get('selected_files',[]))
+                extra.update(hub.record('anchors',ref)['asset'] for ref in b.get('source_anchor_refs',[]))
+                db.executemany('INSERT OR IGNORE INTO owned VALUES(?)',((key,) for key in extra))
             db.execute("INSERT INTO assets SELECT * FROM hub.assets WHERE snapshot=? AND key IN (SELECT key FROM owned)", (sid,))
             visible = {r[0] for r in db.execute("SELECT key FROM assets WHERE snapshot=?",(sid,))}
             snapshot_view = hub.record("snapshots",sid)
@@ -133,6 +139,45 @@ def make_shard(hub, shard, plan, ticket, additions):
             if history["tasks"]:
                 shard.set_meta("coordinator-history:"+plan["id"], {"tasks":history["tasks"],"truncated":history["truncated"]})
             local_task = create_task(shard,snapshot=sid,run=kit_run,profile=run["profile"],kind="module_survey",bundle=task["bundle"])
+            from .whole import current as whole_current
+            program=whole_current(hub,False)
+            if program:
+                # Clone native tasks, not a second queue. Preserve coordinator identities for receipt/review.
+                owned_tasks=[dict(r) for r in hub.db.execute("SELECT * FROM tasks WHERE snapshot=? AND json_extract(data,'$.bundle.plan_id')=? AND json_extract(data,'$.bundle.module')=?",(sid,plan['id'],module))]
+                mapping={};survey_id=info['task']
+                for original in owned_tasks:
+                    original_data=json.loads(original['data']);bundle={**original_data['bundle'],'coordinator_task':original['id']}
+                    new_id=create_task(shard,snapshot=sid,run=kit_run,profile=run['profile'],kind=original['kind'],bundle=bundle)
+                    mapping[original['id']]=new_id
+                    if original['status']=='accepted':
+                        db.execute("UPDATE tasks SET status='accepted',result=? WHERE id=?",(original['result'],new_id))
+                # Remove the legacy duplicate survey, before it can be leased.
+                db.execute('DELETE FROM tasks WHERE id=?',(local_task,));local_task=mapping[survey_id]
+                for original in owned_tasks:
+                    for dep in hub.db.execute('SELECT dependency FROM task_edges WHERE task=?',(original['id'],)):
+                        dep_id=dep[0]
+                        if dep_id not in mapping:
+                            dependency=hub.db.execute('SELECT * FROM tasks WHERE id=?',(dep_id,)).fetchone()
+                            db.execute('INSERT OR IGNORE INTO tasks SELECT * FROM hub.tasks WHERE id=?',(dep_id,))
+                            mapping[dep_id]=dep_id
+                        db.execute('INSERT OR IGNORE INTO task_edges VALUES(?,?)',(mapping[original['id']],mapping[dep_id]))
+                wp={**program,'worker_scope':module,'templates':[{**t,'task':mapping.get(t['task'],t['task'])} for t in program['templates'] if t['module']==module]}
+                db.execute('INSERT INTO learning_programs VALUES(?,?,?,?,?)',(wp['id'],plan['id'],sid,run['profile'],canonical(wp)))
+                db.execute('INSERT INTO learning_assets SELECT * FROM hub.learning_assets WHERE program=? AND module=?',(wp['id'],module))
+                report_ids=[]
+                for record in hub.db.execute('SELECT * FROM learning_reports WHERE program=?',(wp['id'],)):
+                    data=json.loads(record['data'])
+                    if data['module']!=module:continue
+                    report_ids.append(record['id']);data['task']=mapping.get(data['task'],data['task'])
+                    db.execute('INSERT INTO learning_reports VALUES(?,?,?,?,?)',(record['id'],wp['id'],data['task'],record['result_digest'],canonical(data)))
+                for rid in report_ids:
+                    db.execute('INSERT OR REPLACE INTO learning_dispositions SELECT * FROM hub.learning_dispositions WHERE report=?',(rid,))
+                    db.execute('INSERT OR REPLACE INTO learning_leads SELECT * FROM hub.learning_leads WHERE report=?',(rid,))
+                for meta in ('report-proposals:','approved-program-candidates:','planning-candidates:'):
+                    value=hub.get_meta(meta+(wp['id'] if meta!='planning-candidates:' else plan['id']))
+                    if value is not None:shard.set_meta(meta+(wp['id'] if meta!='planning-candidates:' else plan['id']),value)
+                shard.set_meta('whole-for:'+plan['id'],wp['id'])
+                shard.set_meta('coordinator-task-map',mapping)
             member_leads = [{**c,"evidence":[e for e in c["evidence"] if e["asset"] in visible]}
                             for c in leads if c["owner_module"]==module]
             view = {**plan,"run":kit_run,"modules":{module:{**info,"task":local_task}},"worker_scope":module,
@@ -162,7 +207,7 @@ def make_shard(hub, shard, plan, ticket, additions):
 def pack(hub, order, output, additions=()):
     plan = current(hub)
     ticket = json.loads(Path(order).read_text(encoding="utf-8-sig"))
-    require(ticket.get("source_index") and ticket["plan"] == plan["id"], "Use an ECS work order for this plan")
+    require(ticket['plan']==plan['id'],'Work order belongs to another plan')
     output = Path(output).resolve()
     require(output.suffix.lower() == ".zip" and output != Path(order).resolve(), "Use a separate .zip path for the kit")
     output.parent.mkdir(parents=True,exist_ok=True)

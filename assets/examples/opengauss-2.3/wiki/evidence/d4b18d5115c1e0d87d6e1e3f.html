@@ -1,0 +1,62 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/common/backend/utils/cache/plancache.cpp:950-1010</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/common/backend/utils/cache/plancache.cpp:950-1010</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>         * functions will have marked the query invalid.
+         */
+        if (plansource-&gt;is_valid) {
+            /* Successfully revalidated and locked the query. */
+            if (plansource-&gt;opFusionObj) {
+                ((OpFusion*)plansource-&gt;opFusionObj)-&gt;m_hasRelationLock = true;
+            }
+            return NIL;
+        }
+
+        /* Ooops, the race case happened.  Release useless locks. */
+        AcquirePlannerLocks(plansource-&gt;query_list, false);
+    }
+
+    Assert(!plansource-&gt;gpc.status.InShareTable());
+
+#ifdef ENABLE_MOT
+    /*
+     * CachedPlanSource is no longer valid. Invalidate MOT JIT context forcefully,
+     * so that it will be re-validated in the next execution.
+     * ATTENTION: This case relates only to MOT tables, since we have a
+     * ready MOT JIT context.
+     */
+    if (plansource-&gt;mot_jit_context != nullptr) {
+        JitExec::ForceJitContextInvalidation(plansource-&gt;mot_jit_context);
+    }
+    plansource-&gt;checkedMotJitCodegen = false;
+#endif
+
+    /*
+     * Discard the no-longer-useful query tree.  (Note: we don&#x27;t want to do
+     * this any earlier, else we&#x27;d not have been able to release locks
+     * correctly in the race condition case.)
+     */
+    plansource-&gt;is_valid = false;
+    if (plansource-&gt;planManager != NULL) {
+        plansource-&gt;planManager-&gt;is_valid = false;
+    }
+    plansource-&gt;operator_reuse_state = NULL;
+    plansource-&gt;query_list = NIL;
+    plansource-&gt;relationOids = NIL;
+    plansource-&gt;invalItems = NIL;
+    plansource-&gt;search_path = NULL;
+    ResetRowDescPlanCache(plansource);
+    if (plansource-&gt;single_exec_node) {
+        need_reset_singlenode = true;
+    }
+    /*
+     * Free the query_context.	We don&#x27;t really expect MemoryContextDelete to
+     * fail, but just in case, make sure the CachedPlanSource is left in a
+     * reasonably sane state.  (The generic plan won&#x27;t get unlinked yet, but
+     * that&#x27;s acceptable.)
+     */
+    if (plansource-&gt;query_context) {
+        MemoryContext qcxt = plansource-&gt;query_context;
+
+        plansource-&gt;query_context = NULL;
+        MemoryContextDelete(qcxt);
+    }
+
+    /*
+</pre><p>evidence:a0b91a802f118c15adbf8c159549f18a</p><p>SHA-256 b950927b8f9c737e2b3ec5afdb0392bfe9cd0d772c2b5c205124a37fd001a78f</p></main></html>

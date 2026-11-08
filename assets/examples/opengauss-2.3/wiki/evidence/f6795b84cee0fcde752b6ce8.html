@@ -1,0 +1,39 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/geqo/geqo_erx.cpp:168-205</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/geqo/geqo_erx.cpp:168-205</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre> *
+ */
+int gimme_tour(PlannerInfo* root, Edge* edge_table, Gene* new_gene, int num_gene)
+{
+    int i;
+    int edge_failures = 0;
+
+    /* choose int between 1 and num_gene */
+    new_gene[0] = (Gene)geqo_randint(root, num_gene, 1);
+
+    for (i = 1; i &lt; num_gene; i++) {
+        /*
+         * as each point is entered into the tour, remove it from the edge
+         * table
+         */
+        remove_gene(root, new_gene[i - 1], edge_table[(int)new_gene[i - 1]], edge_table);
+
+        /* find destination for the newly entered point */
+        if (edge_table[new_gene[i - 1]].unused_edges &gt; 0)
+            new_gene[i] = gimme_gene(root, edge_table[(int)new_gene[i - 1]], edge_table);
+
+        else { /* cope with fault */
+            edge_failures++;
+
+            new_gene[i] = edge_failure(root, new_gene, i - 1, edge_table, num_gene);
+        }
+
+        /* mark this node as incorporated */
+        edge_table[(int)new_gene[i - 1]].unused_edges = -1;
+    }
+
+    return edge_failures;
+}
+
+/* remove_gene
+ *
+ *	 removes input gene from edge_table.
+ *	 input edge is used
+</pre><p>evidence:ddcda6c6f26608f5891e2c26101001c0</p><p>SHA-256 12266f8dcfcb475fa27c84ab25313ab1a369b95019042b17d9551196bd0a593c</p></main></html>

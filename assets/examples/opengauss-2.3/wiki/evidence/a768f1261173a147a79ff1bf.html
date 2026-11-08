@@ -1,0 +1,42 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/common/backend/utils/cache/plancache.cpp:295-335</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/common/backend/utils/cache/plancache.cpp:295-335</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>    /* Initialize gplan_is_fqs is true, and set to false when find it&#x27;s not fqs */
+    plansource-&gt;gplan_is_fqs = true;
+#endif
+
+    plansource-&gt;query_list = NIL;
+    plansource-&gt;relationOids = NIL;
+    plansource-&gt;invalItems = NIL;
+    plansource-&gt;query_context = NULL;
+    plansource-&gt;gplan = NULL;
+    plansource-&gt;is_oneshot = false;
+    plansource-&gt;is_complete = false;
+    plansource-&gt;is_saved = false;
+    plansource-&gt;is_valid = false;
+    plansource-&gt;generation = 0;
+    plansource-&gt;next_saved = NULL;
+    plansource-&gt;generic_cost = -1;
+    plansource-&gt;total_custom_cost = 0;
+    plansource-&gt;num_custom_plans = 0;
+    plansource-&gt;opFusionObj = NULL;
+    plansource-&gt;is_checked_opfusion = false;
+    plansource-&gt;is_support_gplan = false;
+    plansource-&gt;spi_signature = {(uint32)-1, 0, (uint32)-1, -1};
+    plansource-&gt;sql_patch_sequence = pg_atomic_read_u64(&amp;g_instance.cost_cxt.sql_patch_sequence_id);
+    plansource-&gt;planManager = NULL;
+    plansource-&gt;hasSubQuery = false;
+    plansource-&gt;gpc_lockid = -1;
+    plansource-&gt;hasSubQuery = false;
+    plansource-&gt;param_collation = GetCollationConnection();
+    if (!enable_pbe_gpc &amp;&amp; !(ENABLE_CN_GPC &amp;&amp; enable_spi_gpc)) {
+        plansource-&gt;describe_buf_context = CreateRowDescBufContext(source_context);
+    }
+
+
+#ifdef ENABLE_MOT
+    plansource-&gt;storageEngineType = SE_TYPE_UNSPECIFIED;
+    plansource-&gt;checkedMotJitCodegen = false;
+    plansource-&gt;mot_jit_context = NULL;
+#endif
+
+    if (enable_pbe_gpc) {
+        plansource-&gt;gpc.status.ShareInit();
+</pre><p>evidence:6a1d15b53a43b9100e5b2c485ad79f5f</p><p>SHA-256 6e4325772dfb0b72a7fb51c2e42df9f9698edc0a561ec686ff7a590067274ae0</p></main></html>

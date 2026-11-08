@@ -1,0 +1,11 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/process/threadpool/knl_instance.cpp:66-75</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/process/threadpool/knl_instance.cpp:66-75</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>static void knl_g_cost_init(knl_g_cost_context* cost_cxt)
+{
+    cost_cxt-&gt;cpu_hash_cost = DEFAULT_CPU_HASH_COST;
+    cost_cxt-&gt;send_kdata_cost = DEFAULT_SEND_KDATA_COST;
+    cost_cxt-&gt;receive_kdata_cost = DEFAULT_RECEIVE_KDATA_COST;
+    cost_cxt-&gt;disable_cost = 1.0e10;
+    cost_cxt-&gt;disable_cost_enlarge_factor = 10;
+    cost_cxt-&gt;sql_patch_sequence_id = 0;
+}
+
+</pre><p>evidence:1cfacc7cc853db702b4406ddb2966a63</p><p>SHA-256 1694c31f37c7f52ee232dfb99b4ab9691e15f08da9e2b4984a89cb31fd11030a</p></main></html>

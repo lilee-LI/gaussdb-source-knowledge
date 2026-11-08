@@ -1,0 +1,41 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/geqo/geqo_random.cpp:1-40</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/geqo/geqo_random.cpp:1-40</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>/* ------------------------------------------------------------------------
+ *
+ * geqo_random.cpp
+ *	   random number generator
+ *
+ * Portions Copyright (c) 2020 Huawei Technologies Co.,Ltd.
+ * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1994, Regents of the University of California
+ *
+ * IDENTIFICATION
+ * src/gausskernel/optimizer/geqo/geqo_random.cpp
+ *
+ * -------------------------------------------------------------------------
+ */
+#include &quot;postgres.h&quot;
+#include &quot;knl/knl_variable.h&quot;
+
+#include &quot;optimizer/geqo_random.h&quot;
+
+void geqo_set_seed(PlannerInfo* root, double seed)
+{
+    GeqoPrivateData* priv = (GeqoPrivateData*)root-&gt;join_search_private;
+
+    /*
+     * XXX. This seeding algorithm could certainly be improved - but it is not
+     * critical to do so.
+     */
+    errno_t rc = EOK;
+    rc = memset_s(priv-&gt;random_state, sizeof(priv-&gt;random_state), 0, sizeof(priv-&gt;random_state));
+    securec_check(rc, &quot;\0&quot;, &quot;\0&quot;);
+    rc = memcpy_s(priv-&gt;random_state, sizeof(priv-&gt;random_state), &amp;seed, Min(sizeof(priv-&gt;random_state), sizeof(seed)));
+    securec_check(rc, &quot;\0&quot;, &quot;\0&quot;);
+}
+
+double geqo_rand(PlannerInfo* root)
+{
+    GeqoPrivateData* priv = (GeqoPrivateData*)root-&gt;join_search_private;
+
+    return erand48(priv-&gt;random_state);
+}
+</pre><p>evidence:9fb0fc45efd50b8f24c4dda8afd0d2c5</p><p>SHA-256 4647c33a1337ba8ebc190e03139955eaf7971da1953a0884b286c184e67f0ac5</p></main></html>

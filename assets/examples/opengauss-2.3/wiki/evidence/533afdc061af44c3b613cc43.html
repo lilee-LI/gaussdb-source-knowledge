@@ -1,0 +1,35 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/include/optimizer/geqo_misc.h:1-34</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/include/optimizer/geqo_misc.h:1-34</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>/* -------------------------------------------------------------------------
+ *
+ * geqo_misc.h
+ *	  prototypes for printout routines in optimizer/geqo
+ *
+ * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1994, Regents of the University of California
+ *
+ * src/include/optimizer/geqo_misc.h
+ *
+ * -------------------------------------------------------------------------
+ */
+
+/* contributed by:
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+   *  Martin Utesch				 * Institute of Automatic Control	   *
+   =							 = University of Mining and Technology =
+   *  utesch@aut.tu-freiberg.de  * Freiberg, Germany				   *
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+ */
+
+#ifndef GEQO_MISC_H
+#define GEQO_MISC_H
+
+#include &quot;optimizer/geqo_recombination.h&quot;
+
+#ifdef GEQO_DEBUG
+
+extern void print_pool(FILE* fp, Pool* pool, int start, int stop);
+extern void print_gen(FILE* fp, Pool* pool, int generation);
+extern void print_edge_table(FILE* fp, Edge* edge_table, int num_gene);
+#endif /* GEQO_DEBUG */
+
+#endif /* GEQO_MISC_H */
+</pre><p>evidence:7ac25c6e11f48bca32484ff2669373fd</p><p>SHA-256 5f56b0a15d7d0ca4268baff417b1ee8436d4020dc941f695d74f5550c5bca568</p></main></html>

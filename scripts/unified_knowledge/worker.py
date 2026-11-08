@@ -89,7 +89,8 @@ def prepare_codewiki(store, task, worker, token, settings):
         atomic_write(baseline / "scope.md", "# 尚无已审知识\n\n本页只声明研究范围，不包含语义结论。\n" + canonical(context["bundle"]))
     scope_file, module_tree = root / "scope.json", root / "module-tree.json"
     atomic_write(scope_file, canonical(context))
-    atomic_write(module_tree, canonical(settings.get("module_tree_data", {"name": "research-scope", "path": str(source), "children": []})))
+    atomic_write(module_tree, canonical(settings.get("module_tree_data", {
+        "research-scope":{"name":"research-scope", "path":str(source), "children":{}}})))
     work = root / "codewiki"
     cfg = {**settings, "work": str(work), "source": str(source), "context": str(background), "manual": str(manual),
            "baseline": str(baseline), "scope_file": str(scope_file), "module_tree": str(module_tree),
@@ -99,7 +100,8 @@ def prepare_codewiki(store, task, worker, token, settings):
     cfg["extra_mcp_servers"] = {"unified": {"command": sys.executable, "args": ["-X", "utf8", str(PROJECT / "scripts/unified_kb.py"),
         "--home", str(store.home), "serve", "--transport", "stdio", "--role", "researcher"]}}
     cfg["extra_mcp_tools"] = ["mcp__unified__" + n for n in (
-        "task_context", "query_graph", "create_task_evidence", "read_task_evidence", "find_knowledge", "knowledge_graph", "explain_path")]
+        "study_plan", "feature_candidates", "lookup_symbols", "navigate_code", "task_context", "query_graph", "create_task_evidence", "read_task_evidence",
+        "read_evidence", "find_knowledge", "knowledge_graph", "explain_path")]
     if settings.get("staged_submission"):
         cfg["extra_mcp_tools"] += ["mcp__unified__stage_research_unit", "mcp__unified__finish_research"]
     cfg_file = root / "codewiki-config.json"
@@ -172,6 +174,9 @@ def structured_prompt(store, task, worker, token, *, staged=False):
         "不得自动批准研究或发布，不得把模型新会话称为专家审阅。"
         "\n任务身份：" + canonical({"task": task, "worker": worker, "token": token}) +
         "\n冻结任务：" + canonical(context) +
+        "\n工具绑定：query_graph 的 run 必须使用上面任务的 run，不能使用 source_index.run_id；"
+        "targets 使用 task_context 中的真实符号 ID；其他函数先用 lookup_symbols 按名字与文件核对真实 ID，禁止猜测或用现有 ID 代替未找到的函数。find_knowledge/explain_path/get_context 使用任务 snapshot、"
+        "profile 分别作为 source_snapshot、build_profile，并用任务 run 作为 index_run；上游 run 只表示来源身份。" +
         ("\n本任务采用分单元工具提交：先用 stage_research_unit 每次暂存一个 unit；全部完成后用 finish_research 提交 coverage 和最后一次返回的 drafts_digest。最终文字只简短报告状态，不输出整份 JSON。coverage 每项含 question、"
          if staged else "\n输出一个 JSON 对象，包含 coverage 数组和 units 数组。coverage 每项含 question、") +
         "status(answered/open/not_applicable)、explanation、evidence_refs。"

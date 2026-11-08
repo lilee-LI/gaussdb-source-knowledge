@@ -125,6 +125,15 @@ CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,created T
  kind TEXT NOT NULL,data TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS evidence_task ON events(kind,json_extract(data,'$.task'),
  json_extract(data,'$.worker'),json_extract(data,'$.token'));
+CREATE TABLE IF NOT EXISTS learning_programs(id TEXT PRIMARY KEY,plan TEXT NOT NULL,snapshot TEXT NOT NULL,profile TEXT NOT NULL,data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS learning_assets(program TEXT NOT NULL,asset TEXT NOT NULL,module TEXT,sha TEXT,semantic INTEGER NOT NULL,data TEXT NOT NULL,PRIMARY KEY(program,asset));
+CREATE INDEX IF NOT EXISTS learning_asset_module ON learning_assets(program,module);
+CREATE TABLE IF NOT EXISTS learning_reports(id TEXT PRIMARY KEY,program TEXT NOT NULL,task TEXT NOT NULL,result_digest TEXT NOT NULL,data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS learning_dispositions(program TEXT NOT NULL,asset TEXT NOT NULL,report TEXT NOT NULL,data TEXT NOT NULL,PRIMARY KEY(program,asset));
+CREATE TABLE IF NOT EXISTS learning_leads(program TEXT NOT NULL,candidate TEXT NOT NULL,report TEXT NOT NULL,data TEXT NOT NULL,PRIMARY KEY(program,candidate));
+CREATE TABLE IF NOT EXISTS learning_contracts(program TEXT NOT NULL,unit TEXT NOT NULL,side TEXT NOT NULL,module TEXT NOT NULL,task TEXT NOT NULL,data TEXT NOT NULL,PRIMARY KEY(program,unit,side,module));
+CREATE TABLE IF NOT EXISTS learning_contract_checks(program TEXT NOT NULL,unit TEXT NOT NULL,side TEXT NOT NULL,module TEXT NOT NULL,producer TEXT NOT NULL,consumer TEXT NOT NULL,task TEXT NOT NULL,data TEXT NOT NULL,PRIMARY KEY(program,unit,side,module,producer,consumer));
+CREATE TABLE IF NOT EXISTS learning_checks(id TEXT PRIMARY KEY,program TEXT NOT NULL,revision TEXT,data TEXT NOT NULL);
 """
 
 
@@ -211,9 +220,34 @@ class Store:
         sha = digest(raw)
         path = self.blob_path(sha)
         if path.exists():
-            require(digest(path.read_bytes()) == sha, "Stored blob was modified")
+            require(self.file_hash(path) == sha, "Stored blob was modified")
         else:
             atomic_write(path, raw)
+        return sha
+
+    @staticmethod
+    def file_hash(path):
+        value=hashlib.sha256()
+        with Path(path).open('rb') as stream:
+            for block in iter(lambda:stream.read(1024*1024),b''):value.update(block)
+        return value.hexdigest()
+
+    def put_file(self,path,expected=None):
+        """Freeze large source/test-data assets without two full in-memory copies."""
+        import shutil
+        path=Path(path);sha=self.file_hash(path)
+        require(expected is None or expected==sha,'Material differs from expected content: '+str(path))
+        target=self.blob_path(sha)
+        if target.exists():require(self.file_hash(target)==sha,'Stored blob was modified')
+        else:
+            target.parent.mkdir(parents=True,exist_ok=True)
+            fd,name=tempfile.mkstemp(prefix='.freezing-',dir=target.parent)
+            try:
+                with os.fdopen(fd,'wb') as output,path.open('rb') as source:shutil.copyfileobj(source,output,1024*1024)
+                require(self.file_hash(name)==sha,'Material changed during freezing')
+                os.replace(name,target)
+            finally:
+                if Path(name).exists():Path(name).unlink()
         return sha
 
     def blob(self, sha):
@@ -232,7 +266,7 @@ class Store:
         return self._line_cache[sha]
 
     def record(self, table, key):
-        require(table in {"snapshots", "runs", "tasks", "proposals", "revisions", "changes", "releases", "anchors"},
+        require(table in {"snapshots", "runs", "tasks", "proposals", "revisions", "changes", "releases", "anchors", "learning_programs"},
                 "Unsupported record type")
         row = self.db.execute("SELECT data FROM " + table + " WHERE id=?", (key,)).fetchone()
         require(row is not None, table + " record missing: " + str(key))

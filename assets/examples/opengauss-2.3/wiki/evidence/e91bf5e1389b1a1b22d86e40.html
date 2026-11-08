@@ -1,0 +1,87 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/common/backend/utils/cache/plancache.cpp:845-930</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/common/backend/utils/cache/plancache.cpp:845-930</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>     * assumed the query is parsed, planned, and executed in one transaction,
+     * so that no lock re-acquisition is necessary.
+     */
+    if (plansource-&gt;is_oneshot || IsTransactionStmtPlan(plansource)) {
+        Assert(plansource-&gt;is_valid);
+        return NIL;
+    }
+    /* if is shared plan, we should acquire plan lock before check recreate plan */
+    if (plansource-&gt;gpc.status.InShareTable()) {
+        Assert(plansource-&gt;is_valid);
+        return NIL;
+    }
+    /*
+     * If there were no parsetrees, we don&#x27;t need to check the the plan is whether invalid or not cause we do nothing but call
+     *  NullCommand() in the execute stage.
+     */
+    if (plansource-&gt;raw_parse_tree == NULL) {
+        plansource-&gt;is_valid = true;
+        return NIL;
+    }
+
+    /*
+     * If the query is currently valid, we should have a saved search_path ---
+     * check to see if that matches the current environment.  If not, we want
+     * to force replan.
+     */
+    if (plansource-&gt;is_valid) {
+        Assert(plansource-&gt;search_path != NULL);
+        if (!OverrideSearchPathMatchesCurrent(plansource-&gt;search_path)) {
+            /* Invalidate the querytree and generic plan */
+            plansource-&gt;is_valid = false;
+            if (plansource-&gt;gplan) {
+                plansource-&gt;gplan-&gt;is_valid = false;
+            }
+            /* generic root and all candidate plans need to be rebuilt. */
+            if (ENABLE_CACHEDPLAN_MGR &amp;&amp; plansource-&gt;planManager != NULL) {
+                ereport(DEBUG2,
+                    (errmodule(MOD_OPT),
+                     errmsg(&quot;SearchPath has been changed, invalid planManager; query: \&quot;%s\&quot;&quot;,
+                     plansource-&gt;query_string)));
+                plansource-&gt;planManager-&gt;is_valid = false;
+            }
+        }
+    }
+
+    RevalidateGplanBySqlPatch(plansource);
+
+    /*
+     * If the query rewrite phase had a possible RLS dependency, we must redo
+     * it if either the role setting has changed.
+     */
+    if (plansource-&gt;is_valid &amp;&amp; 
+        ((plansource-&gt;dependsOnRole &amp;&amp; (plansource-&gt;rewriteRoleId != GetUserId())) ||
+            plansource-&gt;param_collation != GetCollationConnection())) {
+        plansource-&gt;is_valid = false;
+    }
+
+    /*
+     * If the query is currently valid, acquire locks on the referenced
+     * objects; then check again.  We need to do it this way to cover the race
+     * condition that an invalidation message arrives before we get the locks.
+     */
+    if (plansource-&gt;is_valid) {
+        AcquirePlannerLocks(plansource-&gt;query_list, true);
+
+#ifdef ENABLE_MOT
+        /*
+         * In case the plan is valid, We must revalidate MOT JIT context early
+         * enough before success is declared, but after plan locks are taken.
+         * We want to make sure that in case JIT context was invalidated and
+         * cannot be revalidated, then the opfusion object should be discarded,
+         * since it must be recreated, this time without JIT.
+         * This use case can happen with select from stored procedure, where
+         * some sub-query was invalidated, or even the stored procedure itself
+         * was modified.
+         * ATTENTION: This case relates only to MOT tables, since we have a
+         * ready MOT JIT context.
+         */
+        if (plansource-&gt;is_valid) {
+            if (plansource-&gt;mot_jit_context != nullptr) {
+                MotTryRevalidateJitContext(plansource);
+            } else {
+                bool checkMotJitCodegen = (!IS_PGXC_COORDINATOR &amp;&amp; (u_sess-&gt;SPI_cxt._connected == -1) &amp;&amp;
+                                            (plansource-&gt;checkedMotJitCodegen == false));
+                if (checkMotJitCodegen) {
+                    // generate JIT code here
+</pre><p>evidence:70c3e157465bf79367ca39ebbde31ed1</p><p>SHA-256 c46514ddbea8e85555e3663c52dd58173375d341f8adebbce3d02c703bea136e</p></main></html>

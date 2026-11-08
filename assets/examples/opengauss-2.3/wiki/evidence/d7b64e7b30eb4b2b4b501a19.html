@@ -1,0 +1,34 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/process/globalplancache/globalplancache.cpp:628-660</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/process/globalplancache/globalplancache.cpp:628-660</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>bool GlobalPlanCache::CheckRecreateSPICachePlan(SPIPlanPtr spi_plan)
+{
+    ListCell* cell = NULL;
+    Assert(spi_plan-&gt;magic == _SPI_PLAN_MAGIC);
+    foreach(cell, spi_plan-&gt;plancache_list) {
+        CachedPlanSource* plansource = (CachedPlanSource*)lfirst(cell);
+        bool hasGetLock = false;
+        if (CheckRecreateCachePlan(plansource, &amp;hasGetLock)) {
+            if (hasGetLock) {
+                AcquirePlannerLocks(plansource-&gt;query_list, false);
+                if (plansource-&gt;gplan) {
+                    AcquireExecutorLocks(plansource-&gt;gplan-&gt;stmt_list, false);
+                }
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+void GlobalPlanCache::RecreateSPICachePlan(SPIPlanPtr spiplan)
+{
+    ListCell* cell = NULL;
+    Assert(spiplan-&gt;magic == _SPI_PLAN_MAGIC);
+    /* push error context stack */
+    ErrorContextCallback spi_err_context;
+    spi_err_context.callback = _SPI_error_callback;
+    spi_err_context.arg = NULL; /* we&#x27;ll fill this below */
+    spi_err_context.previous = t_thrd.log_cxt.error_context_stack;
+    t_thrd.log_cxt.error_context_stack = &amp;spi_err_context;
+    foreach(cell, spiplan-&gt;plancache_list) {
+        CachedPlanSource* oldsource = (CachedPlanSource*)lfirst(cell);
+        if (!oldsource-&gt;gpc.status.InShareTable())
+</pre><p>evidence:dcd95fc10ea6256588c9aec094c2a39b</p><p>SHA-256 c8fcaf35e1e64072d6fc8a7d91f46d99726528978d1f2e531c83831df9179cd5</p></main></html>

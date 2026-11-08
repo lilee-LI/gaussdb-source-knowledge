@@ -1,0 +1,92 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/process/globalplancache/globalplancache.cpp:690-780</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/process/globalplancache/globalplancache.cpp:690-780</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>void GlobalPlanCache::RecreateCachePlan(CachedPlanSource* oldsource, const char* stmt_name, PreparedStatement* entry,
+                                        SPIPlanPtr spiplan, ListCell* spiplanCell, bool hasGetLock,
+                                        void* paramCachedKey)
+{
+    GPC_LOG(&quot;recreate plan&quot;, oldsource, oldsource-&gt;stmt_name);
+    /* these operator may throw error, make sure shared plan is invalid first */
+    CachedPlanSource *newsource = NULL;
+    PG_TRY();
+    {
+        if (hasGetLock) {
+            AcquirePlannerLocks(oldsource-&gt;query_list, false);
+            if (oldsource-&gt;gplan) {
+                AcquireExecutorLocks(oldsource-&gt;gplan-&gt;stmt_list, false);
+            }
+        }
+        newsource = CopyCachedPlan(oldsource, true);
+        MemoryContext oldcxt = MemoryContextSwitchTo(newsource-&gt;context);
+        newsource-&gt;stream_enabled = IsStreamSupport();
+        u_sess-&gt;exec_cxt.CurrentOpFusionObj = NULL;
+        Assert (oldsource-&gt;gpc.status.IsSharePlan());
+        newsource-&gt;gpc.status.ShareInit();
+        // If the planSource is set to invalid, the AST must be analyzed again
+        // because the meta has changed.
+        newsource-&gt;is_valid = false;
+        newsource-&gt;gpc_lockid = -1;
+        bool has_lp = false;
+
+        if (spiplan != NULL) {
+            t_thrd.log_cxt.error_context_stack-&gt;arg = (void *)newsource-&gt;query_string;
+            newsource-&gt;spi_signature = oldsource-&gt;spi_signature;
+            newsource-&gt;parserSetup = spiplan-&gt;parserSetup;
+            newsource-&gt;parserSetupArg = spiplan-&gt;parserSetupArg;
+        } else if (IS_PGXC_DATANODE) {
+            newsource-&gt;stmt_name = pstrdup(stmt_name);
+        } else {
+            newsource-&gt;stmt_name = pstrdup(stmt_name);
+#ifdef ENABLE_MULTIPLE_NODES
+            has_lp = (oldsource-&gt;single_exec_node != NULL &amp;&amp; oldsource-&gt;gplan == NULL &amp;&amp; oldsource-&gt;cplan == NULL);
+            /* clean session&#x27;s datanode statment on cn */
+            if (has_lp) {
+                /* no lp in newsource, delete old lp */
+                GPCDropLPIfNecessary(stmt_name, false, true, NULL);
+            } else if (oldsource-&gt;gplan != NULL) {
+                /* Close any active planned Datanode statements, recreate in BuildCachedPlan later */
+                GPCCleanDatanodeStatement(oldsource-&gt;gplan-&gt;dn_stmt_num, stmt_name);
+            }
+#endif
+        }
+        (void)RevalidateCachedQuery(newsource, has_lp);
+        MemoryContextSwitchTo(oldcxt);
+    }
+    PG_CATCH();
+    {
+        /* catch only move invalid plansource into gpc invalid list when error occurs */
+        MoveIntoInvalidPlanList(oldsource);
+        PG_RE_THROW();
+    }
+    PG_END_TRY();
+
+    /* newsource has reference on session, forget resource owner */
+    ResourceOwnerForgetGMemContext(t_thrd.utils_cxt.TopTransactionResourceOwner, newsource-&gt;context);
+    if (!oldsource-&gt;is_param) {
+        newsource-&gt;next_saved = u_sess-&gt;pcache_cxt.first_saved_plan;
+        u_sess-&gt;pcache_cxt.first_saved_plan = newsource;
+    } else {
+        newsource-&gt;next_saved = u_sess-&gt;param_cxt.first_saved_plan;
+        u_sess-&gt;param_cxt.first_saved_plan = newsource;
+        newsource-&gt;is_param = true;
+        newsource-&gt;entry = oldsource-&gt;entry;
+        ((ParamCachedPlan*)(paramCachedKey))-&gt;psrc = newsource;
+    }
+
+    newsource-&gt;is_saved = true;
+    newsource-&gt;gpc.status.SetLoc(GPC_SHARE_IN_LOCAL_SAVE_PLAN_LIST);
+    if (spiplan != NULL)
+        spiplanCell-&gt;data.ptr_value = newsource;
+    else {
+#ifdef ENABLE_MULTIPLE_NODES
+        if (IS_PGXC_DATANODE)
+            u_sess-&gt;pcache_cxt.cur_stmt_psrc = newsource;
+        else
+            entry-&gt;plansource = newsource;
+#else
+        if (entry != NULL) {
+            entry-&gt;plansource = newsource;
+        }
+#endif
+    }
+
+    RemovePlanSource&lt;ACTION_RECREATE&gt;(oldsource, stmt_name);
+}
+</pre><p>evidence:c92a948bbb1a17dfee73db9c992f74a2</p><p>SHA-256 ce0a3978777178537ca6f020b27442d7478b00a9abfbb5464df23c1a80f7ed62</p></main></html>

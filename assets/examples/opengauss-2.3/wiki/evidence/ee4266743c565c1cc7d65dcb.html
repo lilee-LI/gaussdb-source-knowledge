@@ -1,0 +1,401 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/sqlpatch/sqlpatch.cpp:1-400</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/sqlpatch/sqlpatch.cpp:1-400</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>/*
+ * Copyright (c) 2022 Huawei Technologies Co.,Ltd.
+ *
+ * openGauss is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *
+ *          http://license.coscl.org.cn/MulanPSL2
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ * ---------------------------------------------------------------------------------------
+ *
+ * sqlpatch.cpp
+ *		sqlpatch support.
+ *
+ *
+ * IDENTIFICATION
+ *      src/gausskernel/optimizer/sqlpatch/sqlpatch.cpp
+ *
+ * ---------------------------------------------------------------------------------------
+ */
+#include &quot;access/genam.h&quot;
+#include &quot;access/heapam.h&quot;
+#include &quot;access/sysattr.h&quot;
+#include &quot;auditfuncs.h&quot;
+#include &quot;catalog/indexing.h&quot;
+#include &quot;catalog/pg_authid.h&quot;
+#include &quot;catalog/gs_sql_patch.h&quot;
+#include &quot;instruments/unique_query.h&quot;
+#include &quot;optimizer/sqlpatch.h&quot;
+#include &quot;miscadmin.h&quot;
+#include &quot;funcapi.h&quot;
+#include &quot;parser/parse_hint.h&quot;
+#include &quot;utils/builtins.h&quot;
+#include &quot;utils/fmgroids.h&quot;
+#include &quot;utils/snapmgr.h&quot;
+
+typedef enum {
+    USE_NAME,
+    USE_UNIQUE_SQL_ID,
+    USE_INVALID
+} PatchScanKey;
+
+const int MAX_TEXT_LENGTH = 1024;
+
+static HeapTuple GetPatchTuple(Datum dat, Relation rel, PatchScanKey key);
+static HintState* GetEnabledPatchHintBySqlId(uint64 sql_id);
+static void ModifySQLPatchWorker(PG_FUNCTION_ARGS, bool enable);
+static void PrivCheck();
+static char* ProcessHintString(const char* hintStr);
+static bool AddPatchToDml(Query* query);
+static void AddPatchToExplainQuery(Query* query);
+static void CheckAbortByPatch(uint64 queryId);
+static void RemovePatchUnsupportHint(HintState* hs);
+static bool QueryIsPatched(const Query* query);
+
+Datum create_sql_patch_by_id_hint(PG_FUNCTION_ARGS)
+{
+    /* args: [patch_name, unique_sql_id, hint_string, description, enable] */
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2) || PG_ARGISNULL(4)) {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+            errmsg(&quot;Cannot create sql patch with NULL inputs&quot;)));
+    }
+
+    PreventCommandIfReadOnly(&quot;Create SQL Patch&quot;);
+
+    PrivCheck();
+
+    /* check parameter length */
+    char* hintStr = text_to_cstring(PG_GETARG_TEXT_PP(2));
+
+    int hintLen = (int)strlen(hintStr);
+    int descLen = 0;
+
+    if (!PG_ARGISNULL(3)) {
+        char* descStr = text_to_cstring(PG_GETARG_TEXT_PP(3));
+        descLen = strlen(descStr);
+        pfree(descStr);
+    }
+
+    if (hintLen &gt; MAX_TEXT_LENGTH || descLen &gt; MAX_TEXT_LENGTH) {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+            errmsg(&quot;hint or description too wide for a sql patch&quot;)));
+    }
+
+    Name patchName = PG_GETARG_NAME(0);
+    int64 uniqueSqlId = DatumGetInt64(PG_GETARG_DATUM(1));
+    if (uniqueSqlId == 0) {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+            errmsg(&quot;Cannot accept sql patches with 0 unique sql id&quot;)));
+    }
+
+    char* hintNodeTree = ProcessHintString(hintStr);
+
+    if (hintNodeTree == NULL) {
+        PG_RETURN_BOOL(false);
+    }
+
+    /* open gs_sql_patch to insert a row */
+    Relation rel_gs_sql_patch = heap_open(GsSqlPatchRelationId, RowExclusiveLock);
+    /* need to check the uniqueness of unique sql id for now */
+    if (HeapTupleIsValid(GetPatchTuple(PG_GETARG_DATUM(1), rel_gs_sql_patch, USE_UNIQUE_SQL_ID))) {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+            errmsg(&quot;Cannot accept sql patches with duplicate unique sql id&quot;)));
+    }
+
+    bool nulls[Natts_gs_sql_patch];
+    Datum values[Natts_gs_sql_patch];
+    errno_t rc = EOK;
+    rc = memset_s(nulls, sizeof(bool) * Natts_gs_sql_patch, 0, sizeof(bool) * Natts_gs_sql_patch);
+    securec_check(rc, &quot;&quot;, &quot;&quot;);
+    rc = memset_s(values, sizeof(Datum) * Natts_gs_sql_patch, 0, sizeof(Datum) * Natts_gs_sql_patch);
+    securec_check(rc, &quot;&quot;, &quot;&quot;);
+    HeapTuple tup = NULL;
+
+    /* fill in a data row of sql patch */
+    values[Anum_gs_sql_patch_patch_name - 1] = PG_GETARG_DATUM(0);
+    values[Anum_gs_sql_patch_unique_sql_id - 1] = PG_GETARG_DATUM(1);
+    values[Anum_gs_sql_patch_owner - 1] = ObjectIdGetDatum(GetUserId());
+    values[Anum_gs_sql_patch_enable - 1] = PG_GETARG_DATUM(4);
+    values[Anum_gs_sql_patch_status - 1] = CharGetDatum(STATUS_DEFAULT);
+    values[Anum_gs_sql_patch_abort - 1] = BoolGetDatum(false);
+    values[Anum_gs_sql_patch_hint_string - 1] = PG_GETARG_DATUM(2);
+    values[Anum_gs_sql_patch_hint_node - 1] = CStringGetTextDatum(hintNodeTree);
+    nulls[Anum_gs_sql_patch_original_query - 1] = true;
+    nulls[Anum_gs_sql_patch_original_query_tree - 1] = true;
+    nulls[Anum_gs_sql_patch_patched_query - 1] = true;
+    nulls[Anum_gs_sql_patch_patched_query_tree - 1] = true;
+    values[Anum_gs_sql_patch_description - 1] = PG_GETARG_DATUM(3);
+    nulls[Anum_gs_sql_patch_description - 1] = PG_ARGISNULL(3);
+
+    tup = heap_form_tuple(RelationGetDescr(rel_gs_sql_patch), values, nulls);
+
+    (void)simple_heap_insert(rel_gs_sql_patch, tup);
+
+    /* Update indexes */
+    CatalogUpdateIndexes(rel_gs_sql_patch, tup);
+
+    heap_close(rel_gs_sql_patch, RowExclusiveLock);
+
+    heap_freetuple(tup);
+
+    /* audit */
+    if (t_thrd.postgres_cxt.debug_query_string == NULL) {
+        /* construct command */
+        StringInfoData str;
+        initStringInfo(&amp;str);
+        uint64 sqlId = DatumGetUInt64(PG_GETARG_DATUM(1));
+        char* hintstr = text_to_cstring(PG_GETARG_TEXT_PP(2));
+        const char* enable = PG_GETARG_BOOL(4) ? &quot;true&quot; : &quot;false&quot;;
+        appendStringInfo(&amp;str, &quot;SELECT * FROM dbe_sql_util.create_sql_patch(&#x27;%s&#x27;, &#x27;%lu&#x27;, &#x27;%s&#x27;, &#x27;****&#x27;, &#x27;%s&#x27;)&quot;,
+            patchName-&gt;data, sqlId, hintstr, enable);
+        pgaudit_ddl_sql_patch(patchName-&gt;data, str.data);
+        pfree_ext(str.data);
+    } else {
+        pgaudit_ddl_sql_patch(patchName-&gt;data, t_thrd.postgres_cxt.debug_query_string);
+    }
+
+    u_sess-&gt;opt_cxt.xact_modify_sql_patch = true;
+
+    PG_RETURN_BOOL(true);
+}
+
+Datum create_abort_patch_by_id(PG_FUNCTION_ARGS)
+{
+    /* args: [patch_name, unique_sql_id, description, enable] */
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(3)) {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+            errmsg(&quot;Cannot create sql patch with NULL inputs&quot;)));
+    }
+
+    PreventCommandIfReadOnly(&quot;Create abort SQL Patch&quot;);
+
+    PrivCheck();
+
+    /* check parameter length */
+    int descLen = 0;
+    if (!PG_ARGISNULL(2)) {
+        char* descStr = text_to_cstring(PG_GETARG_TEXT_PP(2));
+        descLen = strlen(descStr);
+        pfree(descStr);
+    }
+
+    if (descLen &gt; MAX_TEXT_LENGTH) {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+            errmsg(&quot;description too wide for a sql patch&quot;)));
+    }
+
+    Name patchName = PG_GETARG_NAME(0);
+    int64 uniqueSqlId = DatumGetInt64(PG_GETARG_DATUM(1));
+    if (uniqueSqlId == 0) {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+            errmsg(&quot;Cannot accept sql patches with 0 unique sql id&quot;)));
+    }
+
+    /* open gs_sql_patch to insert a row */
+    Relation rel_gs_sql_patch = heap_open(GsSqlPatchRelationId, RowExclusiveLock);
+    /* need to check the uniqueness of unique sql id for now */
+    if (HeapTupleIsValid(GetPatchTuple(PG_GETARG_DATUM(1), rel_gs_sql_patch, USE_UNIQUE_SQL_ID))) {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+            errmsg(&quot;Cannot accept sql patches with duplicate unique sql id&quot;)));
+    }
+
+    Datum values[Natts_gs_sql_patch];
+    bool nulls[Natts_gs_sql_patch];
+    errno_t rc = EOK;
+    rc = memset_s(values, sizeof(Datum) * Natts_gs_sql_patch, 0, sizeof(Datum) * Natts_gs_sql_patch);
+    securec_check(rc, &quot;&quot;, &quot;&quot;);
+    rc = memset_s(nulls, sizeof(bool) * Natts_gs_sql_patch, 0, sizeof(bool) * Natts_gs_sql_patch);
+    securec_check(rc, &quot;&quot;, &quot;&quot;);
+    HeapTuple tup = NULL;
+
+    /* fill in a data row of sql patch */
+    values[Anum_gs_sql_patch_patch_name - 1] = PG_GETARG_DATUM(0);
+    values[Anum_gs_sql_patch_unique_sql_id - 1] = PG_GETARG_DATUM(1);
+    values[Anum_gs_sql_patch_owner - 1] = ObjectIdGetDatum(GetUserId());
+    values[Anum_gs_sql_patch_enable - 1] = PG_GETARG_DATUM(3);
+    values[Anum_gs_sql_patch_status - 1] = CharGetDatum(STATUS_DEFAULT);
+    values[Anum_gs_sql_patch_abort - 1] = BoolGetDatum(true);
+    nulls[Anum_gs_sql_patch_hint_string - 1] = true;
+    nulls[Anum_gs_sql_patch_hint_node - 1] = true;
+    nulls[Anum_gs_sql_patch_original_query - 1] = true;
+    nulls[Anum_gs_sql_patch_original_query_tree - 1] = true;
+    nulls[Anum_gs_sql_patch_patched_query - 1] = true;
+    nulls[Anum_gs_sql_patch_patched_query_tree - 1] = true;
+    values[Anum_gs_sql_patch_description - 1] = PG_GETARG_DATUM(2);
+    nulls[Anum_gs_sql_patch_description - 1] = PG_ARGISNULL(2);
+
+    tup = heap_form_tuple(RelationGetDescr(rel_gs_sql_patch), values, nulls);
+
+    (void)simple_heap_insert(rel_gs_sql_patch, tup);
+
+    /* Update indexes */
+    CatalogUpdateIndexes(rel_gs_sql_patch, tup);
+
+    heap_close(rel_gs_sql_patch, RowExclusiveLock);
+
+    heap_freetuple(tup);
+
+    /* audit */
+    if (t_thrd.postgres_cxt.debug_query_string != NULL) {
+        pgaudit_ddl_sql_patch(patchName-&gt;data, t_thrd.postgres_cxt.debug_query_string);
+    } else {
+        /* construct command */
+        StringInfoData str;
+        initStringInfo(&amp;str);
+        uint64 sqlId = DatumGetUInt64(PG_GETARG_DATUM(1));
+        const char* enable = PG_GETARG_BOOL(3) ? &quot;true&quot; : &quot;false&quot;;
+        appendStringInfo(&amp;str, &quot;SELECT * FROM dbe_sql_util.create_abort_patch(&#x27;%s&#x27;, &#x27;%lu&#x27;, &#x27;****&#x27;, &#x27;%s&#x27;)&quot;,
+            patchName-&gt;data, sqlId, enable);
+        pgaudit_ddl_sql_patch(patchName-&gt;data, str.data);
+        pfree_ext(str.data);
+    }
+
+    u_sess-&gt;opt_cxt.xact_modify_sql_patch = true;
+    PG_RETURN_BOOL(true);
+}
+
+Datum enable_sql_patch(PG_FUNCTION_ARGS)
+{
+    PreventCommandIfReadOnly(&quot;Enable SQL Patch&quot;);
+
+    PrivCheck();
+
+    Name patchName = PG_GETARG_NAME(0);
+
+    ModifySQLPatchWorker(fcinfo, true);
+
+    /* audit */
+    if (t_thrd.postgres_cxt.debug_query_string != NULL) {
+        pgaudit_ddl_sql_patch(patchName-&gt;data, t_thrd.postgres_cxt.debug_query_string);
+    } else {
+        /* construct command */
+        StringInfoData str;
+        initStringInfo(&amp;str);
+        appendStringInfo(&amp;str, &quot;SELECT * FROM dbe_sql_util.enable_sql_patch(&#x27;%s&#x27;)&quot;, patchName-&gt;data);
+        pgaudit_ddl_sql_patch(patchName-&gt;data, str.data);
+        pfree_ext(str.data);
+    }
+
+    u_sess-&gt;opt_cxt.xact_modify_sql_patch = true;
+    PG_RETURN_BOOL(true);
+}
+
+Datum disable_sql_patch(PG_FUNCTION_ARGS)
+{
+    PreventCommandIfReadOnly(&quot;Disable SQL Patch&quot;);
+
+    PrivCheck();
+
+    Name patchName = PG_GETARG_NAME(0);
+
+    ModifySQLPatchWorker(fcinfo, false);
+
+    /* audit */
+    if (t_thrd.postgres_cxt.debug_query_string != NULL) {
+        pgaudit_ddl_sql_patch(patchName-&gt;data, t_thrd.postgres_cxt.debug_query_string);
+    } else {
+        /* construct command */
+        StringInfoData str;
+        initStringInfo(&amp;str);
+        appendStringInfo(&amp;str, &quot;SELECT * FROM dbe_sql_util.disable_sql_patch(&#x27;%s&#x27;)&quot;, patchName-&gt;data);
+        pgaudit_ddl_sql_patch(patchName-&gt;data, str.data);
+        pfree_ext(str.data);
+    }
+
+    u_sess-&gt;opt_cxt.xact_modify_sql_patch = true;
+    PG_RETURN_BOOL(true);
+}
+
+Datum drop_sql_patch(PG_FUNCTION_ARGS)
+{
+    if (PG_ARGISNULL(0)) {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+            errmsg(&quot;Cannot alter sql patch with NULL inputs&quot;)));
+    }
+
+    PreventCommandIfReadOnly(&quot;Drop SQL Patch&quot;);
+    PrivCheck();
+
+    Name patchName = PG_GETARG_NAME(0);
+    /* open gs_sql_patch to remove a row */
+    Relation rel_gs_sql_patch = heap_open(GsSqlPatchRelationId, RowExclusiveLock);
+    HeapTuple tup = GetPatchTuple(PG_GETARG_DATUM(0), rel_gs_sql_patch, USE_NAME);
+    if (!HeapTupleIsValid(tup)) {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+            errmsg(&quot;No such SQL patch&quot;)));
+    }
+
+    simple_heap_delete(rel_gs_sql_patch, &amp;tup-&gt;t_self);
+
+    heap_freetuple(tup);
+
+    heap_close(rel_gs_sql_patch, RowExclusiveLock);
+
+    /* audit */
+    if (t_thrd.postgres_cxt.debug_query_string != NULL) {
+        pgaudit_ddl_sql_patch(patchName-&gt;data, t_thrd.postgres_cxt.debug_query_string);
+    } else {
+        /* construct command */
+        StringInfoData str;
+        initStringInfo(&amp;str);
+        appendStringInfo(&amp;str, &quot;SELECT * FROM dbe_sql_util.drop_sql_patch(&#x27;%s&#x27;)&quot;, patchName-&gt;data);
+        pgaudit_ddl_sql_patch(patchName-&gt;data, str.data);
+        pfree_ext(str.data);
+    }
+
+    u_sess-&gt;opt_cxt.xact_modify_sql_patch = true;
+    PG_RETURN_BOOL(true);
+}
+
+
+Datum show_sql_patch(PG_FUNCTION_ARGS)
+{
+    if (PG_ARGISNULL(0)) {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+            errmsg(&quot;Cannot alter sql patch with NULL inputs&quot;)));
+    }
+
+    PrivCheck();
+
+    /* open gs_sql_patch to remove a row */
+    Relation rel_gs_sql_patch = heap_open(GsSqlPatchRelationId, AccessShareLock);
+
+    HeapTuple tup = GetPatchTuple(PG_GETARG_DATUM(0), rel_gs_sql_patch, USE_NAME);
+    if (!HeapTupleIsValid(tup)) {
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+            errmsg(&quot;No such SQL patch&quot;)));
+    }
+
+    Form_gs_sql_patch gs_sql_patch = (Form_gs_sql_patch)GETSTRUCT(tup);
+    bool hintIsNull = false;
+    Datum dat = fastgetattr(tup, Anum_gs_sql_patch_hint_string, rel_gs_sql_patch-&gt;rd_att, &amp;hintIsNull);
+
+    int i = 0;
+    HeapTuple resTup = NULL;
+    TupleDesc tupdesc = NULL;
+    int SQL_PATCH_INFO_ATTR_NUM = 4;
+    tupdesc = CreateTemplateTupleDesc(SQL_PATCH_INFO_ATTR_NUM, false, TableAmHeap);
+    TupleDescInitEntry(tupdesc, (AttrNumber) ++i, &quot;unique_sql_id&quot;, INT8OID, -1, 0);
+    TupleDescInitEntry(tupdesc, (AttrNumber) ++i, &quot;enable&quot;, BOOLOID, -1, 0);
+    TupleDescInitEntry(tupdesc, (AttrNumber) ++i, &quot;abort&quot;, BOOLOID, -1, 0);
+    TupleDescInitEntry(tupdesc, (AttrNumber) ++i, &quot;hint_string&quot;, TEXTOID, -1, 0);
+    TupleDesc tuple_desc = BlessTupleDesc(tupdesc);
+
+    errno_t rc = 0;
+    Datum values[SQL_PATCH_INFO_ATTR_NUM];
+    bool nulls[SQL_PATCH_INFO_ATTR_NUM];
+    rc = memset_s(values, sizeof(values), 0, sizeof(values));
+    securec_check(rc, &quot;\0&quot;, &quot;\0&quot;);
+    rc = memset_s(nulls, sizeof(nulls), 0, sizeof(nulls));
+    securec_check(rc, &quot;\0&quot;, &quot;\0&quot;);
+
+    i = 0;
+    values[i++] = Int64GetDatum(gs_sql_patch-&gt;unique_sql_id);
+    values[i++] = BoolGetDatum(gs_sql_patch-&gt;enable);
+    values[i++] = BoolGetDatum(gs_sql_patch-&gt;abort);
+</pre><p>evidence:edc41b889c4829b77d2bc301c525907c</p><p>SHA-256 cb54e8dab7b53c57d02cda89b136d9f26391963b7238a19e4d5af487a2fe6d95</p></main></html>

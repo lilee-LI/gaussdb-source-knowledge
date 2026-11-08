@@ -1,0 +1,43 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/include/optimizer/geqo_gene.h:1-42</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/include/optimizer/geqo_gene.h:1-42</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>/* -------------------------------------------------------------------------
+ *
+ * geqo_gene.h
+ *	  genome representation in optimizer/geqo
+ *
+ * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1994, Regents of the University of California
+ *
+ * src/include/optimizer/geqo_gene.h
+ *
+ * -------------------------------------------------------------------------
+ */
+
+/* contributed by:
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+   *  Martin Utesch				 * Institute of Automatic Control	   *
+   =							 = University of Mining and Technology =
+   *  utesch@aut.tu-freiberg.de  * Freiberg, Germany				   *
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+ */
+
+#ifndef GEQO_GENE_H
+#define GEQO_GENE_H
+
+#include &quot;nodes/nodes.h&quot;
+
+/* we presume that int instead of Relid
+   is o.k. for Gene; so don&#x27;t change it! */
+typedef int Gene;
+
+typedef struct Chromosome {
+    Gene* string;
+    Cost worth;
+} Chromosome;
+
+typedef struct Pool {
+    Chromosome* data;
+    int size;
+    int string_length;
+} Pool;
+
+#endif /* GEQO_GENE_H */
+</pre><p>evidence:288cc3449214567e66b15bcc5f6c9b38</p><p>SHA-256 8cbc0d504295f406392223d3b73aaaf95ca672a332aa1d78b92e1fd195fc27d8</p></main></html>

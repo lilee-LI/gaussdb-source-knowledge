@@ -1,0 +1,52 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/geqo/geqo_copy.cpp:1-51</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/geqo/geqo_copy.cpp:1-51</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>/* ------------------------------------------------------------------------
+ *
+ * geqo_copy.cpp
+ *
+ * Portions Copyright (c) 2020 Huawei Technologies Co.,Ltd.
+ * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1994, Regents of the University of California
+ *
+ * src/gausskernel/optimizer/geqo/geqo_copy.cpp
+ *
+ * -------------------------------------------------------------------------
+ */
+/* contributed by:
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+   *  Martin Utesch				 * Institute of Automatic Control	   *
+   =							 = University of Mining and Technology =
+   *  utesch@aut.tu-freiberg.de  * Freiberg, Germany				   *
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+ */
+/* this is adopted from D. Whitley&#x27;s Genitor algorithm */
+/*************************************************************/
+/* 															 */
+/* 	Copyright (c) 1990										 */
+/* 	Darrell L. Whitley										 */
+/* 	Computer Science Department								 */
+/* 	Colorado State University								 */
+/* 															 */
+/* 	Permission is hereby granted to copy all or any part of  */
+/* 	this program for free distribution.   The author&#x27;s name  */
+/* 	and this copyright notice must be included in any copy.  */
+/* 															 */
+/*************************************************************/
+
+#include &quot;postgres.h&quot;
+#include &quot;knl/knl_variable.h&quot;
+#include &quot;optimizer/geqo_copy.h&quot;
+
+/* geqo_copy
+ *
+ *	 copies one gene to another
+ *
+ */
+void geqo_copy(PlannerInfo* root, Chromosome* chromo1, Chromosome* chromo2, int string_length)
+{
+    int i;
+
+    for (i = 0; i &lt; string_length; i++)
+        chromo1-&gt;string[i] = chromo2-&gt;string[i];
+
+    chromo1-&gt;worth = chromo2-&gt;worth;
+}
+</pre><p>evidence:5c099c4b5ef6dd61eade4f073695b6c5</p><p>SHA-256 83ab66f8cdfad9d0fd03a8b2486ef24caf984373f990f0e104a8d04c1cd29b02</p></main></html>

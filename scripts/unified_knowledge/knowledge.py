@@ -293,7 +293,7 @@ def review(store, proposal_id, decision):
         if proposal.get("remote_order"):
             order = proposal["remote_order"]
             active = store.get_meta(store.get_meta(order))
-            require(active and active["id"] == order and active["received_task"] in proposal["research_tasks"] and
+            require(active and active["id"] == order and set(proposal['research_tasks'])<=set(active.get('received_tasks',[active.get('received_task')])) and
                     active["ticket"]["snapshot"] == store.get_meta("snapshot_head"), "Remote work order superseded")
         if decision["mode"] == "independent_review":
             require(decision["reviewer"] != proposal["author"], "Independent review requires another actor")

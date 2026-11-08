@@ -1,4 +1,6 @@
 {
+  "product": "GaussDB",
+  "product_adapter": "gaussdb",
   "source": "E:/GaussDB/source",
   "design": "E:/corpus/design",
   "manual": "E:/corpus/manual",

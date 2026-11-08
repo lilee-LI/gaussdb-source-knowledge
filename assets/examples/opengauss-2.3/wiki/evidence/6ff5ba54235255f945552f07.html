@@ -1,0 +1,9 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/sqlpatch/sqlpatch.cpp:832-839</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/sqlpatch/sqlpatch.cpp:832-839</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>static bool QueryIsPatched(const Query* query)
+{
+    if (query-&gt;hintState == NULL) {
+        return false;
+    }
+
+    return query-&gt;hintState-&gt;from_sql_patch;
+}
+</pre><p>evidence:5a6ce491cfd6521d1f76ca08df66b79b</p><p>SHA-256 569606a08832ca18640bfbf12f904ed2cd25f87ef3581d7fd376d9b235f9bf03</p></main></html>

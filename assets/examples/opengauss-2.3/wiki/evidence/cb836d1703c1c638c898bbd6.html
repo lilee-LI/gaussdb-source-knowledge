@@ -1,0 +1,80 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/geqo/geqo_ox1.cpp:1-79</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/geqo/geqo_ox1.cpp:1-79</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>/* ------------------------------------------------------------------------
+ *
+ * geqo_ox1.cpp
+ *
+ *	 order crossover [OX] routines;
+ *	 OX1 operator according to Davis
+ *	 (Proc Int&#x27;l Joint Conf on AI)
+ *
+ * IDENTIFICATION
+ * src/gausskernel/optimizer/geqo/geqo_ox1.cpp
+ *
+ * -------------------------------------------------------------------------
+ */
+/* contributed by:
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+   *  Martin Utesch				 * Institute of Automatic Control	   *
+   =							 = University of Mining and Technology =
+   *  utesch@aut.tu-freiberg.de  * Freiberg, Germany				   *
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+ */
+/* the ox algorithm is adopted from Genitor : */
+/*************************************************************/
+/* 															 */
+/* 	Copyright (c) 1990										 */
+/* 	Darrell L. Whitley										 */
+/* 	Computer Science Department								 */
+/* 	Colorado State University								 */
+/* 															 */
+/* 	Permission is hereby granted to copy all or any part of  */
+/* 	this program for free distribution.   The author&#x27;s name  */
+/* 	and this copyright notice must be included in any copy.  */
+/* 															 */
+/*************************************************************/
+
+#include &quot;postgres.h&quot;
+#include &quot;knl/knl_variable.h&quot;
+#include &quot;optimizer/geqo_random.h&quot;
+#include &quot;optimizer/geqo_recombination.h&quot;
+
+/* ox1
+ *
+ *	 position crossover
+ */
+void ox1(PlannerInfo* root, Gene* tour1, Gene* tour2, Gene* offspring, int num_gene, City* city_table)
+{
+    int left, right, k, p, temp;
+
+    /* initialize city table */
+    for (k = 1; k &lt;= num_gene; k++)
+        city_table[k].used = 0;
+
+    /* select portion to copy from tour1 */
+    left = geqo_randint(root, num_gene - 1, 0);
+    right = geqo_randint(root, num_gene - 1, 0);
+    if (left &gt; right) {
+        temp = left;
+        left = right;
+        right = temp;
+    }
+
+    /* copy portion from tour1 to offspring */
+    for (k = left; k &lt;= right; k++) {
+        offspring[k] = tour1[k];
+        city_table[(int)tour1[k]].used = 1;
+    }
+
+    k = (right + 1) % num_gene; /* index into offspring */
+    p = k;                      /* index into tour2 */
+
+    /* copy stuff from tour2 to offspring */
+    while (k != left) {
+        if (!city_table[(int)tour2[p]].used) {
+            offspring[k] = tour2[p];
+            k = (k + 1) % num_gene;
+            city_table[(int)tour2[p]].used = 1;
+        }
+        p = (p + 1) % num_gene; /* increment tour2-index */
+    }
+}
+</pre><p>evidence:68e2773d065617a54b2dad7fc8860071</p><p>SHA-256 96459a9d5c8f4567f873c4094ab6a112efc3c88426dbf310f944f641ab4e7461</p></main></html>

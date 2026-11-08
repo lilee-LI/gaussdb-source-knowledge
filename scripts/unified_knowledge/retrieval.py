@@ -253,6 +253,7 @@ def get_context(store, request):
             "paths": paths, "impacts": impacts, "test_obligations": tests, "evidence": list(evidence.values()),
             "unknowns": unknowns, "refresh_tasks": [], "retrieval": {"seed_symbols": found["seed_symbols"],
             "knowledge_ids": sorted(used), "modes": sorted({m for h in found["hits"] for m in h["retrieval_modes"]}),
+            "matched_knowledge_count": len(used),
             "semantic_embedding": found["semantic_embedding"]}, "truncated": False, "runtime_validation": "not_run"}
     if request.get("diff_ref"):
         change = store.record("changes", request["diff_ref"])
@@ -273,13 +274,16 @@ def get_context(store, request):
         if pack["impacts"]["candidate_risks"]:
             item=pack["impacts"]["candidate_risks"].pop()
             omitted.append({"kind":"candidate_risk","id":item["evidence"]})
+        elif len(pack["evidence"])>1:
+            # Raw excerpts can be expanded through their immutable source_refs.
+            # Do not let them evict the reviewed producer/consumer contracts.
+            item=pack["evidence"].pop()
+            omitted.append({"kind":"evidence","id":item["id"]})
         elif len(pack["constraints"])>1:
             item=pack["constraints"].pop()
             omitted.append({"kind":"constraint","id":item["id"]})
+            pack["retrieval"]["knowledge_ids"].remove(item["id"])
             pack["impacts"]["confirmed_dependencies"]=[x for x in pack["impacts"]["confirmed_dependencies"] if x["contract"]!=item["id"]]
-        elif len(pack["evidence"])>1:
-            item=pack["evidence"].pop()
-            omitted.append({"kind":"evidence","id":item["id"]})
         elif pack["constraints"] and pack["constraints"][0]["kind"]=="contract" and pack["constraints"][0]["body"]:
             # The structured preconditions and guarantees remain available, with original citations.
             item=pack["constraints"][0]
@@ -295,10 +299,15 @@ def get_context(store, request):
         elif pack["constraints"]:
             item=pack["constraints"].pop()
             omitted.append({"kind":"constraint","id":item["id"]})
+            pack["retrieval"]["knowledge_ids"].remove(item["id"])
         elif pack["test_obligations"]:
-            omitted.append({"kind": "test_obligation", "id": pack["test_obligations"].pop()["id"]})
+            item=pack["test_obligations"].pop()
+            omitted.append({"kind": "test_obligation", "id": item["id"]})
+            pack["retrieval"]["knowledge_ids"].remove(item["id"])
         elif pack["paths"]:
-            omitted.append({"kind": "path", "id": pack["paths"].pop()["id"]})
+            item=pack["paths"].pop()
+            omitted.append({"kind": "path", "id": item["id"]})
+            pack["retrieval"]["knowledge_ids"].remove(item["id"])
         elif len(pack["unknowns"]) > 1:
             pack["unknowns"].pop()
         elif pack["retrieval"]:

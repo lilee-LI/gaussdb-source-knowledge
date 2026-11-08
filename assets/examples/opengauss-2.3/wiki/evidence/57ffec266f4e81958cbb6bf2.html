@@ -1,0 +1,40 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/geqo/geqo_main.cpp:273-311</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/geqo/geqo_main.cpp:273-311</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>static int gimme_pool_size(int nr_rel)
+{
+    double size;
+    int minsize;
+    int maxsize;
+
+    /* Legal pool size *must* be at least 2, so ignore attempt to select 1 */
+    if (u_sess-&gt;attr.attr_sql.Geqo_pool_size &gt;= 2)
+        return u_sess-&gt;attr.attr_sql.Geqo_pool_size;
+
+    size = pow(2.0, nr_rel + 1.0);
+
+    maxsize = 50 * u_sess-&gt;attr.attr_sql.Geqo_effort; /* 50 to 500 individuals */
+    if (size &gt; maxsize) {
+        return maxsize;
+    }
+
+    minsize = 10 * u_sess-&gt;attr.attr_sql.Geqo_effort; /* 10 to 100 individuals */
+    if (size &lt; minsize) {
+        return minsize;
+    }
+
+    return (int)ceil(size);
+}
+
+/*
+ * Return either configured number of generations or a good default
+ *
+ * The default is the same as the pool size, which allows us to be
+ * sure that less-fit individuals get pushed out of the breeding
+ * population before the run finishes.
+ */
+static int gimme_number_generations(int pool_size)
+{
+    if (u_sess-&gt;attr.attr_sql.Geqo_generations &gt; 0)
+        return u_sess-&gt;attr.attr_sql.Geqo_generations;
+
+    return pool_size;
+}
+</pre><p>evidence:63246e70d69c0614185b7a8aebc07c0e</p><p>SHA-256 c7a8046e4ec2da1e223997c34c28ddcc57721d1f1c35d64ad520d697b1e1ecf0</p></main></html>

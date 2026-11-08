@@ -1,0 +1,17 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/storage/access/transam/xact.cpp:8660-8675</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/storage/access/transam/xact.cpp:8660-8675</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>{
+    return CurrentTransactionState-&gt;name;
+}
+
+static void AtEOXact_Proceed_PatchSeq()
+{
+    /* proceed the instance-level patch id */
+    if (u_sess-&gt;opt_cxt.xact_modify_sql_patch) {
+        (void)pg_atomic_add_fetch_u64(&amp;g_instance.cost_cxt.sql_patch_sequence_id, 1);
+        ereport(DEBUG2, (errmodule(MOD_SQLPATCH),
+            errmsg(&quot;[SQLPatch] global patch sequence id is proceeded to %lu&quot;,
+            pg_atomic_read_u64(&amp;g_instance.cost_cxt.sql_patch_sequence_id))));
+        u_sess-&gt;opt_cxt.xact_modify_sql_patch = false;
+    }
+}
+
+</pre><p>evidence:1cd88c7beef1680212e07f7444a7e261</p><p>SHA-256 7a741c035ac2beec6263017c38b2716b039f4296c2db68ee101f7e7e114ee3f8</p></main></html>

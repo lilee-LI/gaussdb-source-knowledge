@@ -1,0 +1,72 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/common/backend/utils/cache/plancache.cpp:330-400</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/common/backend/utils/cache/plancache.cpp:330-400</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>    plansource-&gt;checkedMotJitCodegen = false;
+    plansource-&gt;mot_jit_context = NULL;
+#endif
+
+    if (enable_pbe_gpc) {
+        plansource-&gt;gpc.status.ShareInit();
+    } else if (ENABLE_CN_GPC &amp;&amp; enable_spi_gpc) {
+        Assert(u_sess-&gt;SPI_cxt._current-&gt;plan_id &gt;= 0);
+        plansource-&gt;gpc.status.ShareInit();
+        plansource-&gt;spi_signature.spi_key = u_sess-&gt;SPI_cxt._current-&gt;spi_hash_key;
+        plansource-&gt;spi_signature.func_oid = u_sess-&gt;SPI_cxt._current-&gt;func_oid;
+        plansource-&gt;spi_signature.spi_id = u_sess-&gt;SPI_cxt._current-&gt;visit_id;
+        plansource-&gt;spi_signature.plansource_id = u_sess-&gt;SPI_cxt._current-&gt;plan_id;
+    }
+
+    MemoryContextSwitchTo(oldcxt);
+    GPC_LOG(&quot;create plancache&quot;, plansource, plansource-&gt;stmt_name);
+
+    return plansource;
+}
+
+/*
+ * CreateOneShotCachedPlan: initially create a one-shot plan cache entry.
+ *
+ * This variant of CreateCachedPlan creates a plan cache entry that is meant
+ * to be used only once.  No data copying occurs: all data structures remain
+ * in the caller&#x27;s memory context (which typically should get cleared after
+ * completing execution).  The CachedPlanSource struct itself is also created
+ * in that context.
+ *
+ * A one-shot plan cannot be saved or copied, since we make no effort to
+ * preserve the raw parse tree unmodified.  There is also no support for
+ * invalidation, so plan use must be completed in the current transaction,
+ * and DDL that might invalidate the querytree_list must be avoided as well.
+ *
+ * raw_parse_tree: output of raw_parser()
+ * query_string: original query text
+ * commandTag: compile-time-constant tag for query, or NULL if empty query
+ */
+CachedPlanSource* CreateOneShotCachedPlan(Node* raw_parse_tree, const char* query_string, const char* commandTag)
+{
+    Assert(query_string != NULL); /* required as of 8.4 */
+
+    /* palloc0 zeroes all fields; only set non-zero ones below */
+    CachedPlanSource* plansource = (CachedPlanSource*)palloc0(sizeof(CachedPlanSource));
+    plansource-&gt;magic = CACHEDPLANSOURCE_MAGIC;
+    plansource-&gt;raw_parse_tree = raw_parse_tree;
+    plansource-&gt;query_string = query_string;
+    plansource-&gt;commandTag = commandTag;
+    plansource-&gt;rewriteRoleId = InvalidOid;
+    plansource-&gt;cq_is_flt_frame =
+        (u_sess-&gt;attr.attr_common.enable_expr_fusion &amp;&amp; u_sess-&gt;attr.attr_sql.query_dop_tmp == 1);
+    plansource-&gt;context = CurrentMemoryContext;
+    plansource-&gt;is_oneshot = true;
+    plansource-&gt;generic_cost = -1;
+    plansource-&gt;spi_signature = {(uint32)-1, 0, (uint32)-1, -1};
+    plansource-&gt;param_collation = GetCollationConnection();
+
+#ifdef ENABLE_MOT
+    plansource-&gt;storageEngineType = SE_TYPE_UNSPECIFIED;
+    plansource-&gt;checkedMotJitCodegen = false;
+    plansource-&gt;mot_jit_context = NULL;
+#endif
+
+#ifdef PGXC
+    plansource-&gt;stream_enabled = IsStreamSupport();
+    plansource-&gt;cplan = NULL;
+    plansource-&gt;single_exec_node = NULL;
+    plansource-&gt;is_read_only = false;
+    plansource-&gt;lightProxyObj = NULL;
+#endif
+</pre><p>evidence:817efa5b7a2630e098e779e15924acf0</p><p>SHA-256 4c916eac0424bb748579f31e5a2bbb7461e7c726e33dc04f8a13e85277961589</p></main></html>

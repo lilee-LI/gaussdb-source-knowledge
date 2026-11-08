@@ -51,13 +51,11 @@ class CompletedIndex:
         require(isinstance(sha, str) and len(sha) == 64, "Invalid ECS material digest")
         existing = store.blob_path(sha)
         if existing.is_file():
-            store.blob(sha)
+            require(store.file_hash(existing)==sha,'Stored material was modified')
             return
         frozen = self.path.parent / "blobs" / sha[:2] / sha
         require(frozen.is_file(), "Missing frozen material. Supply the matching source/documents or ECS blobs: " + sha)
-        raw = frozen.read_bytes()
-        require(digest(raw) == sha, "Material differs from the ECS snapshot: " + str(frozen))
-        store.put_blob(raw)
+        store.put_file(frozen,expected=sha)
 
     def source_assets(self, repository):
         keys = set(self.run["evidence_assets"]) if "evidence_assets" in self.run else None
@@ -72,6 +70,9 @@ class CompletedIndex:
                 self.freeze(store, asset["sha"])
             else:
                 # Verify the checkout even when a previous snapshot already cached this blob.
+                if store.file_hash(path)==asset['sha']:
+                    store.put_file(path,expected=asset['sha'])
+                    return row
                 raw = path.read_bytes()
                 if digest(raw) != asset["sha"] and b"\0" not in raw:
                     lf = raw.replace(b"\r\n", b"\n")
@@ -171,8 +172,15 @@ def connect(store, config, requested_profile=None):
             local = [{**local[0],"id":primary[0]["id"]}, *local[1:]]
             require({r["id"] for r in local} == {r["id"] for r in source_repos}, "ECS repository IDs do not match local roots")
             effective = {**config, "repositories":local, "profiles":[],
-                         "product":index.snapshot["product"], "revision":index.snapshot["revision"]}
+                         "product":config.get("product") or index.snapshot["product"],
+                         "revision":index.snapshot["revision"]}
             snapshot = ingest(store, effective, imported=index)
+            if effective["product"] != index.snapshot["product"]:
+                with store.transaction():
+                    store.event("ecs_product_declaration", {"snapshot":snapshot["id"],
+                        "declared_product":effective["product"], "upstream_product":index.snapshot["product"],
+                        "upstream_snapshot":index.origin["snapshot"],
+                        "meaning":"Local product declaration; upstream facts and source binding remain unchanged"})
             if storage == "reference":
                 rid = identity("ecs-study-reference", [snapshot["id"],index.origin])
                 run = register(store,path,index,snapshot["id"],rid)

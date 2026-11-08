@@ -1,0 +1,122 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/geqo/geqo_misc.cpp:1-121</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/geqo/geqo_misc.cpp:1-121</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>/* ------------------------------------------------------------------------
+ *
+ * geqo_misc.cpp
+ *	   misc. printout and debug stuff
+ *
+ * Portions Copyright (c) 2020 Huawei Technologies Co.,Ltd.
+ * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1994, Regents of the University of California
+ *
+ * IDENTIFICATION
+ * src/gausskernel/optimizer/geqo/geqo_misc.cpp
+ *
+ * -------------------------------------------------------------------------
+ */
+/* contributed by:
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+   *  Martin Utesch				 * Institute of Automatic Control	   *
+   =							 = University of Mining and Technology =
+   *  utesch@aut.tu-freiberg.de  * Freiberg, Germany				   *
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+ */
+#include &quot;postgres.h&quot;
+#include &quot;knl/knl_variable.h&quot;
+
+#include &quot;optimizer/geqo_misc.h&quot;
+
+#ifdef GEQO_DEBUG
+
+/*
+ * avg_pool
+ */
+static double avg_pool(Pool* pool)
+{
+    int i;
+    double cumulative = 0.0;
+
+    if (pool-&gt;size &lt;= 0)
+        ereport(
+            ERROR, (errmodule(MOD_OPT), errcode(ERRCODE_OPTIMIZER_INCONSISTENT_STATE), errmsg(&quot;pool_size is zero&quot;)));
+
+    /*
+     * Since the pool may contain multiple occurrences of DBL_MAX, divide by
+     * pool-&gt;size before summing, not after, to avoid overflow.  This loses a
+     * little in speed and accuracy, but this routine is only used for debug
+     * printouts, so we don&#x27;t care that much.
+     */
+    for (i = 0; i &lt; pool-&gt;size; i++)
+        cumulative += pool-&gt;data[i].worth / pool-&gt;size;
+
+    return cumulative;
+}
+
+/* print_pool
+ */
+void print_pool(FILE* fp, Pool* pool, int start, int stop)
+{
+    int i, j;
+
+    /* be extra careful that start and stop are valid inputs */
+    if (start &lt; 0)
+        start = 0;
+    if (stop &gt; pool-&gt;size)
+        stop = pool-&gt;size;
+
+    if (start + stop &gt; pool-&gt;size) {
+        start = 0;
+        stop = pool-&gt;size;
+    }
+
+    for (i = start; i &lt; stop; i++) {
+        fprintf(fp, &quot;%d)\t&quot;, i);
+        for (j = 0; j &lt; pool-&gt;string_length; j++)
+            fprintf(fp, &quot;%d &quot;, pool-&gt;data[i].string[j]);
+        fprintf(fp, &quot;%g\n&quot;, pool-&gt;data[i].worth);
+    }
+
+    fflush(fp);
+}
+
+/* print_gen
+ *
+ *	 printout for chromosome: best, worst, mean, average
+ */
+void print_gen(FILE* fp, Pool* pool, int generation)
+{
+    int lowest;
+
+    /* Get index to lowest ranking gene in poplulation. */
+    /* Use 2nd to last since last is buffer. */
+    lowest = pool-&gt;size &gt; 1 ? pool-&gt;size - 2 : 0;
+
+    fprintf(fp,
+        &quot;%5d | Best: %g  Worst: %g  Mean: %g  Avg: %g\n&quot;,
+        generation,
+        pool-&gt;data[0].worth,
+        pool-&gt;data[lowest].worth,
+        pool-&gt;data[pool-&gt;size / 2].worth,
+        avg_pool(pool));
+
+    fflush(fp);
+}
+
+void print_edge_table(FILE* fp, Edge* edge_table, int num_gene)
+{
+    int i, j;
+
+    fprintf(fp, &quot;\nEDGE TABLE\n&quot;);
+
+    for (i = 1; i &lt;= num_gene; i++) {
+        fprintf(fp, &quot;%d :&quot;, i);
+        for (j = 0; j &lt; edge_table[i].unused_edges; j++)
+            fprintf(fp, &quot; %d&quot;, edge_table[i].edge_list[j]);
+        fprintf(fp, &quot;\n&quot;);
+    }
+
+    fprintf(fp, &quot;\n&quot;);
+
+    fflush(fp);
+}
+
+#endif /* GEQO_DEBUG */
+</pre><p>evidence:e4e42e3b74ab24781102730a50d3cbe3</p><p>SHA-256 fc8681acb6dc34a2c3f32d16a74cd0147f05578a9795b16326d362faeb445907</p></main></html>

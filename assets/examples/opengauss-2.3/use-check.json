@@ -1,0 +1,1761 @@
+{
+  "program": "whole-program:7329fed560534c63999bf03ec9f8157e",
+  "revision": "knowledge:742c722ab8652fa5c3e3b1e36e636058",
+  "cases": [
+    {
+      "module": "server/src/gausskernel/optimizer/sqlpatch",
+      "query": "SQL Patch sql_patch_sequence 只读版本门控共享私有缓存重验证",
+      "targets": [],
+      "token_budget": 64000,
+      "id": "sqlpatch-coding",
+      "role": "coding",
+      "required_units": [
+        "claim:check-recreate-cache-plan-by-sql-patch",
+        "claim:revalidate-gplan-by-sql-patch"
+      ],
+      "passed": true,
+      "delivered_ids": [
+        "claim:check-recreate-cache-plan-by-sql-patch",
+        "claim:revalidate-gplan-by-sql-patch",
+        "claim:sql-patch-sequence-producer",
+        "contract:sql-patch-plan-cache-invalidation",
+        "feature:sqlpatch-sequence-driven-plan-invalidation",
+        "feature:sqlpatch-shared-plan-recreate-boundary",
+        "flow:sql-patch-commit-to-plan-revalidation",
+        "observation:sql-patch-visibility-boundaries",
+        "responsibility:sqlpatch-plan-cache-consistency",
+        "test_obligation:sql-patch-sequence-boundaries"
+      ],
+      "unknowns": [
+        {
+          "code": "index_partial",
+          "coverage": {
+            "available_tus": 2412,
+            "call_binding": {
+              "ambiguous_definitions": 195821,
+              "declaration_only": 81809,
+              "legacy_usr_candidate": 0,
+              "linked_definitions": 713356
+            },
+            "deferred_tus": 0,
+            "failed_tus": 0,
+            "parsed_tus": 818,
+            "partial_tus": 1594,
+            "relations": 1994720,
+            "semantic_completeness": "not_certified",
+            "source_evidence_files": 4032,
+            "symbols": 398544,
+            "translation_units": 2412
+          }
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "obs:scope-unknowns",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "obs:scope-unknowns"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "module:geqo",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "mech:guc",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "mech:guc"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-params"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-guc"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "decision:dev-review",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "decision:dev-review"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "contract:pool-spread"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:pool-ordering"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-population"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "claim:erx-unconditional"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:erx-alias"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-crossover"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-variants"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:memory-context"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-storage"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-eval"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:errors"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-clump"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "obs:geqo-existing-regression",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "obs:geqo-existing-regression"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-gate"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-driver"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "mech:errors",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "mech:errors"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-crossover"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:erx-alias"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "claim:erx-unconditional"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-variants"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-clump"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "feat:geqo-root",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "claim:variants-unreachable",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "claim:variants-unreachable"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "claim:erx-unconditional"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:erx-alias"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-crossover"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-variants"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "test:geqo-existing-regression-baseline",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "test:geqo-existing-regression-baseline"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-gate"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-driver"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "claim:erx-unconditional",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "claim:erx-unconditional"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:erx-alias"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-crossover"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-variants"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "feat:geqo-variants",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-variants"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "claim:erx-unconditional"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:erx-alias"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-crossover"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "mech:erx-alias",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "mech:erx-alias"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "claim:erx-unconditional"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-variants"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-crossover"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            }
+          ]
+        },
+        {
+          "code": "evidence_partial",
+          "meaning": "Expand cited evidence to read its complete range"
+        }
+      ]
+    },
+    {
+      "module": "server/src/gausskernel/optimizer/sqlpatch",
+      "query": "SQL Patch sql_patch_sequence 只读版本门控共享私有缓存重验证",
+      "targets": [],
+      "token_budget": 64000,
+      "id": "sqlpatch-tests",
+      "role": "test_generation",
+      "required_units": [
+        "test_obligation:sql-patch-sequence-boundaries"
+      ],
+      "passed": true,
+      "delivered_ids": [
+        "claim:check-recreate-cache-plan-by-sql-patch",
+        "claim:revalidate-gplan-by-sql-patch",
+        "claim:sql-patch-sequence-producer",
+        "contract:sql-patch-plan-cache-invalidation",
+        "feature:sqlpatch-sequence-driven-plan-invalidation",
+        "feature:sqlpatch-shared-plan-recreate-boundary",
+        "flow:sql-patch-commit-to-plan-revalidation",
+        "observation:sql-patch-visibility-boundaries",
+        "responsibility:sqlpatch-plan-cache-consistency",
+        "test_obligation:sql-patch-sequence-boundaries"
+      ],
+      "unknowns": [
+        {
+          "code": "index_partial",
+          "coverage": {
+            "available_tus": 2412,
+            "call_binding": {
+              "ambiguous_definitions": 195821,
+              "declaration_only": 81809,
+              "legacy_usr_candidate": 0,
+              "linked_definitions": 713356
+            },
+            "deferred_tus": 0,
+            "failed_tus": 0,
+            "parsed_tus": 818,
+            "partial_tus": 1594,
+            "relations": 1994720,
+            "semantic_completeness": "not_certified",
+            "source_evidence_files": 4032,
+            "symbols": 398544,
+            "translation_units": 2412
+          }
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "obs:scope-unknowns",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "obs:scope-unknowns"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "module:geqo",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "mech:guc",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "mech:guc"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-params"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-guc"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "decision:dev-review",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "decision:dev-review"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "contract:pool-spread"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:pool-ordering"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-population"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "claim:erx-unconditional"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:erx-alias"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-crossover"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-variants"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:memory-context"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-storage"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-eval"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:errors"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-clump"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "obs:geqo-existing-regression",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "obs:geqo-existing-regression"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-gate"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-driver"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "mech:errors",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "mech:errors"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-crossover"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:erx-alias"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "claim:erx-unconditional"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-variants"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-clump"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "feat:geqo-root",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "claim:variants-unreachable",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "claim:variants-unreachable"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "claim:erx-unconditional"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:erx-alias"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-crossover"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-variants"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "test:geqo-existing-regression-baseline",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "test:geqo-existing-regression-baseline"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-gate"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-driver"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "claim:erx-unconditional",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "claim:erx-unconditional"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:erx-alias"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-crossover"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-variants"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "feat:geqo-variants",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-variants"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "claim:erx-unconditional"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:erx-alias"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-crossover"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "mech:erx-alias",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "mech:erx-alias"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "claim:erx-unconditional"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-variants"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-crossover"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            }
+          ]
+        },
+        {
+          "code": "evidence_partial",
+          "meaning": "Expand cited evidence to read its complete range"
+        }
+      ]
+    },
+    {
+      "module": "server/src/gausskernel/optimizer/sqlpatch",
+      "query": "SQL Patch sql_patch_sequence 只读版本门控共享私有缓存重验证",
+      "targets": [],
+      "token_budget": 64000,
+      "id": "sqlpatch-review",
+      "role": "review",
+      "required_units": [
+        "contract:sql-patch-plan-cache-invalidation",
+        "flow:sql-patch-commit-to-plan-revalidation"
+      ],
+      "passed": true,
+      "delivered_ids": [
+        "claim:check-recreate-cache-plan-by-sql-patch",
+        "claim:revalidate-gplan-by-sql-patch",
+        "claim:sql-patch-sequence-producer",
+        "contract:sql-patch-plan-cache-invalidation",
+        "feature:sqlpatch-sequence-driven-plan-invalidation",
+        "feature:sqlpatch-shared-plan-recreate-boundary",
+        "flow:sql-patch-commit-to-plan-revalidation",
+        "observation:sql-patch-visibility-boundaries",
+        "responsibility:sqlpatch-plan-cache-consistency",
+        "test_obligation:sql-patch-sequence-boundaries"
+      ],
+      "unknowns": [
+        {
+          "code": "index_partial",
+          "coverage": {
+            "available_tus": 2412,
+            "call_binding": {
+              "ambiguous_definitions": 195821,
+              "declaration_only": 81809,
+              "legacy_usr_candidate": 0,
+              "linked_definitions": 713356
+            },
+            "deferred_tus": 0,
+            "failed_tus": 0,
+            "parsed_tus": 818,
+            "partial_tus": 1594,
+            "relations": 1994720,
+            "semantic_completeness": "not_certified",
+            "source_evidence_files": 4032,
+            "symbols": 398544,
+            "translation_units": 2412
+          }
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "obs:scope-unknowns",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "obs:scope-unknowns"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "module:geqo",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "mech:guc",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "mech:guc"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-params"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-guc"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "decision:dev-review",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "decision:dev-review"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "contract:pool-spread"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:pool-ordering"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-population"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "claim:erx-unconditional"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:erx-alias"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-crossover"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-variants"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:memory-context"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-storage"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-eval"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:errors"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-clump"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "obs:geqo-existing-regression",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "obs:geqo-existing-regression"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-gate"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-driver"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "mech:errors",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "mech:errors"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-crossover"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:erx-alias"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "claim:erx-unconditional"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-variants"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-clump"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "feat:geqo-root",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "claim:variants-unreachable",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "claim:variants-unreachable"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "claim:erx-unconditional"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:erx-alias"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-crossover"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-variants"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "test:geqo-existing-regression-baseline",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "test:geqo-existing-regression-baseline"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-gate"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-driver"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "claim:erx-unconditional",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "claim:erx-unconditional"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:erx-alias"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-crossover"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-variants"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "feat:geqo-variants",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-variants"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "claim:erx-unconditional"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "mech:erx-alias"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-crossover"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            }
+          ]
+        },
+        {
+          "code": "stale_knowledge",
+          "id": "mech:erx-alias",
+          "reasons": [
+            {
+              "code": "method_version_changed",
+              "id": "mech:erx-alias"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "claim:erx-unconditional"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-variants"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:connect-order-opt"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "feat:sql-capability"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "module:geqo"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-crossover"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:geqo-root"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:optimizer"
+            },
+            {
+              "code": "method_version_changed",
+              "id": "resp:sql-engine"
+            }
+          ]
+        },
+        {
+          "code": "evidence_partial",
+          "meaning": "Expand cited evidence to read its complete range"
+        }
+      ]
+    }
+  ],
+  "status": "passed",
+  "meaning": "Actual context retrieval contract check, not answer semantic accuracy or blind QA",
+  "created": "2026-11-08T09:36:27.990953+00:00",
+  "id": "use-check:a6959885830fe612ed2c2f4b06971102"
+}

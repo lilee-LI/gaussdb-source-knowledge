@@ -199,9 +199,9 @@ def ingest(store, config, *, imported=None):
                 rows.append(imported.bind_asset(store, known, p))
                 continue
             try:
-                raw = p.read_bytes()
-                sha = store.put_blob(raw)
-                record.update(sha=sha, status="frozen", bytes=len(raw))
+                raw = p.read_bytes() if entry['kind']=='document' else None
+                sha = store.put_blob(raw) if raw is not None else store.put_file(p)
+                record.update(sha=sha, status="frozen", bytes=p.stat().st_size)
                 if entry.get("native_sources"):
                     stamp = p.stat().st_mtime_ns
                     record["source_mtime_ns"] = stamp
@@ -236,7 +236,7 @@ def ingest(store, config, *, imported=None):
             require(target.is_relative_to(root), "Invalid source path in ECS snapshot")
             rows.append(imported.bind_asset(store, asset, None))
         # Detect an input modified while this material was being captured.
-        require(all(p.is_file() and digest(p.read_bytes()) == sha for p, sha in before),
+        require(all(p.is_file() and store.file_hash(p) == sha for p, sha in before),
                 "Material changed during snapshot; retry from a stable checkout")
         require(all(p.stat().st_mtime_ns==stamp for p,stamp in native_times),
                 "Native source timestamps changed during snapshot")

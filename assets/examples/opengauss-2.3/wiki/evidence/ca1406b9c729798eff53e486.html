@@ -1,0 +1,64 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/geqo/geqo_eval.cpp:138-200</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/geqo/geqo_eval.cpp:138-200</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre> * generated plans.
+ */
+RelOptInfo* gimme_tree(PlannerInfo* root, Gene* tour, int num_gene)
+{
+    GeqoPrivateData* priv = (GeqoPrivateData*)root-&gt;join_search_private;
+    List* clumps = NIL;
+    int rel_count;
+
+    /*
+     * Sometimes, a relation can&#x27;t yet be joined to others due to heuristics
+     * or actual semantic restrictions.  We maintain a list of &quot;clumps&quot; of
+     * successfully joined relations, with larger clumps at the front. Each
+     * new relation from the tour is added to the first clump it can be joined
+     * to; if there is none then it becomes a new clump of its own. When we
+     * enlarge an existing clump we check to see if it can now be merged with
+     * any other clumps.  After the tour is all scanned, we forget about the
+     * heuristics and try to forcibly join any remaining clumps.  Some forced
+     * joins might still fail due to semantics, but we should always be able
+     * to find some join order that works.
+     */
+    clumps = NIL;
+
+    for (rel_count = 0; rel_count &lt; num_gene; rel_count++) {
+        int cur_rel_index;
+        RelOptInfo* cur_rel = NULL;
+        Clump* cur_clump = NULL;
+
+        /* Get the next input relation */
+        cur_rel_index = (int)tour[rel_count];
+        cur_rel = (RelOptInfo*)list_nth(priv-&gt;initial_rels, cur_rel_index - 1);
+
+        /* Make it into a single-rel clump */
+        cur_clump = (Clump*)palloc(sizeof(Clump));
+        cur_clump-&gt;joinrel = cur_rel;
+        cur_clump-&gt;size = 1;
+
+        /* Merge it into the clumps list, using only desirable joins */
+        clumps = merge_clump(root, clumps, cur_clump, false);
+    }
+
+    if (list_length(clumps) &gt; 1) {
+        /* Force-join the remaining clumps in some legal order */
+        List* fclumps = NIL;
+        ListCell* lc = NULL;
+
+        foreach (lc, clumps) {
+            Clump* clump = (Clump*)lfirst(lc);
+
+            fclumps = merge_clump(root, fclumps, clump, true);
+        }
+        clumps = fclumps;
+    }
+
+    /* Did we succeed in forming a single join relation? */
+    if (list_length(clumps) != 1)
+        ereport(ERROR,
+            (errmodule(MOD_OPT),
+                errcode(ERRCODE_OPTIMIZER_INCONSISTENT_STATE),
+                errmsg(&quot;failed to join all relations together&quot;)));
+
+    return ((Clump*)linitial(clumps))-&gt;joinrel;
+}
+
+</pre><p>evidence:7f15cf2eb1a9b1c9232135cb6a416766</p><p>SHA-256 ec8febebd466eebb4a352e9fbf727e273224f4effeeb5ce6b43ef01f308fde1f</p></main></html>

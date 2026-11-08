@@ -107,7 +107,7 @@ def candidates(store, plan):
     return _order([*plan.get("candidates", []), *extra])
 
 
-def construct(store, *, modules=None, max_tasks=20, files_per_task=12, apply=False):
+def construct(store, *, modules=None, max_tasks=20, files_per_task=12, apply=False, candidate_ids=None):
     require(type(max_tasks) is int and 1 <= max_tasks <= 500, "max_tasks must be 1..500")
     require(type(files_per_task) is int and 1 <= files_per_task <= 40, "files_per_task must be 1..40")
     plan = study.current(store)
@@ -115,6 +115,8 @@ def construct(store, *, modules=None, max_tasks=20, files_per_task=12, apply=Fal
     scope = sorted(set(modules or plan["modules"]))
     require(set(scope) <= set(plan["modules"]), "Unknown module in planning scope")
     leads = candidates(store, plan)
+    if candidate_ids is not None:
+        require(set(candidate_ids)<={c['id'] for c in leads},'Unknown candidate selection')
     superseded = {cid for c in leads for cid in c.get("supersedes", [])}
     # Referenced prerequisites cannot disappear merely because another candidate supersedes them.
     needed = {cid for c in leads for cid in c.get("depends_on", [])}
@@ -130,6 +132,8 @@ def construct(store, *, modules=None, max_tasks=20, files_per_task=12, apply=Fal
         elif owner is None:
             gaps.append({"candidate": cid, "reason": "unassigned_module"})
         elif owner in scope:
+            if candidate_ids is not None and cid not in candidate_ids:
+                continue
             if cid in existing:
                 dispositions.append({"candidate": cid, "state": "existing_task", "task": existing[cid]})
             else:

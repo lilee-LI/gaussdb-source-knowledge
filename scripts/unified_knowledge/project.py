@@ -10,14 +10,58 @@ from . import study
 from .store import Store, atomic_write, canonical, digest, read_json, require
 
 ROOT = Path(__file__).resolve().parents[2]
-COMMANDS = {"start","check","modules","features","route","learn","review","wiki","ask","plan-tasks","planning-feedback"}
+COMMANDS = {"start","check","modules","features","route","learn","review","wiki","ask","plan-tasks","planning-feedback",
+            "plan","progress","next","advance","run","coverage","verify-uses","accept-coverage"}
+
+
+def query_config(home, researcher_config):
+    value=read_json(Path(researcher_config))
+    for server in value["mcpServers"].values():
+        args=server["args"]
+        args[args.index("--role")+1]="query"
+    target=Path(home)/"query.mcp.json"
+    if not target.is_file() or read_json(target)!=value:
+        atomic_write(target,json.dumps(value,ensure_ascii=False,indent=2)+"\n")
+    return str(target)
+
+
+def research_prompt(task, actor, question):
+    return (
+        f"以 {actor} 身份研究任务 {task}，问题：{question}。只使用当前 gaussdb_knowledge MCP 工作区。"
+        "先 claim_task（建议seconds=14400），读取task_context、冻结方法、已审复用知识、文档和历史结果。"
+        "保留返回的token；到期前renew_task续租，checkpoint_task记录进展，必要时release_task。"
+        "重新认领后的证据必须在新租约实际回读，不能把旧回执当作新读取。"
+        "query_graph的run使用task_context.run，不能用source_index.run_id；get_context的source_snapshot/build_profile/index_run"
+        "分别来自任务snapshot/profile/run。lookup_symbols核对真实符号ID，不猜ID或用另一个函数/类型代替。"
+        "通过create_task_evidence建立准确区间，并用read_task_evidence完整读取；截断则分段。"
+        "优先用search_source在冻结材料检索状态名、字段和文字（支持asset_patterns），再read_source读命中上下文；搜索命中本身不算阅读。"
+        "沿入口、状态生产/消费、跨模块契约、宏条件、正常/错误清理、资源寿命、缓存及必要并发/恢复边界研究。"
+        "目录或关键词未命中不证明功能/测试不存在；图的候选边不证明运行路径。"
+        "每次stage_research_unit提交一个unit。共同字段为id/kind/title/body/conditions/counterexamples/source_refs/symbol_refs/knowledge_refs；"
+        "kind只能为module/responsibility/feature/mechanism/claim/contract/flow/test_obligation/requirement/observation/decision。"
+        "claim需statement；contract需producers/consumers（真实symbol-instance ID）、requires/ensures/invariants。"
+        "knowledge_refs是对象数组，如[{\"relation\":\"DEPENDS_ON\",\"target\":\"claim:example\"}]。"
+        "test_obligation的expected_from是单个对象，如{\"kind\":\"contract\",\"ref\":\"contract:example\"}，execution_status=not_run。"
+        "flow.steps用call/data_stage/state_transition/async_message区分，不把数据阶段伪装成调用。"
+        "责任树和特性树分别使用level=1..4与parent，先提交上级；不要写_binding/review/content_hash等保留字段。"
+        "source_refs只能引用本租约真正完整读过的证据。全部完成后，用finish_research提交coverage与最新drafts_digest；"
+        "如果task_context含whole_learning，必须遵守该覆盖协议：module_assets分页盘点、read_source逐段读取，"
+        "用stage_progress登记资产/候选归属、机制提案、跨模块契约和缺口，并在finish_research同时带最新progress_digest。"
+        "模块盘点可以只提交真实规划progress；不能在没读全文件或没形成知识时标记studied。"
+        "coverage逐问题包含question/status(answered/open/not_applicable)/explanation/evidence_refs。"
+        "存在whole_learning时，新机制和依赖只在stage_progress.proposals/gaps登记；不要再调用planning_feedback另建一份。"
+        "只有旧工作区没有whole_learning才用planning_feedback。不逐函数或调用边扩张任务，不重跑全仓索引。"
+        "finish_research成功即停止工具调用；租约已经结束，不要继续stage/submit/planning_feedback。"
+        "最后返回任务ID、提交状态和缺口，停在待审；不得自行接受研究或知识。"
+        "当前为源码研究，不运行数据库、SQL、产品编译或故障注入；未证实的外部实现与构建条件明确保留。"
+    )
 
 
 def settings(file):
     file = file.expanduser().resolve()
     require(file.is_file(),"将包内 paths.example.json 复制到 local/paths.json 并填写路径，或用 --paths 指定配置文件。")
     spec = read_json(file)
-    known = {"source","design","manual","home","index_db","run_id","graph_storage","output","module_prefixes","repository_roots","product","revision","product_adapter"}
+    known = {"source","design","manual","home","index_db","run_id","graph_storage","output","module_prefixes","repository_roots","product","revision","product_adapter","learning_policy"}
     require(isinstance(spec,dict) and not set(spec)-known,"paths.json 含未知字段："+str(sorted(set(spec)-known) if isinstance(spec,dict) else spec))
     def resolve(value):
         return (file.parent/Path(value).expanduser()).resolve()
@@ -33,6 +77,8 @@ def settings(file):
         if isinstance(value, str) and ("/" in value or "\\" in value or value.endswith(".json")):
             value = str(resolve(value))
         spec["product_adapter"] = load(value)
+    if isinstance(spec.get('learning_policy'),str) and (spec['learning_policy'].endswith('.json') or '/' in spec['learning_policy'] or '\\' in spec['learning_policy']):
+        spec['learning_policy']=str(resolve(spec['learning_policy']))
     return spec
 
 
@@ -65,29 +111,35 @@ def start(spec, refresh):
     info = check(spec)
     graph = info["graph"] or {}
     home = Path(spec["home"])
-    signature=digest(["checkout-catalog/v2",spec,graph.get("run_id"),str(ROOT),sys.executable])
+    from . import whole
+    learning=whole.policy(spec.get('learning_policy'),spec.get('product_adapter') if isinstance(spec.get('product_adapter'),dict) else None)
+    signature=digest(["whole-curriculum/v1",spec,learning['digest'],graph.get("run_id"),str(ROOT),sys.executable])
     if not refresh and (home/"knowledge.sqlite3").is_file():
         with Store(home,readonly=True,graph_override=spec.get("index_db")) as store:
             bound=store.get_meta("project_entry",{})
             if bound.get("signature")==signature and store.get_meta("study_head")==bound.get("plan_id") and Path(bound["mcp"]).is_file():
-                return {**bound,**info,"action":"继续已冻结的学习快照。材料更新时用 start --refresh。"}
+                return {**bound,**info,"query_mcp":query_config(home,bound["mcp"]),"action":"继续已冻结的学习快照。材料更新时用 start --refresh。"}
     args=argparse.Namespace(source=Path(spec["source"]),home=home,output=home/"setup/project.json",
          index_db=spec.get("index_db"),run_id=graph.get("run_id"),graph_storage=graph.get("storage"),
          product=spec.get("product","GaussDB"),revision=spec.get("revision","content-addressed"),
          design=Path(spec["design"]) if spec.get("design") else None,manual=Path(spec["manual"]) if spec.get("manual") else None,
          compile_db=None,repository_roots=spec["repository_roots"],module_prefix=spec.get("module_prefixes",[]),
          product_adapter=spec.get("product_adapter"),
+         learning_policy=learning,
          role="researcher",workspace_setup=True,source_only=not graph)
     result=create(args)
     with Store(home) as store:
         plan=study.current(store)
         mcp=home/"researcher.mcp.json"
         atomic_write(mcp,Path(result["mcp"]).read_bytes())
+        whole.ensure(store,learning)
+        exported=whole.export(store)
         bound={"signature":signature,"plan_id":plan["id"],"plan":result["study_plan"],"run":plan["run"],
-               "modules":len(plan["modules"]),"candidates":len(plan.get("candidates",[])),"mcp":str(mcp),"source_snapshot":plan["snapshot"]}
+               "modules":len(plan["modules"]),"candidates":len(plan.get("candidates",[])),"mcp":str(mcp),
+               "query_mcp":query_config(home,mcp),"source_snapshot":plan["snapshot"],"whole_plan":exported}
         with store.transaction():
             store.set_meta("project_entry",bound)
-    return {**info,**bound,"graph":result.get("graph"),"action":"打开 plan，运行 features，选择 ID 后用 learn --candidate 建单。"}
+    return {**info,**bound,"graph":result.get("graph"),"action":"打开 whole_plan.html 查看全仓范围，next --worker 成员名 获取就绪任务，run --worker 成员名 --steps 1 调用已有Claude研究；review审阅后advance继续。"}
 
 
 def review_step(store, args):
@@ -119,6 +171,10 @@ def review_step(store, args):
         planner.review_task(store,args.task,{**decision,"result_digest":args.accept})
         # The following prompt is a separate knowledge decision, bound to the exact proposed units.
         args.accept=None
+    if not result.get('claims'):
+        from . import whole
+        require(result.get('progress'),'Planning-only task has no coverage report')
+        return {'status':'planning_accepted','task':args.task,'advance':whole.advance(store),'plan':whole.export(store)}
     proposal=team.propose_task(store,args.task)
     if not args.accept:
         ctx=knowledge.review_context(store,proposal["id"],args.reviewer,max_chars=1000000)
@@ -126,7 +182,9 @@ def review_step(store, args):
                 "units":proposal["units"],"evidence":ctx["evidence"],"truncated":ctx["truncated"],
                 "next":"审阅知识提案和引用，认可后用此提案的新 digest 执行同一 review 命令。"}
     rev=knowledge.review(store,proposal["id"],{**decision,"proposal_digest":args.accept})
-    return {"status":"knowledge_accepted","revision":rev["id"],"next":"运行 wiki 打开已审知识，或用 ask 查询证据。"}
+    from . import whole
+    extra={'advance':whole.advance(store),'whole_plan':whole.export(store)} if whole.current(store,False) else {}
+    return {"status":"knowledge_accepted","revision":rev["id"],**extra,"next":"运行 wiki 打开已审知识，next 继续下一项；coverage 查看验收缺口。"}
 
 
 def execute(args):
@@ -139,6 +197,18 @@ def execute(args):
     require((home/"knowledge.sqlite3").is_file(),"请先在本工作区执行 start")
     with Store(home,readonly=args.action in {"ask","modules","features"}) as store:
         plan=study.current(store)
+        if args.action in {'plan','progress','next','advance','run','coverage','verify-uses','accept-coverage'}:
+            from . import whole
+            if args.action=='plan':return whole.export(store)
+            if args.action=='progress':return whole.status(store,args.module)
+            if args.action=='next':return whole.next_task(store,args.worker,args.module)
+            if args.action=='advance':return {**whole.advance(store,args.max_tasks),'export':whole.export(store)}
+            if args.action=='run':
+                from .continuation import run
+                return run(store,worker=args.worker,module=args.module,steps=args.steps,timeout=args.timeout,budget=args.budget,executable=args.claude,resume_task=args.resume_task)
+            if args.action=='coverage':return whole.audit(store,args.module)
+            if args.action=='verify-uses':return whole.verify_uses(store,read_json(args.input))
+            if args.action=='accept-coverage':return whole.accept(store,args.digest,args.reviewer,args.notes,args.module)
         if args.action == "plan-tasks":
             from .task_planning import construct
             return construct(store, modules=args.module, max_tasks=args.max_tasks, files_per_task=args.files_per_task, apply=args.apply)
@@ -176,8 +246,11 @@ def execute(args):
                 status=store.db.execute("SELECT status FROM tasks WHERE id=?",(task,)).fetchone()[0]
                 if status in {"accepted","submitted","leased"}:
                     return {**work,"status":status,"next":"查看 features 状态。进行中的任务由租约持有人继续，已提交任务进入 review。"}
+            prompt=research_prompt(task,actor,question)
+            prompt_file=home/"instructions"/(task.replace(":","-")+".md")
+            atomic_write(prompt_file,prompt+"\n")
             return {**work,"worker":actor,"mcp":str(mcp),"claude_command":'claude --mcp-config "'+str(mcp)+'"',
-                    "prompt":f"以 {actor} 身份领取 {task}，研究问题 {question}。读取 task_context、历史结果和文档，按调用点及源码行核对条件和反例。用 read_task_evidence 读取引用，stage_research_unit 保存结论及测试依据，用 finish_research 提交后停下。"}
+                    "prompt_file":str(prompt_file),"prompt":prompt}
         if args.action=="review":
             return review_step(store,args)
         if args.action=="wiki":
@@ -198,6 +271,16 @@ def main(argv):
         a.add_argument("--paths",type=Path,default=ROOT/"local/paths.json")
         if name=="start":
             a.add_argument("--refresh",action="store_true")
+        if name in {'progress','next','run','coverage','accept-coverage'}:a.add_argument('--module')
+        if name in {'next','run'}:a.add_argument('--worker',required=True)
+        if name=='advance':a.add_argument('--max-tasks',type=int,default=8)
+        if name=='run':
+            a.add_argument('--steps',type=int,default=1);a.add_argument('--timeout',type=int,default=1800)
+            a.add_argument('--budget',type=float,default=3);a.add_argument('--claude',type=Path)
+            a.add_argument('--resume-task')
+        if name=='verify-uses':a.add_argument('--input',required=True,type=Path)
+        if name=='accept-coverage':
+            a.add_argument('--digest',required=True);a.add_argument('--reviewer',required=True);a.add_argument('--notes',required=True)
         if name == "plan-tasks":
             a.add_argument("--module", action="append")
             a.add_argument("--max-tasks", type=int, default=20)

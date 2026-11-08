@@ -1,0 +1,58 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/geqo/geqo_selection.cpp:52-108</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/geqo/geqo_selection.cpp:52-108</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>void geqo_selection(PlannerInfo* root, Chromosome* momma, Chromosome* daddy, Pool* pool, double bias)
+{
+    int first, second;
+
+    first = linear_rand(root, pool-&gt;size, bias);
+    second = linear_rand(root, pool-&gt;size, bias);
+
+    /*
+     * Ensure we have selected different genes, except if pool size is only
+     * one, when we can&#x27;t.
+     *
+     * This code was observed to hang up in an infinite loop when the
+     * platform&#x27;s implementation of erand48() was broken.  We now always use
+     * our own version.
+     */
+    if (pool-&gt;size &gt; 1) {
+        while (first == second)
+            second = linear_rand(root, pool-&gt;size, bias);
+    }
+
+    geqo_copy(root, momma, &amp;pool-&gt;data[first], pool-&gt;string_length);
+    geqo_copy(root, daddy, &amp;pool-&gt;data[second], pool-&gt;string_length);
+}
+
+/*
+ * linear_rand
+ *	  generates random integer between 0 and input max number
+ *	  using input linear bias
+ *
+ *	  bias is y-intercept of linear distribution
+ *
+ *	  probability distribution function is: f(x) = bias - 2(bias - 1)x
+ *			 bias = (prob of first rule) / (prob of middle rule)
+ */
+static int linear_rand(PlannerInfo* root, int pool_size, double bias)
+{
+    double index; /* index between 0 and pop_size */
+    double max = (double)pool_size;
+
+    /*
+     * If geqo_rand() returns exactly 1.0 then we will get exactly max from
+     * this equation, whereas we need 0 &lt;= index &lt; max.  Also it seems
+     * possible that roundoff error might deliver values slightly outside the
+     * range; in particular avoid passing a value slightly less than 0 to
+     * sqrt(). If we get a bad value just try again.
+     */
+    do {
+        double sqrtval;
+
+        sqrtval = (bias * bias) - 4.0 * (bias - 1.0) * geqo_rand(root);
+        if (sqrtval &gt; 0.0)
+            sqrtval = sqrt(sqrtval);
+        index = max * (bias - sqrtval) / 2.0 / (bias - 1.0);
+    } while (index &lt; 0.0 || index &gt;= max);
+
+    return (int)index;
+}
+</pre><p>evidence:fb724c1ccc85f44955ea91fd50de9f23</p><p>SHA-256 7480e077ac6145b3b066a00930dd88634c05c038e7527dd429b138c6925acda8</p></main></html>

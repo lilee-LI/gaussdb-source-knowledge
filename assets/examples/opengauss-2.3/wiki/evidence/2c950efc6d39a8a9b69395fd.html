@@ -1,0 +1,61 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/include/optimizer/geqo.h:1-60</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/include/optimizer/geqo.h:1-60</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>/* -------------------------------------------------------------------------
+ *
+ * geqo.h
+ *	  prototypes for various files in optimizer/geqo
+ *
+ * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1994, Regents of the University of California
+ *
+ * src/include/optimizer/geqo.h
+ *
+ * -------------------------------------------------------------------------
+ */
+
+/* contributed by:
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+   *  Martin Utesch				 * Institute of Automatic Control	   *
+   =							 = University of Mining and Technology =
+   *  utesch@aut.tu-freiberg.de  * Freiberg, Germany				   *
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+ */
+
+#ifndef GEQO_H
+#define GEQO_H
+
+#include &quot;nodes/relation.h&quot;
+#include &quot;optimizer/geqo_gene.h&quot;
+
+/* GEQO debug flag */
+/* recombination mechanism */
+#define ERX
+
+/*
+ * Configuration options
+ *
+ * If you change these, update backend/utils/misc/postgresql.conf.sample
+ */
+#define DEFAULT_GEQO_EFFORT 5
+#define MIN_GEQO_EFFORT 1
+#define MAX_GEQO_EFFORT 10
+
+#define DEFAULT_GEQO_SELECTION_BIAS 2.0
+#define MIN_GEQO_SELECTION_BIAS 1.5
+#define MAX_GEQO_SELECTION_BIAS 2.0
+
+/*
+ * Private state for a GEQO run --- accessible via root-&gt;join_search_private
+ */
+typedef struct {
+    List* initial_rels;             /* the base relations we are joining */
+    unsigned short random_state[3]; /* state for pg_erand48() */
+} GeqoPrivateData;
+
+/* routines in geqo_main.c */
+extern RelOptInfo* geqo(PlannerInfo* root, int number_of_rels, List* initial_rels);
+
+/* routines in geqo_eval.c */
+extern Cost geqo_eval(PlannerInfo* root, Gene* tour, int num_gene);
+extern RelOptInfo* gimme_tree(PlannerInfo* root, Gene* tour, int num_gene);
+
+#endif /* GEQO_H */
+</pre><p>evidence:0799812115b48b8231258b6e99d836b9</p><p>SHA-256 8780f41932ee10631ef094642f064b5409e3d3e3f7c11eadeb5a3d598df17ef2</p></main></html>

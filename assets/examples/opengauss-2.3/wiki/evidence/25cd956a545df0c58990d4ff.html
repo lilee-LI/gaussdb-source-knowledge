@@ -1,0 +1,19 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/geqo/CMakeLists.txt:1-18</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/geqo/CMakeLists.txt:1-18</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>#This is the main CMAKE for build bin.
+AUX_SOURCE_DIRECTORY(${CMAKE_CURRENT_SOURCE_DIR} TGT_geqo_SRC)
+
+set(TGT_geqo_INC 
+    ${PROJECT_SRC_DIR}/gausskernel/cbb/communication
+    ${PROJECT_SRC_DIR}/include/libcomm
+    ${PROJECT_SRC_DIR}/include
+    ${PROJECT_SRC_DIR}/lib/gstrace
+    ${LIBCGROUP_INCLUDE_PATH}
+    ${PROJECT_SRC_DIR}/include/libcomm
+    ${ZLIB_INCLUDE_PATH}
+)
+
+set(geqo_DEF_OPTIONS ${MACRO_OPTIONS})
+set(geqo_COMPILE_OPTIONS ${OPTIMIZE_OPTIONS} ${OS_OPTIONS} ${PROTECT_OPTIONS} ${WARNING_OPTIONS} ${BIN_SECURE_OPTIONS} ${CHECK_OPTIONS})
+set(geqo_LINK_OPTIONS ${BIN_LINK_OPTIONS})
+add_static_objtarget(gausskernel_optimizer_geqo TGT_geqo_SRC TGT_geqo_INC &quot;${geqo_DEF_OPTIONS}&quot; &quot;${geqo_COMPILE_OPTIONS}&quot; &quot;${geqo_LINK_OPTIONS}&quot;)
+
+</pre><p>evidence:e0eb1e7e38e3ec1a247a44d554290d71</p><p>SHA-256 8f61af6645ad55b9f8d9147d65bdc3121ce00d0a646078df15aee77ce0b4e170</p></main></html>

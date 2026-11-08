@@ -1,0 +1,65 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/geqo/geqo_pool.cpp:146-209</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/geqo/geqo_pool.cpp:146-209</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre> *	 assumes best-&gt;worst = smallest-&gt;largest
+ */
+void spread_chromo(PlannerInfo* root, Chromosome* chromo, Pool* pool)
+{
+    int top, mid, bot;
+    int i, index;
+    Chromosome swap_chromo, tmp_chromo;
+
+    /* new chromo is so bad we can&#x27;t use it */
+    if (chromo-&gt;worth &gt; pool-&gt;data[pool-&gt;size - 1].worth)
+        return;
+
+    /* do a binary search to find the index of the new chromo */
+    top = 0;
+    mid = pool-&gt;size / 2;
+    bot = pool-&gt;size - 1;
+    index = -1;
+
+    while (index == -1) {
+        /* these 4 cases find a new location */
+        if (chromo-&gt;worth &lt;= pool-&gt;data[top].worth) {
+            index = top;
+        } else if (chromo-&gt;worth - pool-&gt;data[mid].worth == 0) {
+            index = mid;
+        } else if (chromo-&gt;worth - pool-&gt;data[bot].worth == 0) {
+            index = bot;
+        } else if (bot - top &lt;= 1) {
+            index = bot;
+        } else if (chromo-&gt;worth &lt; pool-&gt;data[mid].worth) {
+        /*
+         * these 2 cases move the search indices since a new location has not
+         * yet been found.
+         */
+            bot = mid;
+            mid = top + ((bot - top) / 2);
+        } else { /* (chromo-&gt;worth &gt; pool-&gt;data[mid].worth) */
+            top = mid;
+            mid = top + ((bot - top) / 2);
+        }
+    } /* ... while */
+
+    /* now we have index for chromo */
+    /*
+     * move every gene from index on down one position to make room for chromo
+     */
+    /*
+     * copy new gene into pool storage; always replace worst gene in pool
+     */
+    geqo_copy(root, &amp;pool-&gt;data[pool-&gt;size - 1], chromo, pool-&gt;string_length);
+
+    swap_chromo.string = pool-&gt;data[pool-&gt;size - 1].string;
+    swap_chromo.worth = pool-&gt;data[pool-&gt;size - 1].worth;
+
+    for (i = index; i &lt; pool-&gt;size; i++) {
+        tmp_chromo.string = pool-&gt;data[i].string;
+        tmp_chromo.worth = pool-&gt;data[i].worth;
+
+        pool-&gt;data[i].string = swap_chromo.string;
+        pool-&gt;data[i].worth = swap_chromo.worth;
+
+        swap_chromo.string = tmp_chromo.string;
+        swap_chromo.worth = tmp_chromo.worth;
+    }
+}
+</pre><p>evidence:9aa5c37f4ae13a97c6572c365deefe91</p><p>SHA-256 3af72b4b12dc81b3e42b6528c1175ac860b632241ceec8ad14ef83bec0cf9622</p></main></html>

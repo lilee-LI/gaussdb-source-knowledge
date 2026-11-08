@@ -1,0 +1,36 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/geqo/geqo_main.cpp:228-262</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/geqo/geqo_main.cpp:228-262</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>    best_tour = (Gene*)pool-&gt;data[0].string;
+
+    best_rel = gimme_tree(root, best_tour, pool-&gt;string_length);
+
+    /* DBG: show the query plan */
+#ifdef NOT_USED
+    print_plan(best_plan, root);
+#endif
+
+    /* ... free memory stuff */
+    free_chromo(root, momma);
+    free_chromo(root, daddy);
+
+#if defined(ERX)
+    free_edge_table(root, edge_table);
+#elif defined(PMX)
+    free_chromo(root, kid);
+#elif defined(CX)
+    free_chromo(root, kid);
+    free_city_table(root, city_table);
+#elif defined(PX)
+    free_chromo(root, kid);
+    free_city_table(root, city_table);
+#elif defined(OX1)
+    free_chromo(root, kid);
+    free_city_table(root, city_table);
+#elif defined(OX2)
+    free_chromo(root, kid);
+    free_city_table(root, city_table);
+#endif
+
+    free_pool(root, pool);
+
+    /* ... clear root pointer to our private storage */
+    root-&gt;join_search_private = NULL;
+</pre><p>evidence:9a052ad6da3709cd3dd8cd44993630a2</p><p>SHA-256 0916a11e98d8dc945ab7e9a3cdc2aab1cc4ad05a64727f9080f1e5d2a9412fa7</p></main></html>

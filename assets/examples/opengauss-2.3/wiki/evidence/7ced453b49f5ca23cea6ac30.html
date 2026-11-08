@@ -1,0 +1,12 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/sqlpatch/sqlpatch.cpp:751-761</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/sqlpatch/sqlpatch.cpp:751-761</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>bool CheckRecreateCachePlanBySqlPatch(const CachedPlanSource *plansource)
+{
+    if (t_thrd.proc-&gt;workingVersionNum &lt; SQL_PATCH_VERSION_NUM) {
+        return false;
+    }
+    if (u_sess-&gt;attr.attr_common.XactReadOnly) {
+        return false;
+    }
+    return plansource-&gt;sql_patch_sequence &lt;
+        pg_atomic_read_u64(&amp;g_instance.cost_cxt.sql_patch_sequence_id);
+}
+</pre><p>evidence:841936ca2c14996525e87f0e3b880d51</p><p>SHA-256 1f60fa2ed72ad45d2bc8d0a519bd5433d83cbbaab8af1b04b000a44525d417b7</p></main></html>

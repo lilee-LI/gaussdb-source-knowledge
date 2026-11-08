@@ -41,6 +41,31 @@ class ECSStudyTests(unittest.TestCase):
     def connect(self):
         return ecs.connect(self.hub,self.config)["study_plan"]
 
+    def test_explicit_product_declaration_preserves_original_ecs_binding(self):
+        self.config["product"] = "openGauss"
+        self.config["ecs_index"]["graph_storage"] = "reference"
+        original = hashlib.sha256(self.db.read_bytes()).hexdigest()
+        plan = self.connect()
+        snapshot = self.hub.record("snapshots",plan["snapshot"])
+        self.assertEqual(snapshot["product"],"openGauss")
+        self.assertEqual(snapshot["source_index"]["run_id"],self.origin["run_id"])
+        self.assertEqual(hashlib.sha256(self.db.read_bytes()).hexdigest(),original)
+        event = self.hub.db.execute("SELECT data FROM events WHERE kind='ecs_product_declaration'").fetchone()
+        self.assertIsNotNone(event)
+        self.assertEqual(json.loads(event[0])["declared_product"],"openGauss")
+
+    def test_query_role_symbol_lookup_returns_bound_ids_without_large_payloads(self):
+        from unified_knowledge import service
+        self.config["ecs_index"]["graph_storage"]="reference"
+        plan=self.connect()
+        result=service.invoke(self.hub,"lookup_symbols",{"run":plan["study_run"],"query":"cg_compute","limit":10})
+        self.assertTrue(result["symbols"])
+        self.assertTrue(all(s["name"]=="cg_compute" and s["id"].startswith("symbol-instance:") for s in result["symbols"]))
+        self.assertTrue(all("contexts" not in s and "type_observations" not in s for s in result["symbols"]))
+        self.assertEqual(self.hub.db.execute("SELECT count(*) FROM main.symbols").fetchone()[0],0)
+        with self.assertRaises(ValueError):
+            service.invoke(self.hub,"lookup_symbols",{"run":"not-the-bound-run","query":"cg_compute"})
+
     def test_readonly_graph_cross_file_calls_and_disconnected_kit(self):
         original = hashlib.sha256(self.db.read_bytes()).hexdigest()
         self.config["ecs_index"]["graph_storage"] = "reference"

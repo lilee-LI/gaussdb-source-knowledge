@@ -6,6 +6,7 @@ import json
 import sqlite3
 from pathlib import Path
 import sys
+import traceback
 
 from . import __version__, study
 from .changes import analyze_change
@@ -18,6 +19,10 @@ from .store import Store, canonical, require
 
 
 QUERY_TOOLS = {
+    "reference_knowledge": "Read up to 24 exact reviewed knowledge/reference units by ID, including signed coordinator references in a member workspace.",
+    "program_status": "Read the whole-repository program, per-module evidence coverage, or acceptance blockers. Inventory is not learned knowledge.",
+    "module_assets": "Page the full assigned module asset ledger; includes files without feature leads and unreadable materials.",
+    "lookup_symbols": "Find real symbol IDs and bounded definition/evidence locations by name; does not infer calls or return per-TU payloads.",
     "feature_candidates": "List evidence-backed feature leads and their current research or review state.",
     "navigate_code": "Look up callers and callees in the bound ECS graph or the configured repository navigation provider.",
     "study_plan": "List module boundaries, research tasks, assignments and next steps in the current project.",
@@ -33,12 +38,19 @@ QUERY_TOOLS = {
     "knowledge_delta": "Compare semantic content and source bindings across frozen knowledge revisions.",
 }
 WORK_TOOLS = {
+    "read_research_drafts": "Read this active lease's unreviewed units and unit_hash values to resume or repair drafts; bounded pages, never accepts knowledge.",
+    "search_source": "Search frozen module/extra materials for a literal, or explicit asset glob patterns; bounded to 200 files per page. Results are locations, not read receipts.",
+    "read_source": "Read 1..400 lines of a frozen source/material with an actual task receipt; returns total_lines and next_line.",
+    "stage_progress": "Stage versioned asset/lead dispositions, mechanism proposals, contract endpoints and gaps. Does not approve coverage. Use the returned progress_digest in finish_research.",
     "request_refresh": "Enqueue an idempotent concrete knowledge-gap task; does not execute a model or approve knowledge.",
     "plan_tasks": "Preview or apply a bounded research-task batch using the bound product adapter; never accepts knowledge.",
     "planning_feedback": "Record evidence-backed new, merged or split candidates and research gaps for subsequent task planning.",
     "focus_module": "Create a bounded module research task. ECS plans reuse indexed symbols and evidence.",
     "next_tasks": "Find research tasks whose dependencies are accepted.",
     "claim_task": "Claim a research task with a real lease.",
+    "renew_task": "Renew this worker's active lease; requires the current token and does not create a new attempt.",
+    "checkpoint_task": "Record a progress checkpoint for this active lease; staged units remain unreviewed.",
+    "release_task": "Release this active lease for later work; does not accept or delete research.",
     "task_context": "Read the immutable research scope, methods and evidence references.",
     "read_task_evidence": "Actually read evidence for this task and record its complete/truncated receipt.",
     "create_task_evidence": "Create a bounded evidence anchor inside this task's frozen snapshot.",
@@ -47,6 +59,27 @@ WORK_TOOLS = {
     "finish_research": "Check staged units and submit coverage for review using the latest drafts_digest; no automatic approval.",
 }
 REVIEW_TOOLS = {"review_context": "Read proposal and evidence for an explicitly identified reviewer."}
+
+
+def progress_schema():
+    strings={"type":"array","items":{"type":"string"}}
+    def row(properties,required):return {"type":"array","items":{"type":"object","properties":properties,"required":required}}
+    text={"type":"string"}
+    return {"type":"object","properties":{
+        "program":text,"inventory_complete":{"type":"boolean"},
+        "assets":row({"asset":text,"disposition":{"type":"string","enum":["studied","partial","supporting","excluded","deferred"]},
+                      "reason":text,"unit_ids":strings,"evidence_refs":strings,"reuse":{"type":"boolean"}},["asset","disposition","reason"]),
+        "leads":row({"candidate_id":text,"state":{"type":"string","enum":["mapped","research","excluded","deferred"]},
+                     "reason":text,"unit_ids":strings,"proposal_ids":strings,"evidence_refs":strings},["candidate_id","state","reason","evidence_refs"]),
+        "proposals":row({"id":text,"title":text,"question":text,"owner_module":text,"reason":text,"depends_on":strings,"supersedes":strings,
+                         "evidence":row({"asset":text,"start":{"type":"integer","minimum":1},"end":{"type":"integer","minimum":1}},["asset","start","end"])},
+                        ["id","title","question","owner_module","reason","evidence"]),
+        "contracts":row({"unit":text,"side":{"type":"string","enum":["producer","consumer"]},"module":text,
+                         "producer_module":text,"consumer_module":text,"reason":text,"evidence_refs":strings},
+                        ["unit","side","module","producer_module","consumer_module","reason","evidence_refs"]),
+        "gaps":row({"question":text,"reason":text,"resolved_by":strings},["question","reason"]),
+        "templates":row({"id":text,"state":{"type":"string","enum":["verified","not_applicable"]},"reason":text,
+                         "evidence_refs":strings,"unit_ids":strings},["id","state","reason","evidence_refs"])},"additionalProperties":False}
 
 
 def tools(role="query"):
@@ -62,6 +95,16 @@ def tools(role="query"):
         "diff_ref": {"type": "string"},
     }
     schemas = {
+        "read_research_drafts": ({"task":{"type":"string"},"worker":{"type":"string"},"token":{"type":"string"},"ids":{"type":"array","items":{"type":"string"}},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":10}},["task","worker","token"]),
+        "reference_knowledge": ({"ids":{"type":"array","items":{"type":"string"}}},["ids"]),
+        "search_source": ({"task":{"type":"string"},"worker":{"type":"string"},"token":{"type":"string"},"query":{"type":"string"},"asset_patterns":{"type":"array","items":{"type":"string"}},"limit":{"type":"integer","minimum":1,"maximum":100},"offset":{"type":"integer","minimum":0},"line_offset":{"type":"integer","minimum":0}},["task","worker","token","query"]),
+        "program_status": ({"module":{"type":"string"},"audit":{"type":"boolean"}}, []),
+        "module_assets": ({"module":{"type":"string"},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":200}}, ["module"]),
+        "read_source": ({"task":{"type":"string"},"worker":{"type":"string"},"token":{"type":"string"},"asset":{"type":"string"},"start":{"type":"integer","minimum":1},"lines":{"type":"integer","minimum":1,"maximum":400}}, ["task","worker","token","asset"]),
+        "stage_progress": ({"task":{"type":"string"},"worker":{"type":"string"},"token":{"type":"string"},"report":progress_schema(),"previous_digest":{"type":"string"}}, ["task","worker","token","report"]),
+        "lookup_symbols": ({"run":{"type":"string"},"query":{"type":"string"},
+                            "assets":{"type":"array","items":{"type":"string"}},
+                            "limit":{"type":"integer","minimum":1,"maximum":100}}, ["run","query"]),
         "plan_tasks": ({"modules": {"type":"array","items":{"type":"string"}}, "max_tasks":{"type":"integer","minimum":1,"maximum":500},
                          "files_per_task":{"type":"integer","minimum":1,"maximum":40},"apply":{"type":"boolean"}}, []),
         "planning_feedback": ({"proposal":{"type":"object"}}, ["proposal"]),
@@ -90,6 +133,11 @@ def tools(role="query"):
         "request_refresh": (context_properties, ["source_snapshot"]),
         "next_tasks": ({"run": {"type": "string"}, "limit": {"type": "integer"}}, ["run"]),
         "claim_task": ({"task": {"type": "string"}, "worker": {"type": "string"}, "seconds": {"type": "integer"}}, ["task", "worker"]),
+        "renew_task": ({"task":{"type":"string"},"worker":{"type":"string"},"token":{"type":"string"},
+                        "seconds":{"type":"integer","minimum":1,"maximum":86400}}, ["task","worker","token"]),
+        "checkpoint_task": ({"task":{"type":"string"},"worker":{"type":"string"},"token":{"type":"string"},
+                             "checkpoint":{"type":"object"}}, ["task","worker","token","checkpoint"]),
+        "release_task": ({"task":{"type":"string"},"worker":{"type":"string"},"token":{"type":"string"}}, ["task","worker","token"]),
         "task_context": ({"task": {"type": "string"}}, ["task"]),
         "read_task_evidence": ({"task": {"type": "string"}, "worker": {"type": "string"}, "token": {"type": "string"},
                                "evidence": {"type": "string"}, "max_chars": {"type": "integer"}}, ["task", "worker", "token", "evidence"]),
@@ -97,12 +145,15 @@ def tools(role="query"):
                             ["task", "worker", "token", "result"]),
         "stage_research_unit": ({"task": {"type": "string"}, "worker": {"type": "string"}, "token": {"type": "string"},
                                  "unit": {"type":"object","properties":{
+                                     "id":{"type":"string"},"kind":{"type":"string","enum":["module","responsibility","feature","mechanism","claim","contract","flow","test_obligation","requirement","observation","decision"]},
+                                     "title":{"type":"string"},"body":{"type":"string"},
+                                     "steps":{"type":"array","items":{"type":"object","properties":{"kind":{"type":"string","enum":["call","data_stage","state_transition","async_message"]},"symbol":{"type":"string","description":"Real caller symbol ID, required for kind=call"},"target":{"type":"string","description":"Real callee symbol ID, required for kind=call"},"detail":{"type":"string"}},"required":["kind"]}},
                                      "expected_from":{"type":"object","properties":{"kind":{"type":"string","enum":["contract","claim","requirement","source_prediction"]},
                                      "ref":{"type":"string"}},"required":["kind","ref"]}}}, "previous_hash": {"type": "string"}}, ["task", "worker", "token", "unit"]),
         "finish_research": ({"task": {"type": "string"}, "worker": {"type": "string"}, "token": {"type": "string"},
                              "coverage": {"type":"array","items":{"type":"object","properties":{"question":{"type":"string"},
                              "status":{"type":"string","enum":["answered","open","not_applicable"]},"explanation":{"type":"string"},
-                             "evidence_refs":{"type":"array","items":{"type":"string"}}},"required":["question","status","explanation"]}}, "drafts_digest": {"type": "string"}}, ["task", "worker", "token", "coverage", "drafts_digest"]),
+                             "evidence_refs":{"type":"array","items":{"type":"string"}}},"required":["question","status","explanation"]}}, "drafts_digest": {"type": "string"},"progress_digest":{"type":"string"}}, ["task", "worker", "token", "coverage"]),
         "create_task_evidence": ({"task": {"type": "string"}, "worker": {"type": "string"}, "token": {"type": "string"},
                                   "asset": {"type": "string"}, "start": {"type": "integer"}, "end": {"type": "integer"}},
                                  ["task", "worker", "token", "asset", "start", "end"]),
@@ -137,6 +188,29 @@ def invoke(store, name, values, *, role="query"):
     specification = next((t for t in tools(role) if t["name"] == name), None)
     require(specification is not None, "Tool unavailable for this role")
     _validate(values, specification["inputSchema"])
+    if name=='read_research_drafts':
+        from .planner import read_research_drafts
+        return read_research_drafts(store,**values)
+    if name=='reference_knowledge':
+        from .whole import reference_units
+        require(1<=len(values['ids'])<=24,'Read 1..24 reference knowledge IDs')
+        return {'units':reference_units(store,values['ids']),'semantic_approval':'references retain their original review and binding'}
+    if name in {'get_context','find_knowledge','explain_path','test_obligations','request_refresh'} and store.get_meta('study_head'):
+        bound=study.current(store)
+        if values.get('source_snapshot')==bound['snapshot']:
+            values={**values};values.setdefault('build_profile',bound['profile']);values.setdefault('index_run',bound['run'])
+    if name in {'program_status','module_assets','stage_progress','read_source','search_source'}:
+        from . import whole
+        if name=='program_status':return whole.audit(store,values.get('module')) if values.get('audit') else whole.status(store,values.get('module'))
+        return getattr(whole,name)(store,**values)
+    if name == "lookup_symbols":
+        store.record("runs",values["run"])
+        limit=values.get("limit",20)
+        rows=store.lookup_symbols(values["run"],values["query"],assets=values.get("assets"),limit=limit+1)
+        fields=("id","name","kind","asset","start","end","evidence","definition","resolution")
+        return {"run":values["run"],"query":values["query"],"symbols":[
+            {k:s.get(k) for k in fields} for r in rows[:limit] for s in [json.loads(r["data"])]],
+            "truncated":len(rows)>limit,"semantic_completeness":"not_certified"}
     if name == "plan_tasks":
         from .task_planning import construct
         return construct(store, **values)
@@ -161,6 +235,9 @@ def invoke(store, name, values, *, role="query"):
     if name == "find_knowledge":
         return search(store, {k: v for k, v in values.items() if k != "limit"}, limit=values.get("limit", 12))
     if name == "query_graph":
+        if values.get('kinds'):
+            aliases={'call':'CALLS','calls':'CALLS'}
+            values={**values,'kinds':[aliases.get(k,k) for k in values['kinds']]}
         return query_graph(store, **values)
     if name == "read_evidence":
         return store.read_evidence(**values)
@@ -182,6 +259,8 @@ def invoke(store, name, values, *, role="query"):
         return next_tasks(store, **values)
     if name == "claim_task":
         return lease(store, **values)
+    if name in {"renew_task","checkpoint_task","release_task"}:
+        return lease(store, action={"renew_task":"renew","checkpoint_task":"checkpoint","release_task":"release"}[name], **values)
     if name == "task_context":
         return task_context(store, **values)
     if name == "read_task_evidence":
@@ -223,7 +302,13 @@ def stdio(home, role="query", incoming=None, outgoing=None):
                     with Store(home, readonly=(role == "query" and args.get("name") != "request_refresh")) as store:
                         data = invoke(store, args.get("name"), args.get("arguments", {}), role=role)
                     result = {"content": [{"type": "text", "text": json.dumps(data, ensure_ascii=False)}], "isError": False}
-                except (OSError, ValueError, KeyError, TypeError, sqlite3.Error) as error:
+                except Exception as error:
+                    # Keep malformed model payloads from killing the MCP connection;
+                    # diagnostics are local and contain no request/token dump.
+                    try:
+                        with (Path(home)/'mcp-errors.log').open('a',encoding='utf-8') as diagnostics:
+                            diagnostics.write(traceback.format_exc()+'\n')
+                    except OSError:pass
                     result = {"content": [{"type": "text", "text": canonical({"error": str(error)})}], "isError": True}
             else:
                 raise ValueError("Unsupported MCP method")

@@ -1,0 +1,92 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/path/allpaths.cpp:3320-3410</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/path/allpaths.cpp:3320-3410</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>            (errmodule(MOD_OPT),
+                errcode(ERRCODE_OPTIMIZER_INCONSISTENT_STATE),
+                (errmsg(&quot;could not find plan for CTE \&quot;%s\&quot; when set worktable pathlist&quot;, rte-&gt;ctename))));
+
+    /* Mark rel with estimated output rows, width, etc */
+    set_cte_size_estimates(root, rel, cteplan);
+
+    /* Generate appropriate path */
+    add_path(root, rel, create_worktablescan_path(root, rel));
+
+    /* Select cheapest path (pretty easy in this case...) */
+    set_cheapest(rel);
+}
+
+/*
+ * make_rel_from_joinlist
+ *	  Build access paths using a &quot;joinlist&quot; to guide the join path search.
+ *
+ * See comments for deconstruct_jointree() for definition of the joinlist
+ * data structure.
+ */
+static RelOptInfo* make_rel_from_joinlist(PlannerInfo* root, List* joinlist)
+{
+    int levels_needed;
+    List* initial_rels = NIL;
+    ListCell* jl = NULL;
+
+    /*
+     * Count the number of child joinlist nodes.  This is the depth of the
+     * dynamic-programming algorithm we must employ to consider all ways of
+     * joining the child nodes.
+     */
+    levels_needed = list_length(joinlist);
+    if (levels_needed &lt;= 0)
+        return NULL; /* nothing to do? */
+
+    /*
+     * Construct a list of rels corresponding to the child joinlist nodes.
+     * This may contain both base rels and rels constructed according to
+     * sub-joinlists.
+     */
+    initial_rels = NIL;
+    foreach (jl, joinlist) {
+        Node* jlnode = (Node*)lfirst(jl);
+        RelOptInfo* thisrel = NULL;
+
+        if (IsA(jlnode, RangeTblRef)) {
+            int varno = ((RangeTblRef*)jlnode)-&gt;rtindex;
+
+            thisrel = find_base_rel(root, varno);
+        } else if (IsA(jlnode, List)) {
+            /* Recurse to handle subproblem */
+            thisrel = make_rel_from_joinlist(root, (List*)jlnode);
+        } else {
+            ereport(ERROR,
+                (errmodule(MOD_OPT),
+                    errcode(ERRCODE_UNRECOGNIZED_NODE_TYPE),
+                    (errmsg(&quot;unrecognized joinlist node type when build access paths by joinlist: %d&quot;,
+                        (int)nodeTag(jlnode)))));
+            thisrel = NULL; /* keep compiler quiet */
+        }
+
+        initial_rels = lappend(initial_rels, thisrel);
+    }
+
+    if (levels_needed == 1) {
+        /*
+         * Single joinlist node, so we&#x27;re done.
+         */
+        return (RelOptInfo*)linitial(initial_rels);
+    } else {
+        /*
+         * Consider the different orders in which we could join the rels,
+         * using a plugin, GEQO, or the regular join search code.
+         *
+         * We put the initial_rels list into a PlannerInfo field because
+         * has_legal_joinclause() needs to look at it (ugly :-().
+         */
+        root-&gt;initial_rels = initial_rels;
+
+        if (u_sess-&gt;attr.attr_sql.enable_geqo &amp;&amp; levels_needed &gt;= u_sess-&gt;attr.attr_sql.geqo_threshold)
+            return geqo(root, levels_needed, initial_rels);
+        else
+            return standard_join_search(root, levels_needed, initial_rels);
+    }
+}
+
+/*
+ * standard_join_search
+ *	  Find possible joinpaths for a query by successively finding ways
+ *	  to join component relations into join relations.
+</pre><p>evidence:89fdb501ecd6c164fed7fd14a68cf1e2</p><p>SHA-256 7401d7d03eeb53590700bb10913a04361a8fabb8baeb8e706992b0e868369b85</p></main></html>

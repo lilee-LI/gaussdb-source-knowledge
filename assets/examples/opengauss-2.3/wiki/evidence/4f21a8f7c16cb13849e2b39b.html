@@ -1,0 +1,50 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/geqo/geqo_main.cpp:152-200</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/geqo/geqo_main.cpp:152-200</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>#endif
+
+    /* my pain main part: */
+    /* iterative optimization */
+    for (generation = 0; generation &lt; number_generations; generation++) {
+        /* SELECTION: using linear bias function */
+        geqo_selection(root, momma, daddy, pool, u_sess-&gt;attr.attr_sql.Geqo_selection_bias);
+
+#if defined(ERX)
+        /* EDGE RECOMBINATION CROSSOVER */
+        gimme_edge_table(root, momma-&gt;string, daddy-&gt;string, pool-&gt;string_length, edge_table);
+
+        kid = momma;
+
+        /* are there any edge failures ? */
+        edge_failures += gimme_tour(root, edge_table, kid-&gt;string, pool-&gt;string_length);
+#elif defined(PMX)
+        /* PARTIALLY MATCHED CROSSOVER */
+        pmx(root, momma-&gt;string, daddy-&gt;string, kid-&gt;string, pool-&gt;string_length);
+#elif defined(CX)
+        /* CYCLE CROSSOVER */
+        cycle_diffs = cx(root, momma-&gt;string, daddy-&gt;string, kid-&gt;string, pool-&gt;string_length, city_table);
+        /* mutate the child */
+        if (cycle_diffs == 0) {
+            mutations++;
+            geqo_mutation(root, kid-&gt;string, pool-&gt;string_length);
+        }
+#elif defined(PX)
+        /* POSITION CROSSOVER */
+        px(root, momma-&gt;string, daddy-&gt;string, kid-&gt;string, pool-&gt;string_length, city_table);
+#elif defined(OX1)
+        /* ORDER CROSSOVER */
+        ox1(root, momma-&gt;string, daddy-&gt;string, kid-&gt;string, pool-&gt;string_length, city_table);
+#elif defined(OX2)
+        /* ORDER CROSSOVER */
+        ox2(root, momma-&gt;string, daddy-&gt;string, kid-&gt;string, pool-&gt;string_length, city_table);
+#endif
+
+        /* EVALUATE FITNESS */
+        kid-&gt;worth = geqo_eval(root, kid-&gt;string, pool-&gt;string_length);
+
+        /* push the kid into the wilderness of life according to its worth */
+        spread_chromo(root, kid, pool);
+
+#ifdef GEQO_DEBUG
+        if (status_interval &amp;&amp; !(generation % status_interval))
+            print_gen(stdout, pool, generation);
+#endif
+    }
+</pre><p>evidence:94dfac4121f1a9e1fc09aaf69b7b78dc</p><p>SHA-256 3967045d6f941abefb20d2925fc7ca6e745141aeadf7021aaec93e8046fd60fb</p></main></html>

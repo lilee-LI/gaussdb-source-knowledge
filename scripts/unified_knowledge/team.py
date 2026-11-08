@@ -98,8 +98,11 @@ def open_order(store, order):
 
 
 def _refs(result):
-    return {r for c in result["coverage"] for r in c.get("evidence_refs", [])} | {
+    refs={r for c in result["coverage"] for r in c.get("evidence_refs", [])} | {
         r for c in result.get("claims", []) for r in c.get("source_refs", [])}
+    refs.update(r for section in result.get('progress',{}).values() if isinstance(section,list)
+                for item in section if isinstance(item,dict) for r in item.get('evidence_refs',[]))
+    return refs
 
 
 def _environment(store, snapshot, profile):
@@ -137,6 +140,18 @@ def _signed(secret, payload):
     return hmac.new(bytes.fromhex(secret), canonical(payload).encode("utf-8"), hashlib.sha256).hexdigest()
 
 
+def _read_packet(path):
+    """Limit decompression without reserving 256 MiB for every tiny module packet."""
+    blocks=[];length=0
+    with gzip.open(path,'rb') as stream:
+        while True:
+            block=stream.read(1024*1024)
+            if not block:break
+            length+=len(block);require(length<=256*1024**2,'Split this packet into smaller module batches')
+            blocks.append(block)
+    return json.loads(b''.join(blocks))
+
+
 def export_result(store, order, task, output):
     local = open_order(store, order)
     ticket = store.get_meta("local-order:" + local["assignment"])["ticket"]
@@ -148,14 +163,15 @@ def export_result(store, order, task, output):
     result = t["result"]
     require(result["worker"] == ticket["worker"] and t["profile"] == ticket["profile"], "Worker or profile mismatch")
     run = store.record("runs", t["run"])
-    require(run.get("mode") in {"inventory", "selected", "ecs", "ecs_module"}, "Work orders return bounded module results")
+    require(run.get("mode") in {"inventory", "selected", "ecs", "ecs_module",'source_only'}, "Work orders return bounded module results")
     evidence = {r: store.record("anchors", r) for r in _refs(result)}
     for ref, anchor in evidence.items():
         receipt = store.db.execute("SELECT 1 FROM events WHERE kind='evidence_read' AND json_extract(data,'$.task')=? "
             "AND json_extract(data,'$.worker')=? AND json_extract(data,'$.evidence')=? "
             "AND json_extract(data,'$.quote_sha256')=? AND json_extract(data,'$.truncated')=0",
             (task, result["worker"], ref, anchor["quote_sha256"])).fetchone()
-        require(receipt and store.evidence_in_scope(anchor, t["snapshot"]), "Missing worker evidence receipt")
+        reuse={r for item in result.get('progress',{}).get('assets',[]) if item.get('reuse') for r in item.get('evidence_refs',[])}
+        require((receipt or ref in reuse) and store.evidence_in_scope(anchor, t["snapshot"]), "Missing worker evidence receipt")
     symbols = {}
     stack = list(result.get("claims", []))
     while stack:
@@ -185,6 +201,10 @@ def export_result(store, order, task, output):
             "evidence": evidence, "coverage": result["coverage"], "claims": result.get("claims", []),
             **({"candidate_id":t["bundle"]["candidate_id"]} if t["bundle"].get("candidate_id") else {}),
             "submission_digest": digest(result)}
+    coordinator=t['bundle'].get('coordinator_task') or next((k for k,v in store.get_meta('coordinator-task-map',{}).items() if v==task),None)
+    data.update(task_kind=t['kind'],coordinator_task=coordinator,program_item=t['bundle'].get('program_item'),
+                question=t['bundle'].get('question'),progress=result.get('progress'),
+                reference_epoch=store.get_meta('synced-references:'+ticket['id'],{}).get('epoch'))
     packet = {"data": data, "hmac": _signed(ticket["secret"], data)}
     atomic_write(output, gzip.compress(canonical(packet).encode("utf-8"), mtime=0))
     return {"file": str(output), "module": ticket["module"], "claims": len(data["claims"]),
@@ -203,7 +223,7 @@ def _translate(value, mapping):
     return value
 
 
-def _check_conflicts(store, ticket, claims):
+def _check_conflicts(store, ticket, claims, epoch=None):
     ids = {c["id"] for c in claims}
     for unit in claims:
         ids.update(link["target"] for link in unit.get("knowledge_refs", []))
@@ -214,16 +234,16 @@ def _check_conflicts(store, ticket, claims):
             ids.add(expected["ref"])
     base = store.units(ticket["base_revision"], ids=sorted(ids)) if ticket["base_revision"] else {}
     current = store.units(ids=sorted(ids))
+    issued=store.get_meta('issued-reference:'+ticket['id']+':'+str(epoch)) if epoch else None
+    require(not epoch or issued,'Unknown coordinator reference epoch')
     for uid in ids:
-        require((content_hash(base[uid]) if uid in base else None) == (content_hash(current[uid]) if uid in current else None),
+        expected=issued['hashes'].get(uid) if issued and uid in issued['hashes'] else content_hash(base[uid]) if uid in base else None
+        require(expected == (content_hash(current[uid]) if uid in current else None),
                 "Knowledge changed since assignment; reconcile unit: " + uid)
 
 
 def receive(store, path, jobs=2):
-    with gzip.open(path, "rb") as stream:
-        raw = stream.read(256 * 1024 * 1024 + 1)
-    require(len(raw) <= 256 * 1024 * 1024, "Split this result into smaller research batches")
-    packet = json.loads(raw)
+    packet = _read_packet(path)
     data = packet["data"]
     key = store.get_meta(data["order"])
     active = store.get_meta(key) if key else None
@@ -238,8 +258,7 @@ def receive(store, path, jobs=2):
     existing = store.get_meta(receipt_id)
     if existing:
         return {**existing, "replayed": True}
-    require(not active.get("received_task"), "A different result was received; issue a new work order for the next batch")
-    _check_conflicts(store, ticket, data["claims"])
+    _check_conflicts(store, ticket, data["claims"],data.get('reference_epoch'))
     snapshot, profile = plan["snapshot"], plan["profile"]
     run = store.record("runs", plan["run"])
     files = data["selected_files"]
@@ -273,8 +292,7 @@ def receive(store, path, jobs=2):
         require(active["id"] == ticket["id"], "Assignment changed during receipt")
         if store.get_meta(receipt_id):
             return {**store.get_meta(receipt_id), "replayed": True}
-        require(not active.get("received_task"), "Another result won the assignment")
-        _check_conflicts(store, ticket, data["claims"])
+        _check_conflicts(store, ticket, data["claims"],data.get('reference_epoch'))
         mapping = {}
         for ref, a in data["evidence"].items():
             require(a["id"] == ref and (a["snapshot"] == data["origin_snapshot"] or (plan.get("source_index") and
@@ -301,12 +319,26 @@ def receive(store, path, jobs=2):
         cid = data.get("candidate_id")
         if cid:
             from .catalog import candidate
+            lead=candidate(plan,cid,store)
+        prior_origin=active.get('origins',{}).get(data['origin_task'])
+        other=None
+        target=data.get('coordinator_task') or (prior_origin or {}).get('task')
+        if not target and data.get('task_kind')=='module_survey':target=plan['modules'][ticket['module']]['task']
+        if not target and data.get('program_item'):
+            target=next((t['id'] for t in (dict(r) for r in store.db.execute("SELECT id,data FROM tasks WHERE snapshot=?",(snapshot,)))
+                         if json.loads(t['data'])['bundle'].get('plan_id')==plan['id'] and json.loads(t['data'])['bundle'].get('program_item')==data['program_item']),None)
+        if target:
+            other=store.db.execute('SELECT id,status,attempt,data FROM tasks WHERE id=?',(target,)).fetchone()
+            require(other and other['status'] in {'queued','needs_research'} and json.loads(other['data'])['bundle'].get('module')==ticket['module'],
+                    'Coordinator task is active, submitted, accepted, or outside this module')
+        elif cid:
+            from .catalog import candidate
             lead = candidate(plan,cid,store)
             require(lead["owner_module"] in (None,ticket["module"]),"Candidate belongs to a different module")
             other = store.db.execute("SELECT id,status,attempt,data FROM tasks WHERE snapshot=? AND json_extract(data,'$.bundle.plan_id')=? "
                         "AND json_extract(data,'$.bundle.candidate_id')=?",(snapshot,plan["id"],cid)).fetchone()
             if other:
-                require(other["status"]=="queued" and other["attempt"]==0 and
+                require(other["status"] in {'queued','needs_research'} and
                         json.loads(other["data"])["bundle"]["module"]==ticket["module"],
                         "Candidate already has active or reviewed work; resolve it before importing another result")
         coverage = _translate(data["coverage"], mapping)
@@ -320,18 +352,29 @@ def receive(store, path, jobs=2):
         bundle={"module":ticket["module"],"plan_id":plan["id"],"order":ticket["id"],"receipt":receipt_id,
                 **({"candidate_id":cid} if cid else {}),"question":lead["question"] if cid else "审阅模块发现、跨模块边界和缺口",
                 "source_anchor_refs":list(mapping[r] for r in data["evidence"])}
-        if cid and other:
+        if data.get('program_item'):bundle['program_item']=data['program_item']
+        bundle['reference_epoch']=data.get('reference_epoch')
+        if other:
             tid = other["id"]
             prior = json.loads(other["data"])
             prior["bundle"].update(bundle)
             store.db.execute("UPDATE tasks SET data=? WHERE id=?",(canonical(prior),tid))
         else:
-            tid = create_task(store,snapshot=snapshot,run=run["id"],profile=profile,kind="remote_module_research",bundle=bundle)
+            tid = create_task(store,snapshot=snapshot,run=run["id"],profile=profile,kind=data.get('task_kind') or "remote_module_research",bundle=bundle)
         result = {"worker": data["worker"], "task": tid, "submitted": now(), "coverage": coverage, "claims": claims,
                   "remote_submission": data["submission_digest"], "origin_task": data["origin_task"],
                   "read_provenance": "worker_receipts_rebound_to_coordinator_evidence", "database_execution": "not_run"}
+        if data.get('progress'):
+            from .whole import validate_progress
+            result['progress']=validate_progress(store,task_status(store,tid),_translate(data['progress'],mapping),
+                       {u['id']:u for u in claims},set(mapping[r] for r in data['evidence']),imported=True)
+        require(not store.db.execute("SELECT 1 FROM task_edges e JOIN tasks d ON e.dependency=d.id WHERE e.task=? AND d.status<>'accepted'",(tid,)).fetchone(),
+                'Coordinator prerequisites are not accepted; import and review upstream work first')
         store.db.execute("UPDATE tasks SET status='submitted',owner=?,result=? WHERE id=?", (data["worker"], canonical(result), tid))
         active["received_task"] = tid
+        active.setdefault('received_tasks',[])
+        if tid not in active['received_tasks']:active['received_tasks'].append(tid)
+        active.setdefault('origins',{})[data['origin_task']]={'task':tid,'submission':data['submission_digest']}
         store.set_meta(key, active)
         receipt = {"task": tid, "run": run["id"], "status": "submitted", "result_digest": digest(result),
                    "worker": data["worker"], "claims": len(claims), "semantic_approval": "pending_review",
@@ -348,9 +391,139 @@ def propose_task(store, task):
     order_id = t["bundle"].get("order")
     if order_id:
         active = store.get_meta(store.get_meta(order_id))
-        require(active["id"] == order_id and active["received_task"] == task and
+        require(active["id"] == order_id and task in active.get('received_tasks',[active.get('received_task')]) and
                 active["ticket"]["snapshot"] == store.get_meta("snapshot_head"), "Assignment superseded")
-        _check_conflicts(store, active["ticket"], t["result"]["claims"])
+        _check_conflicts(store, active["ticket"], t["result"]["claims"],t['bundle'].get('reference_epoch'))
     return propose(store, {"author": t["result"]["worker"], "expected_head": expected_head,
                            "snapshot": t["snapshot"], "run": t["run"], "profile": t["profile"],
                            "research_tasks": [task], "units": t["result"]["claims"], "remote_order": order_id})
+
+
+def feedback(store,order,output,additions=()):
+    """Signed review outcomes and exact accepted reference versions for continuing work."""
+    import base64
+    ticket=read_json(order);active=store.get_meta(assignment_key(ticket['plan'],ticket['module']))
+    require(active and active['id']==ticket['id'] and ticket['snapshot']==store.get_meta('snapshot_head'),'Superseded feedback order')
+    outcomes=[];ids=set(ticket.get('references',{}))
+    for origin,item in active.get('origins',{}).items():
+        t=task_status(store,item['task'])
+        reviews=[json.loads(r[0]) for r in store.db.execute("SELECT data FROM events WHERE kind='research_review' AND json_extract(data,'$.task')=? ORDER BY id DESC LIMIT 1",(t['id'],))]
+        outcomes.append({'origin_task':origin,'hub_task':t['id'],'submission_digest':item['submission'],'status':t['status'],
+                         'review':reviews[0] if reviews else None})
+        if t['status']=='accepted':ids.update(u['id'] for u in t.get('result',{}).get('claims',[]))
+    dependencies=[]
+    for row in store.db.execute("SELECT DISTINCT d.id,d.status,d.result FROM tasks t JOIN task_edges e ON e.task=t.id JOIN tasks d ON d.id=e.dependency WHERE t.snapshot=? AND json_extract(t.data,'$.bundle.plan_id')=? AND json_extract(t.data,'$.bundle.module')=?",(ticket['snapshot'],ticket['plan'],ticket['module'])):
+        dependencies.append({'task':row['id'],'status':row['status']})
+        if row['status']=='accepted' and row['result']:ids.update(u['id'] for u in json.loads(row['result']).get('claims',[]))
+    task_delta=[]
+    for row in store.db.execute("SELECT id,kind,status,data FROM tasks WHERE snapshot=? AND json_extract(data,'$.bundle.plan_id')=? AND json_extract(data,'$.bundle.module')=? AND status IN ('queued','needs_research') ORDER BY id",(ticket['snapshot'],ticket['plan'],ticket['module'])):
+        task_delta.append({'id':row['id'],'kind':row['kind'],'status':row['status'],'bundle':json.loads(row['data'])['bundle'],
+                           'dependencies':[r[0] for r in store.db.execute('SELECT dependency FROM task_edges WHERE task=?',(row['id'],))]})
+    require(len(task_delta)<=500,'Split the module before synchronizing more than 500 pending tasks')
+    stubs=[]
+    for did in {d for t in task_delta for d in t['dependencies']}:
+        dep=task_status(store,did)
+        stubs.append({k:dep[k] for k in ('id','kind','status','bundle')})
+    # Pin the transitive knowledge context, including hierarchy and test oracles.
+    units={};pending=set(ids)
+    while pending:
+        found=store.units(ids=sorted(pending));pending=set()
+        units.update(found);require(len(units)<=1000,'Split reference synchronization into smaller module work orders')
+        for u in found.values():
+            wanted={x['target'] for x in u.get('knowledge_refs',[])}
+            if u.get('parent'):wanted.add(u['parent'])
+            if u.get('expected_from',{}).get('kind') not in (None,'source_prediction'):wanted.add(u['expected_from']['ref'])
+            pending.update(wanted-set(units))
+    anchors={r:store.record('anchors',r) for u in units.values() for r in u.get('source_refs',[])}
+    anchors.update({r:store.record('anchors',r) for t in task_delta for r in t['bundle'].get('source_anchor_refs',[])})
+    assets={a['asset']:store.asset(ticket['snapshot'],a['asset']) for a in anchors.values()}
+    require(len(set(additions))<=40,'At most 40 extra frozen materials per feedback packet')
+    for key in additions:
+        material=store.asset(ticket['snapshot'],key)
+        require(material['kind'] in {'source','document'} and material['status']=='frozen','Choose a frozen product material: '+key)
+        assets[key]=material
+    blobs={sha:base64.b64encode(store.blob(sha)).decode('ascii') for a in assets.values() for sha in {a.get('sha'),a.get('text_sha')}-{None}}
+    require(sum(len(v) for v in blobs.values())<=240*1024**2,'Reference material too large; narrow the order')
+    hashes={u:content_hash(v) for u,v in units.items()}
+    from .knowledge import freshness,UnitMap
+    plan=current(store);bound=UnitMap(store,store.get_meta('knowledge_head'),units)
+    applicable={uid:hashes[uid] for uid,u in units.items() if not freshness(store,u,ticket['snapshot'],plan['run'],bound)}
+    epoch=identity('reference-epoch',[ticket['id'],store.get_meta('knowledge_head'),hashes,outcomes,dependencies,task_delta,[(k,a['sha'],a.get('text_sha')) for k,a in sorted(assets.items())]])
+    data={'schema':'module-feedback/v1','order':ticket['id'],'snapshot':ticket['snapshot'],'profile':ticket['profile'],
+          'worker':ticket['worker'],'epoch':epoch,'revision':store.get_meta('knowledge_head'),'units':units,'anchors':anchors,
+          'source_index':plan.get('source_index'),'applicable_hashes':applicable,
+          'assets':assets,'extra_materials':sorted(set(additions)),'blobs':blobs,'outcomes':outcomes,'dependencies':dependencies,
+          'task_delta':task_delta,'dependency_stubs':stubs,'created':now()}
+    with store.transaction():
+        store.set_meta('issued-reference:'+ticket['id']+':'+epoch,{'hashes':hashes,'revision':data['revision']})
+    atomic_write(output,gzip.compress(canonical({'data':data,'hmac':_signed(ticket['secret'],data)}).encode('utf-8'),mtime=0))
+    return {'file':str(output),'epoch':epoch,'units':len(units),'outcomes':len(outcomes),'next':'成员执行 team sync --input 此反馈包，再 whole advance / whole next。'}
+
+
+def sync_feedback(store,path):
+    import base64
+    packet=_read_packet(path);data=packet['data'];local=store.get_meta('local-order:'+data['order'])
+    require(local and data.get('schema')=='module-feedback/v1','Unknown feedback order')
+    ticket=local['ticket'];plan=current(store)
+    require(hmac.compare_digest(packet['hmac'],_signed(ticket['secret'],data)) and data['worker']==ticket['worker'] and
+            data['snapshot']==ticket['snapshot'] and data['profile']==ticket['profile'],'Invalid feedback binding/signature')
+    receipt='feedback-receipt:'+data['epoch']
+    if store.get_meta(receipt):return {**store.get_meta(receipt),'replayed':True}
+    old=store.get_meta('synced-references:'+ticket['id'],{})
+    require(not old or data['created']>=old.get('created',''),'Older feedback cannot roll back references')
+    with store.transaction():
+        for sha,encoded in data['blobs'].items():require(store.put_blob(base64.b64decode(encoded,validate=True))==sha,'Feedback blob hash mismatch')
+        for key,a in data['assets'].items():
+            require(key==a['key'] and a.get('sha') in data['blobs'] or key==a['key'] and a['status']=='excluded','Feedback asset binding mismatch')
+            existing=store.db.execute('SELECT sha FROM assets WHERE snapshot=? AND key=?',(plan['snapshot'],key)).fetchone()
+            require(not existing or existing[0]==a['sha'],'Feedback source changed')
+            store.db.execute('INSERT OR IGNORE INTO assets VALUES(?,?,?,?,?,?,?,?)',(plan['snapshot'],key,a['repo'],a['path'],a['sha'],a['kind'],a['status'],canonical(a)))
+        for ref,a in data['anchors'].items():
+            mapped=store.anchor(plan['snapshot'],a['asset'],a['start'],a['end'],text_sha=a['sha'] if a['view']=='extracted' else None)
+            require(a['id']==ref and mapped['quote_sha256']==a['quote_sha256'] and store.evidence_in_scope(a,plan['snapshot']),'Feedback evidence mismatch')
+            store.db.execute('INSERT OR IGNORE INTO anchors VALUES(?,?,?,?,?,?,?)',(ref,a['snapshot'],a['asset'],a['sha'],a['start'],a['end'],canonical(a)))
+        require(all(u['id']==uid and u.get('review',{}).get('verdict')=='accept' for uid,u in data['units'].items()),'Feedback reference was not accepted')
+        require(data.get('source_index')==plan.get('source_index'),'Feedback global graph changed')
+        store.set_meta('synced-references:'+ticket['id'],{**{k:data[k] for k in ('units','epoch','revision','created','source_index','applicable_hashes')},
+            'extra_materials':sorted(set(old.get('extra_materials',[]))|set(data.get('extra_materials',[])))})
+        store._coverage_freshness={}
+        for dependency in data.get('dependencies',[]):
+            # External prerequisite stubs may advance only by the signed coordinator outcome.
+            row=store.db.execute('SELECT data FROM tasks WHERE id=?',(dependency['task'],)).fetchone()
+            if row and json.loads(row[0])['bundle'].get('module')!=ticket['module'] and dependency['status']=='accepted':
+                store.db.execute("UPDATE tasks SET status='accepted' WHERE id=?",(dependency['task'],))
+        mapping=store.get_meta('coordinator-task-map',{})
+        for item in data.get('task_delta',[]):
+            b=item['bundle'];require(b.get('module')==ticket['module'] and b.get('plan_id')==plan['id'],'Task delta outside assigned scope')
+            cid=b.get('candidate_id');local_id=mapping.get(item['id'])
+            if not local_id and cid:
+                row=store.db.execute("SELECT id FROM tasks WHERE snapshot=? AND json_extract(data,'$.bundle.plan_id')=? AND json_extract(data,'$.bundle.candidate_id')=?",(plan['snapshot'],plan['id'],cid)).fetchone()
+                local_id=row[0] if row else None
+            if not local_id:local_id=create_task(store,snapshot=plan['snapshot'],run=plan['run'],profile=plan['profile'],kind=item['kind'],bundle={**b,'coordinator_task':item['id']})
+            mapping[item['id']]=local_id
+        for stub in data.get('dependency_stubs',[]):
+            if stub['id'] not in mapping:
+                # Coordinator-only prerequisites remain read-only stubs for scheduling.
+                value={'id':stub['id'],'snapshot':plan['snapshot'],'run':plan['run'],'profile':plan['profile'],'kind':stub['kind'],'bundle':stub['bundle'],'created':data['created']}
+                store.db.execute('INSERT OR IGNORE INTO tasks(id,snapshot,run,profile,kind,status,data) VALUES(?,?,?,?,?,?,?)',
+                    (stub['id'],plan['snapshot'],plan['run'],plan['profile'],stub['kind'],'accepted' if stub['status']=='accepted' else 'blocked_external',canonical(value)))
+                mapping[stub['id']]=stub['id']
+        for item in data.get('task_delta',[]):
+            for dep in item['dependencies']:store.db.execute('INSERT OR IGNORE INTO task_edges VALUES(?,?)',(mapping[item['id']],mapping[dep]))
+        store.set_meta('coordinator-task-map',mapping)
+        updated=[]
+        for item in data['outcomes']:
+            t=task_status(store,item['origin_task'])
+            require(t.get('result') and digest(t['result'])==item['submission_digest'],'Feedback does not describe this local submission')
+            if item['status'] not in {'accepted','needs_research'}:continue
+            require(item['review'] and item['review'].get('verdict')==('accept' if item['status']=='accepted' else 'reject'),'Missing coordinator research review')
+            require(t['status'] in {'submitted',item['status']},'Local work changed after remote review')
+            store.db.execute('UPDATE tasks SET status=? WHERE id=?',(item['status'],t['id']))
+            if item['status']=='accepted' and t['result'].get('progress'):
+                from .whole import apply_reviewed_locked
+                apply_reviewed_locked(store,t,t['result'],item['review'])
+            store.event('coordinator_review_synced',{'task':t['id'],'hub_task':item['hub_task'],'review':item['review'],'epoch':data['epoch']})
+            updated.append({'task':t['id'],'status':item['status']})
+        result={'epoch':data['epoch'],'updated':updated,'reference_units':len(data['units']),'extra_materials':data.get('extra_materials',[]),'review_source':'coordinator_signed_feedback'}
+        store.set_meta(receipt,result)
+    return result

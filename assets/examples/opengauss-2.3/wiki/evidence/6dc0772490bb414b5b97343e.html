@@ -1,0 +1,59 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/geqo/geqo_mutation.cpp:1-58</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/geqo/geqo_mutation.cpp:1-58</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>/* ------------------------------------------------------------------------
+ *
+ * geqo_mutation.cpp
+ *
+ *	 TSP mutation routines
+ *
+ * IDENTIFICATION
+ * src/gausskernel/optimizer/geqo/geqo_mutation.cpp
+ *
+ * -------------------------------------------------------------------------
+ */
+/* contributed by:
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+   *  Martin Utesch				 * Institute of Automatic Control	   *
+   =							 = University of Mining and Technology =
+   *  utesch@aut.tu-freiberg.de  * Freiberg, Germany				   *
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+ */
+/* this is adopted from Genitor : */
+/*************************************************************/
+/* 															 */
+/* 	Copyright (c) 1990										 */
+/* 	Darrell L. Whitley										 */
+/* 	Computer Science Department								 */
+/* 	Colorado State University								 */
+/* 															 */
+/* 	Permission is hereby granted to copy all or any part of  */
+/* 	this program for free distribution.   The author&#x27;s name  */
+/* 	and this copyright notice must be included in any copy.  */
+/* 															 */
+/*************************************************************/
+
+#include &quot;postgres.h&quot;
+#include &quot;knl/knl_variable.h&quot;
+#include &quot;optimizer/geqo_mutation.h&quot;
+#include &quot;optimizer/geqo_random.h&quot;
+
+void geqo_mutation(PlannerInfo* root, Gene* tour, int num_gene)
+{
+    int swap1;
+    int swap2;
+    int num_swaps = geqo_randint(root, num_gene / 3, 0);
+    Gene temp;
+
+    while (num_swaps &gt; 0) {
+        swap1 = geqo_randint(root, num_gene - 1, 0);
+        swap2 = geqo_randint(root, num_gene - 1, 0);
+
+        while (swap1 == swap2)
+            swap2 = geqo_randint(root, num_gene - 1, 0);
+
+        temp = tour[swap1];
+        tour[swap1] = tour[swap2];
+        tour[swap2] = temp;
+
+        num_swaps -= 1;
+    }
+}
+</pre><p>evidence:a5052c11c1dc3bf0a067efec6b8f2199</p><p>SHA-256 86f7860a344c8d0652dc0ae06310ad0d0509b69a7e972211fe3c1b375683d69d</p></main></html>

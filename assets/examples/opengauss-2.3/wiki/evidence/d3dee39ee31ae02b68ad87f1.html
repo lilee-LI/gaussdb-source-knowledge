@@ -1,0 +1,17 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/storage/access/transam/xact.cpp:3195-3210</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/storage/access/transam/xact.cpp:3195-3210</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>    oldstate = s-&gt;state;
+    s-&gt;state = TRANS_DEFAULT;
+
+    if (module_logging_is_on(MOD_TRANS_XACT)) {
+        ereport(LOG, (errmodule(MOD_TRANS_XACT),
+                      errmsg(&quot;Local Node %s: local commit process completed, trans state : %s -&gt; %s&quot;,
+                             g_instance.attr.attr_common.PGXCNodeName, TransStateAsString(oldstate),
+                             TransStateAsString(s-&gt;state))));
+    }
+
+    RESUME_INTERRUPTS();
+
+    AtEOXact_Proceed_PatchSeq();
+    AtEOXact_Remote();
+    /* flush all profile log about this worker thread */
+    flush_plog();
+</pre><p>evidence:1487a4d5cd3ae0c8b26f45c3775694b1</p><p>SHA-256 0ce16f895b64ae548e8bb7cffd14d9e41a32dd22fafc529e5215d96436f06e5c</p></main></html>

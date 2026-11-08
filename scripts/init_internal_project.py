@@ -29,6 +29,8 @@ def create(args):
     if getattr(args, "product_adapter", None):
         from unified_knowledge.product_adapter import load
         config["product_adapter"] = load(args.product_adapter)
+    if getattr(args,"learning_policy",None):
+        config["learning_policy"]=args.learning_policy
     if index_db:
         from unified_knowledge.graph_mount import inspect_input
         run_id = inspect_input(index_db,run_id)["run_id"]

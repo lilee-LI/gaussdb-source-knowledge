@@ -1,0 +1,82 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/common/backend/utils/cache/plancache.cpp:1000-1080</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/common/backend/utils/cache/plancache.cpp:1000-1080</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>     * reasonably sane state.  (The generic plan won&#x27;t get unlinked yet, but
+     * that&#x27;s acceptable.)
+     */
+    if (plansource-&gt;query_context) {
+        MemoryContext qcxt = plansource-&gt;query_context;
+
+        plansource-&gt;query_context = NULL;
+        MemoryContextDelete(qcxt);
+    }
+
+    /*
+     * Now re-do parse analysis and rewrite.  This not incidentally acquires
+     * the locks we need to do planning safely.
+     */
+    Assert(plansource-&gt;is_complete);
+
+    /*
+     * If a snapshot is already set (the normal case), we can just use that
+     * for parsing/planning.  But if it isn&#x27;t, install one.  Note: no point in
+     * checking whether parse analysis requires a snapshot; utility commands
+     * don&#x27;t have invalidatable plans, so we&#x27;d not get here for such a
+     * command.
+     */
+    snapshot_set = false;
+    if (!ActiveSnapshotSet()) {
+        PushActiveSnapshot(GetTransactionSnapshot(GTM_LITE_MODE));
+        snapshot_set = true;
+    }
+
+    /*
+     * Query Tree is about to be rebuilt, reset is_top_unique_sql, otherwise, unique sql id
+     * can not be set.
+     */
+    if (IS_UNIQUE_SQL_TRACK_TOP)
+        SetIsTopUniqueSQL(false);
+
+    /*
+     * Run parse analysis and rule rewriting.  The parser tends to scribble on
+     * its input, so we must copy the raw parse tree to prevent corruption of
+     * the cache.
+     */
+    rawtree = (Node*)copyObject(plansource-&gt;raw_parse_tree);
+    if (plansource-&gt;parserSetup != NULL)
+        tlist = pg_analyze_and_rewrite_params(
+            rawtree, plansource-&gt;query_string, plansource-&gt;parserSetup, plansource-&gt;parserSetupArg);
+    else
+        tlist =
+            pg_analyze_and_rewrite(rawtree, plansource-&gt;query_string, plansource-&gt;param_types, plansource-&gt;num_params);
+
+    ereport(DEBUG2, (errmodule(MOD_SQLPATCH),
+        errmsg(&quot;[SQLPatch] %lu after revalidation update from %lu to %lu&quot;, u_sess-&gt;unique_sql_cxt.unique_sql_id,
+        plansource-&gt;sql_patch_sequence, pg_atomic_read_u64(&amp;g_instance.cost_cxt.sql_patch_sequence_id))));
+    plansource-&gt;sql_patch_sequence = pg_atomic_read_u64(&amp;g_instance.cost_cxt.sql_patch_sequence_id);
+    plansource-&gt;nextval_default_expr_type = u_sess-&gt;opt_cxt.nextval_default_expr_type;
+
+    /* Release snapshot if we got one */
+    if (snapshot_set)
+        PopActiveSnapshot();
+
+    /*
+     * Check or update the result tupdesc.	XXX should we use a weaker
+     * condition than equalTupleDescs() here?
+     *
+     * We assume the parameter types didn&#x27;t change from the first time, so no
+     * need to update that.
+     */
+    resultDesc = PlanCacheComputeResultDesc(tlist);
+    if (resultDesc == NULL &amp;&amp; plansource-&gt;resultDesc == NULL) {
+        /* OK, doesn&#x27;t return tuples */
+    } else if (resultDesc == NULL || plansource-&gt;resultDesc == NULL ||
+               !equalTupleDescs(resultDesc, plansource-&gt;resultDesc)) {
+        /* can we give a better error message? */
+        if (plansource-&gt;fixed_result) {
+            ereport(ERROR, (errcode(ERRCODE_INVALID_CACHE_PLAN),
+                            errmsg(&quot;cached plan must not change result type&quot;)));
+        } else if (!FORCE_VALIDATE_PLANCACHE_RESULT) {
+            /* If result type validation is turned off, better notice the caller */
+            ereport(NOTICE, (errmsg(&quot;cached plan&#x27;s result type has changed&quot;),
+                             errdetail(&quot;plan cache result type validation is turned off&quot;)));
+        }
+
+</pre><p>evidence:e6c8169db713aa94fbfb7b9905346bb2</p><p>SHA-256 4618e0febaa266569750454e10534c7103a14cd9f9b76375564853f8b52dbc7e</p></main></html>

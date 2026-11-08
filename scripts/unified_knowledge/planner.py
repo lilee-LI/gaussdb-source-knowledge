@@ -244,6 +244,11 @@ def stage_research_unit(store, task, worker, token, unit, previous_hash=None):
             "Typed unit id/kind/title/body required")
     require(len(canonical(unit).encode("utf-8")) <= 80000, "Split oversized research unit")
     require(not any(k.startswith("_") for k in unit), "Reserved knowledge metadata")
+    if unit['kind']=='flow':
+        require(isinstance(unit.get('steps'),list) and unit['steps'],'Flow needs typed steps')
+        for step in unit['steps']:
+            require(isinstance(step,dict) and step.get('kind') in {'call','data_stage','state_transition','async_message'},'flow.steps uses kind (not type): call/data_stage/state_transition/async_message')
+            if step['kind']=='call':require(step.get('symbol') and step.get('target'),'A call step requires real symbol and target IDs; use data_stage/state_transition for effects and stages')
     if unit["kind"] == "test_obligation":
         expected = unit.get("expected_from")
         require(isinstance(expected,dict) and expected.get("kind") in {"requirement","claim","contract","source_prediction"}
@@ -273,33 +278,57 @@ def stage_research_unit(store, task, worker, token, unit, previous_hash=None):
             "staged_units": len(drafts), "ids": sorted(drafts), "semantic_approval": "not_granted"}
 
 
-def finish_research(store, task, worker, token, coverage, drafts_digest):
+def read_research_drafts(store,task,worker,token,ids=None,offset=0,limit=5):
+    row=_check_lease(store,task,worker,token)
+    require(type(offset) is int and offset>=0 and type(limit) is int and 1<=limit<=10,'Read 1..10 drafts per page')
+    drafts=store.get_meta('research_drafts:'+task+':'+str(row['attempt']),{})
+    keys=sorted(set(ids)) if ids is not None else sorted(drafts)
+    require(set(keys)<=set(drafts),'Unknown draft knowledge ID')
+    out=[];size=0
+    for uid in keys[offset:offset+limit]:
+        u=drafts[uid];length=len(canonical(u))
+        if out and size+length>250000:break
+        out.append({'unit':u,'unit_hash':digest(u)});size+=length
+    return {'items':out,'total':len(keys),'next_offset':offset+len(out) if offset+len(out)<len(keys) else None,
+            'drafts_digest':digest(drafts),'semantic_approval':'not_granted'}
+
+
+def finish_research(store, task, worker, token, coverage, drafts_digest=None, progress_digest=None):
     """Validate staged structure/evidence and submit for actual semantic review."""
     from .knowledge import _validate_unit
     row = _check_lease(store, task, worker, token)
     key = "research_drafts:" + task + ":" + str(row["attempt"])
     drafts = store.get_meta(key, {})
-    require(drafts and digest(drafts) == drafts_digest, "Research drafts changed or empty; use latest drafts_digest")
+    progress_key='progress-draft:'+task+':'+str(row['attempt'])
+    progress=store.get_meta(progress_key)
+    require((drafts or progress) and (not drafts or digest(drafts)==drafts_digest), "Research drafts changed or empty; use latest drafts_digest")
+    require(not progress or digest(progress)==progress_digest,'Progress changed; use latest progress_digest')
     bundle = json.loads(row["data"])["bundle"]
     references = store.get_meta("order-references:" + str(bundle.get("plan_id")) + ":" + str(bundle.get("module")) + ":" + worker, {})
-    available = {**references, **store.units(), **drafts}
+    from .whole import reference_units
+    wanted={link['target'] for u in drafts.values() for link in u.get('knowledge_refs',[])}
+    wanted.update(u['parent'] for u in drafts.values() if u.get('parent'))
+    available = {**references, **reference_units(store,wanted), **store.units(), **drafts}
     binding = {"snapshot": row["snapshot"], "run": row["run"], "profile": row["profile"]}
     for unit in drafts.values():
         _validate_unit(store, unit, binding, available)
     result = submit(store, task, worker, token, {"coverage": coverage, "claims": [drafts[k] for k in sorted(drafts)],
         "capture": "mcp_staged_units", "capture_attempt": row["attempt"], "capture_lease_digest": digest(token),
-        "drafts_digest": drafts_digest}, expected_drafts=(key, drafts_digest))
+        "drafts_digest": digest(drafts),**({'progress':progress} if progress else {})},
+        expected_drafts=(key,digest(drafts)),expected_progress=(progress_key,progress_digest) if progress else None)
     return {"task": task, "status": result["status"], "units": len(drafts),
             "result_digest": digest(result["result"]), "semantic_approval": "not_granted"}
 
 
-def submit(store, task, worker, token, result, *, expected_drafts=None):
+def submit(store, task, worker, token, result, *, expected_drafts=None, expected_progress=None):
     require(isinstance(result, dict) and isinstance(result.get("coverage"), list) and result["coverage"],
             "Research must account for its questions")
     with store.transaction():
         row = _check_lease(store, task, worker, token)
         if expected_drafts:
             require(digest(store.get_meta(expected_drafts[0], {})) == expected_drafts[1], "Research drafts changed during submission")
+        if expected_progress:
+            require(digest(store.get_meta(expected_progress[0]))==expected_progress[1],'Progress changed during submission')
         evidence = set()
         for item in result["coverage"]:
             require(isinstance(item,dict) and item.get("status") in {"answered", "open", "not_applicable"} and item.get("question"),
@@ -313,6 +342,10 @@ def submit(store, task, worker, token, result, *, expected_drafts=None):
         for item in result.get("claims", []):
             evidence.update(item.get("source_refs", []))
         complete = _complete_reads(store, task, worker, token)
+        if result.get('progress'):
+            from .whole import validate_progress
+            result={**result,'progress':validate_progress(store,task_status(store,task),result['progress'],
+                    {u['id']:u for u in result.get('claims',[])},complete)}
         require(evidence <= complete, "Research references evidence not fully read with this lease")
         for ref in evidence:
             value = store.record("anchors", ref)
@@ -342,6 +375,9 @@ def review_task(store, task, review):
         store.event("research_review", {"task": task, **review})
         followups = []
         if status == "accepted":
+            if result.get('progress'):
+                from .whole import apply_reviewed_locked
+                apply_reviewed_locked(store,value,result,review)
             for item in result["coverage"]:
                 if item["status"] == "open":
                     followups.append(create_task(store, snapshot=value["snapshot"], run=value["run"], profile=value["profile"],
@@ -357,8 +393,20 @@ def task_context(store, task):
     value["evidence"] = [store.record("anchors", ref) for ref in refs]
     value["known_revision"] = store.get_meta("knowledge_head")
     b = value["bundle"]
+    attempt=value.get('attempt',0)
+    drafts=store.get_meta('research_drafts:'+task+':'+str(attempt),{})
+    progress=store.get_meta('progress-draft:'+task+':'+str(attempt))
+    value['active_drafts']={'ids':sorted(drafts),'drafts_digest':digest(drafts),'read_with':'read_research_drafts returns full units and previous unit_hash values'}
+    value['active_progress']={'report':progress,'progress_digest':digest(progress)} if progress else None
+    value['review_feedback']=[json.loads(r[0]) for r in store.db.execute("SELECT data FROM events WHERE kind IN ('research_review','coordinator_review_synced') AND json_extract(data,'$.task')=? ORDER BY id DESC LIMIT 2",(task,))]
     value["coordinator_references"] = store.get_meta("order-references:" + str(b.get("plan_id")) + ":"
         + str(b.get("module")) + ":" + str(value.get("owner")), {})
+    if store.get_meta('work_kit'):
+        synced=store.get_meta('synced-references:'+store.get_meta('work_kit'),{})
+        units=list(synced.get('units',{}).values())
+        value['synced_reference_units']=[{k:u.get(k) for k in ('id','kind','title','conditions','source_refs','knowledge_refs')} for u in units[:100]]
+        value['synced_references_truncated']=len(units)>100
+        value['supplemental_materials']=synced.get('extra_materials',[])
     if value["kind"] in {"feature_research","module_survey"}:
         from .course import previous_research
         value["previous_research"] = previous_research(store,value)
@@ -380,6 +428,9 @@ def task_context(store, task):
         "required": ["coverage of each research question", "actual evidence reads", "conditions", "counterexamples", "open questions"],
         "tools": ["query_graph", "read_evidence", "find_knowledge", "explain_path"],
         "semantic_approval": "requires_actual_review", "runtime_validation": "not_run"}
+    if store.get_meta('whole-for:'+str(b.get('plan_id'))):
+        from .whole import guidance
+        value['whole_learning']=guidance(store,value)
     if value["kind"] == "feature_research" and b.get("symbol_refs"):
         from .indexer import query_graph
         seeds = b.get("seed_symbol_refs", b["symbol_refs"])[:12]

@@ -1,0 +1,22 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/storage/access/transam/xact.cpp:2620-2640</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/storage/access/transam/xact.cpp:2620-2640</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre> *	CommitTransaction
+ *
+ * NB: if you change this routine, better look at PrepareTransaction too!
+ */
+static void CommitTransaction(bool STP_commit)
+{
+    u_sess-&gt;exec_cxt.isLockRows = false;
+    u_sess-&gt;need_report_top_xid = false;
+    TransactionState s = CurrentTransactionState;
+    TransactionId latestXid;
+    bool barrierLockHeld = false;
+#ifdef ENABLE_MULTIPLE_NODES
+        checkAndDoUpdateSequence();
+#endif
+
+    ShowTransactionState(&quot;CommitTransaction&quot;);
+
+#ifndef ENABLE_MULTIPLE_NODES
+    LockPartitionDDLOperation();
+    ResetPartitionLockInfo();
+#endif
+</pre><p>evidence:9cc0ea04839487ab7dbac9050964439d</p><p>SHA-256 ef8b538cb62ce40576fa58721e4585117ffdd2718e119b34994b5a7bf6483f85</p></main></html>

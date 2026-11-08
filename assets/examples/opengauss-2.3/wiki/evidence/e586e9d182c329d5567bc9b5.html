@@ -1,0 +1,20 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/test/regress/sql/single_node_join.sql:336-354</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/test/regress/sql/single_node_join.sql:336-354</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>
+--
+-- regression test: check for failure to generate a plan with multiple
+-- degenerate IN clauses
+--
+select count(*) from tenk1 x where
+  x.unique1 in (select a.f1 from int4_tbl a,float8_tbl b where a.f1=b.f1) and
+  x.unique1 = 0 and
+  x.unique1 in (select aa.f1 from int4_tbl aa,float8_tbl bb where aa.f1=bb.f1);
+
+-- try that with GEQO too
+begin;
+set geqo = on;
+set geqo_threshold = 2;
+select count(*) from tenk1 x where
+  x.unique1 in (select a.f1 from int4_tbl a,float8_tbl b where a.f1=b.f1) and
+  x.unique1 = 0 and
+  x.unique1 in (select aa.f1 from int4_tbl aa,float8_tbl bb where aa.f1=bb.f1);
+rollback;
+</pre><p>evidence:ea3ceea50dbe732fabb78ecea4d60b23</p><p>SHA-256 616653091d5ed80021dfbb4f666ead0bccbc63c3db21bc0d1aa0099dd35e7b6f</p></main></html>

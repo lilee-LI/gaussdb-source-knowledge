@@ -1,0 +1,27 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/common/backend/utils/cache/plancache.cpp:870-895</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/common/backend/utils/cache/plancache.cpp:870-895</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>     */
+    if (plansource-&gt;is_valid) {
+        Assert(plansource-&gt;search_path != NULL);
+        if (!OverrideSearchPathMatchesCurrent(plansource-&gt;search_path)) {
+            /* Invalidate the querytree and generic plan */
+            plansource-&gt;is_valid = false;
+            if (plansource-&gt;gplan) {
+                plansource-&gt;gplan-&gt;is_valid = false;
+            }
+            /* generic root and all candidate plans need to be rebuilt. */
+            if (ENABLE_CACHEDPLAN_MGR &amp;&amp; plansource-&gt;planManager != NULL) {
+                ereport(DEBUG2,
+                    (errmodule(MOD_OPT),
+                     errmsg(&quot;SearchPath has been changed, invalid planManager; query: \&quot;%s\&quot;&quot;,
+                     plansource-&gt;query_string)));
+                plansource-&gt;planManager-&gt;is_valid = false;
+            }
+        }
+    }
+
+    RevalidateGplanBySqlPatch(plansource);
+
+    /*
+     * If the query rewrite phase had a possible RLS dependency, we must redo
+     * it if either the role setting has changed.
+     */
+</pre><p>evidence:300c9a22b467b5a29420a2bf09db5af7</p><p>SHA-256 546a83119303d5a77fc686b02a2a4016cb72e718817b8dd47cb97d8f262df7ce</p></main></html>

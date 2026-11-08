@@ -1,0 +1,46 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/storage/access/transam/xact.cpp:3180-3224</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/storage/access/transam/xact.cpp:3180-3224</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>     * as the 1st one.
+     * For remote nodes, enforce the command ID sending flag to false to avoid
+     * sending any command ID by default as now transaction is done.
+     */
+    if (IS_PGXC_COORDINATOR &amp;&amp; !IsConnFromCoord())
+        SetReceivedCommandId(FirstCommandId);
+    else
+        SetSendCommandId(false);
+
+    /*AtCommit_Memory has freed up the memory for savepointList*/
+    s-&gt;savepointList = NULL;
+#endif
+
+    TwoPhaseCommit = false;
+    /* done with commit processing, set current transaction state back to default */
+    oldstate = s-&gt;state;
+    s-&gt;state = TRANS_DEFAULT;
+
+    if (module_logging_is_on(MOD_TRANS_XACT)) {
+        ereport(LOG, (errmodule(MOD_TRANS_XACT),
+                      errmsg(&quot;Local Node %s: local commit process completed, trans state : %s -&gt; %s&quot;,
+                             g_instance.attr.attr_common.PGXCNodeName, TransStateAsString(oldstate),
+                             TransStateAsString(s-&gt;state))));
+    }
+
+    RESUME_INTERRUPTS();
+
+    AtEOXact_Proceed_PatchSeq();
+    AtEOXact_Remote();
+    /* flush all profile log about this worker thread */
+    flush_plog();
+#ifdef ENABLE_MULTIPLE_NODES 
+    CheckDeleteLock(true);
+    Tsdb::PartCacheMgr::GetInstance().commit_item();
+#endif   /* ENABLE_MULTIPLE_NODES */        
+    print_leak_warning_at_commit();
+#ifdef ENABLE_MULTIPLE_NODES
+    closeAllVfds();
+#endif
+}
+
+#ifdef ENABLE_MULTIPLE_NODES
+static int finish_txn_gtm_lite(bool commit, bool is_write)
+{
+    TransactionState s = CurrentTransactionState;
+</pre><p>evidence:73e98c8fa1273cdb369e14f1c9887ca2</p><p>SHA-256 9e1413b2005d9629460effdd557da2ed67017fbb61b325c47bbfd3267642b927</p></main></html>

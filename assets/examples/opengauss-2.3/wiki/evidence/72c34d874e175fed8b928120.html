@@ -1,0 +1,28 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/process/globalplancache/globalplancache.cpp:600-626</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/process/globalplancache/globalplancache.cpp:600-626</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>        return true;
+    }
+    if (psrc-&gt;dependsOnRole &amp;&amp; (psrc-&gt;rewriteRoleId != GetUserId())) {
+        return true;
+    }
+    if ((psrc-&gt;gplan != NULL &amp;&amp; TransactionIdIsValid(psrc-&gt;gplan-&gt;saved_xmin))) {
+        return true;
+    }
+
+    if (psrc-&gt;search_path &amp;&amp; !OverrideSearchPathMatchesCurrent(psrc-&gt;search_path)) {
+        return true;
+    }
+
+    /* If enable_expr_fusion or query_dop alreadly change, need build plan again. */
+    if (psrc-&gt;cq_is_flt_frame !=
+        (u_sess-&gt;attr.attr_common.enable_expr_fusion &amp;&amp; u_sess-&gt;attr.attr_sql.query_dop_tmp == 1)) {
+        return true;
+    }
+
+#ifndef ENABLE_MULTIPLE_NODES
+    if (CheckRecreateCachePlanBySqlPatch(psrc)) {
+        return true;
+    }
+#endif
+
+    return false;
+}
+</pre><p>evidence:07ce6bb0a4ad07b18c9c14ce240c6658</p><p>SHA-256 22563a48e6681046c192aab8ee7d871620fe9e78205320fc9fb4e6e102695d8a</p></main></html>

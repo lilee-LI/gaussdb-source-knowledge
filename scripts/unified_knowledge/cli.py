@@ -23,6 +23,20 @@ def parser():
     p.add_argument("--home", required=True, type=Path)
     p.add_argument("--version", action="version", version=__version__)
     sub = p.add_subparsers(dest="command", required=True)
+    q=sub.add_parser('whole');actions=q.add_subparsers(dest='action',required=True)
+    for name in ('plan','progress','advance','next','run','coverage','verify-uses','accept-coverage'):
+        a=actions.add_parser(name)
+        if name in {'progress','next','run','coverage','accept-coverage'}:a.add_argument('--module')
+        if name in {'next','run'}:a.add_argument('--worker',required=True)
+        if name=='advance':a.add_argument('--max-tasks',type=int,default=8)
+        if name=='plan':a.add_argument('--policy')
+        if name=='run':
+            a.add_argument('--steps',type=int,default=1);a.add_argument('--timeout',type=int,default=1800)
+            a.add_argument('--budget',type=float,default=3);a.add_argument('--claude',type=Path)
+            a.add_argument('--resume-task')
+        if name=='verify-uses':a.add_argument('--input',type=Path,required=True)
+        if name=='accept-coverage':
+            a.add_argument('--digest',required=True);a.add_argument('--reviewer',required=True);a.add_argument('--notes',required=True)
     q = sub.add_parser("doctor"); q.add_argument("--repair-git", action="store_true"); q.add_argument("--verify-blobs", action="store_true")
     q = sub.add_parser("ingest"); q.add_argument("--config", required=True, type=Path)
     q = sub.add_parser("pipeline"); q.add_argument("--config", required=True, type=Path); q.add_argument("--profile"); q.add_argument("--timeout", type=int, default=120); q.add_argument("--ctags", type=Path)
@@ -50,6 +64,8 @@ def parser():
     a.add_argument("--task", required=True); a.add_argument("--out", required=True, type=Path)
     a = actions.add_parser("receive"); a.add_argument("--input", required=True, type=Path); a.add_argument("--jobs", type=int, default=2)
     a = actions.add_parser("propose"); a.add_argument("--task", required=True)
+    a=actions.add_parser('feedback');a.add_argument('--order',type=Path,required=True);a.add_argument('--out',type=Path,required=True);a.add_argument('--include-asset',action='append',default=[])
+    a=actions.add_parser('sync');a.add_argument('--input',type=Path,required=True)
     q = sub.add_parser("plan"); q.add_argument("--run"); q.add_argument("--targets", nargs="*"); q.add_argument("--question"); q.add_argument("--max-symbols", type=int, default=12)
     q.add_argument("--granularity", choices=("auto","module"), default="auto"); q.add_argument("--preview",action="store_true")
     q = sub.add_parser("anchor"); q.add_argument("--snapshot", required=True); q.add_argument("--asset", required=True); q.add_argument("--start", required=True, type=int); q.add_argument("--end", required=True, type=int)
@@ -87,7 +103,7 @@ def parser():
             a.add_argument("--evidence", required=True); a.add_argument("--max-chars", type=int, default=100000)
     a = actions.add_parser("review"); a.add_argument("--id", required=True); a.add_argument("--input", required=True, type=Path)
     a = actions.add_parser("propose"); a.add_argument("--id", required=True)
-    for action in ("anchor", "stage", "finish"):
+    for action in ("anchor", "stage", "finish", "progress"):
         a = actions.add_parser(action)
         a.add_argument("--id", required=True); a.add_argument("--worker", required=True); a.add_argument("--token", required=True)
         if action == "anchor":
@@ -96,8 +112,9 @@ def parser():
             a.add_argument("--input", required=True, type=Path)
             if action == "stage":
                 a.add_argument("--previous-hash")
+            elif action=='progress':a.add_argument('--previous-digest')
             else:
-                a.add_argument("--drafts-digest", required=True)
+                a.add_argument("--drafts-digest");a.add_argument('--progress-digest')
     q = sub.add_parser("worker"); actions = q.add_subparsers(dest="action", required=True)
     for name in ("prepare-codewiki", "run-codewiki", "structured", "receive-structured", "propose"):
         a = actions.add_parser(name); a.add_argument("--task", required=True); a.add_argument("--worker", required=True)
@@ -114,6 +131,19 @@ def parser():
 
 def dispatch(store, args):
     command = args.command
+    if command=='whole':
+        from . import whole
+        if args.action=='plan':
+            whole.ensure(store,args.policy);return whole.export(store)
+        if args.action=='progress':return whole.status(store,args.module)
+        if args.action=='advance':return {**whole.advance(store,args.max_tasks),'export':whole.export(store)}
+        if args.action=='next':return whole.next_task(store,args.worker,args.module)
+        if args.action=='run':
+            from .continuation import run
+            return run(store,worker=args.worker,module=args.module,steps=args.steps,timeout=args.timeout,budget=args.budget,executable=args.claude,resume_task=args.resume_task)
+        if args.action=='coverage':return whole.audit(store,args.module)
+        if args.action=='verify-uses':return whole.verify_uses(store,read_json(args.input))
+        return whole.accept(store,args.digest,args.reviewer,args.notes,args.module)
     if command == "doctor":
         return doctor(store, repair_git=args.repair_git, verify_blobs=args.verify_blobs)
     if command == "ingest":
@@ -192,6 +222,8 @@ def dispatch(store, args):
             return team.export_result(store, args.order or store.home/"order.json", args.task, args.out)
         if args.action == "receive":
             return team.receive(store, args.input, args.jobs)
+        if args.action=='feedback':return team.feedback(store,args.order,args.out,args.include_asset)
+        if args.action=='sync':return team.sync_feedback(store,args.input)
         return team.propose_task(store, args.task)
     if command == "plan":
         if args.preview:
@@ -252,7 +284,10 @@ def dispatch(store, args):
         if action == "stage":
             return stage_research_unit(store, args.id, args.worker, args.token, read_json(args.input), args.previous_hash)
         if action == "finish":
-            return finish_research(store, args.id, args.worker, args.token, read_json(args.input), args.drafts_digest)
+            return finish_research(store, args.id, args.worker, args.token, read_json(args.input), args.drafts_digest,args.progress_digest)
+        if action=='progress':
+            from .whole import stage_progress
+            return stage_progress(store,args.id,args.worker,args.token,read_json(args.input),args.previous_digest)
         if action == "propose":
             return team.propose_task(store, args.id)
         if action == "review":

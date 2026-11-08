@@ -66,13 +66,21 @@ def inventory(store, config, profile=None, snapshot=None, existing_run=None, mod
             continue
         module = next((p for p in prefixes if asset["key"] == p or asset["key"].startswith(p.rstrip("/") + "/")), None)
         groups[module or product_adapter.module_for(adapter, asset["repo"], asset["path"])].append(asset["key"])
+    learning=None
+    if config.get("learning_policy"):
+        from .whole import policy, partition
+        learning=policy(config["learning_policy"],adapter)
+        groups=partition(groups,learning.get("partition_max_files",80),prefixes)
+        for asset in snap["assets"]:
+            if asset["kind"]=="document" and asset["status"]!="excluded":
+                groups.setdefault(asset["repo"]+"/@materials",[]).append(asset["key"])
     docs = [json.loads(r[0]) for r in store.db.execute("SELECT data FROM documents WHERE snapshot=? ORDER BY id", (snap["id"],))]
     units = Counter(binding["repository"] + "/" + c["file"] for c in binding["commands"])
     by_key = {a["key"]: a for a in snap["assets"]}
     aliases = adapter.get("aliases", {})
     candidates = catalog.discover(store, snap, groups, docs, aliases, adapter)
     topic_signals, signal_gaps = product_adapter.signals(store, snap, groups, adapter)
-    plan_id = identity("study-plan", [rid, sorted(prefixes), adapter["digest"]])
+    plan_id = identity("study-plan", [rid, sorted(prefixes), adapter["digest"],*([learning["digest"]] if learning else [])])
     coverage = {"mode": "inventory", "assets": len(sources), "available_tus": len(binding["commands"]),
                 "translation_units": 0, "parsed_tus": 0, "partial_tus": 0, "failed_tus": 0,
                 "deferred_tus": len(binding["commands"]), "invalid_commands": len(binding.get("unavailable_commands", [])), "semantic_completeness": "not_certified"}
@@ -170,6 +178,8 @@ def inventory(store, config, profile=None, snapshot=None, existing_run=None, mod
         if source_only:
             plan["source_only"] = True
             plan["navigation"] = {r["id"]:"source-text" for r in snap["materials"] if r["kind"]=="source"}
+        if learning:
+            plan["learning_policy"]=learning
         if existing_run:
             plan["reuse_index"] = True
             origin = existing_run.get("source_index")

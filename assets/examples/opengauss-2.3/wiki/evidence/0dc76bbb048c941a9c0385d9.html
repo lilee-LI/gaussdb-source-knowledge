@@ -1,0 +1,40 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/include/optimizer/geqo_random.h:1-39</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/include/optimizer/geqo_random.h:1-39</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>/* -------------------------------------------------------------------------
+ *
+ * geqo_random.h
+ *	  random number generator
+ *
+ * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1994, Regents of the University of California
+ *
+ * src/include/optimizer/geqo_random.h
+ *
+ * -------------------------------------------------------------------------
+ */
+
+/* contributed by:
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+   *  Martin Utesch				 * Institute of Automatic Control	   *
+   =							 = University of Mining and Technology =
+   *  utesch@aut.tu-freiberg.de  * Freiberg, Germany				   *
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+ */
+
+/* -- parts of this are adapted from D. Whitley&#x27;s Genitor algorithm -- */
+
+#ifndef GEQO_RANDOM_H
+#define GEQO_RANDOM_H
+
+#include &lt;math.h&gt;
+
+#include &quot;optimizer/geqo.h&quot;
+
+extern void geqo_set_seed(PlannerInfo* root, double seed);
+
+/* geqo_rand returns a random float value between 0 and 1 inclusive */
+extern double geqo_rand(PlannerInfo* root);
+
+/* geqo_randint returns integer value between lower and upper inclusive */
+#define geqo_randint(root, upper, lower) ((int)floor(geqo_rand(root) * (((upper) - (lower)) + 0.999999)) + (lower))
+
+#endif /* GEQO_RANDOM_H */
+</pre><p>evidence:dcc355007c7193c690ff970b5d24a41a</p><p>SHA-256 428118af024e06965f72b3dc7ae6aecabfd820408c10e34814d8b6f65ee9abdc</p></main></html>

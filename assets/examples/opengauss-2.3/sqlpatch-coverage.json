@@ -1,0 +1,122 @@
+{
+  "program": "whole-program:7329fed560534c63999bf03ec9f8157e",
+  "scope_module": "server/src/gausskernel/optimizer/sqlpatch",
+  "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6",
+  "profile": "linux-native",
+  "knowledge_revision": "knowledge:742c722ab8652fa5c3e3b1e36e636058",
+  "digest": "3b5fe58421f54ea784137fc9b7fdac0bda7aa3780c2447dfd195f7705de76d44",
+  "status": "incomplete",
+  "metrics": {
+    "assets": 3,
+    "asset_states": {
+      "deferred": 2,
+      "partial": 1
+    },
+    "semantic_assets": 3,
+    "candidate_states": {
+      "unreviewed": 2,
+      "mapped": 1
+    }
+  },
+  "modules_closed": 0,
+  "modules_total": 1,
+  "blockers": [
+    {
+      "kind": "asset_coverage",
+      "count": 3,
+      "examples": [
+        "server/src/gausskernel/optimizer/sqlpatch/CMakeLists.txt",
+        "server/src/gausskernel/optimizer/sqlpatch/Makefile",
+        "server/src/gausskernel/optimizer/sqlpatch/sqlpatch.cpp"
+      ]
+    },
+    {
+      "kind": "module_closure",
+      "count": 1,
+      "examples": [
+        "server/src/gausskernel/optimizer/sqlpatch"
+      ]
+    },
+    {
+      "kind": "candidate_disposition",
+      "count": 2,
+      "examples": [
+        "candidate:4d8e974a35db0afcbcd81ee4d1694d7e",
+        "candidate:9bed7285121c074249f77ba71741e492"
+      ]
+    },
+    {
+      "kind": "one_sided_contract",
+      "unit": "contract:sql-patch-plan-cache-invalidation",
+      "producer_modules": [
+        "server/src/gausskernel/optimizer/sqlpatch"
+      ],
+      "consumer_modules": [
+        "server/src/common/backend/utils/cache"
+      ]
+    },
+    {
+      "kind": "one_sided_contract",
+      "unit": "contract:sql-patch-plan-cache-invalidation",
+      "producer_modules": [
+        "server/src/gausskernel/optimizer/sqlpatch"
+      ],
+      "consumer_modules": [
+        "server/src/gausskernel/process/globalplancache"
+      ]
+    },
+    {
+      "kind": "open_gap",
+      "task": "task:f467990d2a69a09688fec89746d523e9",
+      "question": "sql_patch_sequence_id 的写者、递增时机与提交/回滚语义是什么？"
+    },
+    {
+      "kind": "open_gap",
+      "task": "task:f467990d2a69a09688fec89746d523e9",
+      "question": "g_instance.cost_cxt.sql_patch_sequence_id 的写者、递增时机与提交/回滚语义是什么？"
+    },
+    {
+      "kind": "open_gap",
+      "task": "task:f467990d2a69a09688fec89746d523e9",
+      "question": "CMake 静态目标 gausskernel_optimizer_sqlpatch 与 Makefile OBJS=sqlpatch.o 如何接入最终可执行文件，-DOBS_SERVER 是否改变本模块编译路径？"
+    },
+    {
+      "kind": "open_gap",
+      "task": "task:f467990d2a69a09688fec89746d523e9",
+      "question": "SQL 可调用入口（dbe_sql_util 包装、gs_sql_patch catalog 定义）与权限模型的注册点在哪里？"
+    },
+    {
+      "kind": "open_gap",
+      "task": "task:f467990d2a69a09688fec89746d523e9",
+      "question": "create/enable/drop 在 ereport(ERROR) 时 relation/tuple 如何释放，GetPatchTuple 无元组时 heap_copytuple(NULL) 的契约是什么？"
+    },
+    {
+      "kind": "open_gap",
+      "task": "task:f467990d2a69a09688fec89746d523e9",
+      "question": "只读事务下 RevalidateGplanBySqlPatch 绕过序号快速返回后，是否每次 RevalidateCachedQuery 都扫描 gs_sql_patch，其性能与并发可见性边界是什么？"
+    },
+    {
+      "kind": "open_gap",
+      "task": "task:a7e9df7d9bbff1d5470d5401e991ff9b",
+      "question": "非 SPI 的 GlobalPlanCache::CheckRecreateCachePlan 调用方及 hasGetLock 释放契约？"
+    },
+    {
+      "kind": "open_gap",
+      "task": "task:a7e9df7d9bbff1d5470d5401e991ff9b",
+      "question": "SQL_PATCH_VERSION_NUM 数值与 workingVersionNum 设置路径？"
+    },
+    {
+      "kind": "open_gap",
+      "task": "task:a7e9df7d9bbff1d5470d5401e991ff9b",
+      "question": "CopyCachedPlan+ShareInit 后 RevalidateCachedQuery 是否不提前返回？"
+    },
+    {
+      "kind": "open_gap",
+      "task": "task:a7e9df7d9bbff1d5470d5401e991ff9b",
+      "question": "AbortTransaction 是否有未读到的旗标清理？"
+    }
+  ],
+  "graph_status": "partial",
+  "semantic_accuracy": "requires_actual_review",
+  "database_execution": "not_run"
+}

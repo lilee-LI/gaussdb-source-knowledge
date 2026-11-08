@@ -1,0 +1,1168 @@
+{
+  "schema": "context-pack/v1",
+  "scope": {
+    "source_snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6",
+    "build_profile": "linux-native",
+    "index_run": "ecs-study-reference:16036114d9a15c9bb7f85e2e1363fc67",
+    "knowledge_revision": "knowledge:742c722ab8652fa5c3e3b1e36e636058"
+  },
+  "task": "review",
+  "constraints": [
+    {
+      "id": "contract:sql-patch-plan-cache-invalidation",
+      "kind": "contract",
+      "title": "SQL Patch 序号失效端点与全局计划缓存/RevalidateCachedQuery 的调用契约",
+      "body": "SQL Patch提供两个不同端点。共享计划消费者在所引非多节点分支调用CheckRecreateCachePlanBySqlPatch；布尔结果只是重建判据的一部分。私有计划消费者RevalidateCachedQuery在提前返回检查后调用RevalidateGplanBySqlPatch，由后者按标记或目录命中设置有效性字段，再由消费者处理重解析。锁、对象复制和发布属于调用方协议，必须分别检查入口，不从一个SPI调用点推断所有调用方。两处实际静态调用与数据/状态阶段分开记录；两个消费模块尚需分别核对本契约。",
+      "conditions": [
+        "只适用于所引源码及实际构建条件；图为静态证据。",
+        "共享与私有对象、版本和只读条件必须分开。"
+      ],
+      "counterexamples": [
+        "低版本或提前返回路径不会走到同样的补丁处理。",
+        "单方核对不能充当两个消费模块的验收。"
+      ],
+      "source_refs": [
+        "evidence:841936ca2c14996525e87f0e3b880d51",
+        "evidence:c7ba3e12228c241d9d91bcdd3661b2eb",
+        "evidence:70c3e157465bf79367ca39ebbde31ed1",
+        "evidence:fda27942c43e38d127c662694c565820",
+        "evidence:dcd95fc10ea6256588c9aec094c2a39b",
+        "evidence:c92a948bbb1a17dfee73db9c992f74a2",
+        "evidence:e6c8169db713aa94fbfb7b9905346bb2"
+      ],
+      "review_mode": "independent_review",
+      "requires": [
+        "版本、编译与对象分支符合所引入口条件",
+        "调用方维护对象/锁与重建协议"
+      ],
+      "ensures": [
+        "共享谓词只返回序号比较结果",
+        "私有重验证在源码命中条件下设置有效性字段，未命中追平序号"
+      ],
+      "invariants": [
+        "共享和私有分支不能互相代替",
+        "原子序号不是目录快照或完整并发正确性的证明"
+      ],
+      "producers": [
+        "symbol-instance:ea5002b322d5ebccd17e00745342a2dd",
+        "symbol-instance:76a5026d6cd83bb9b6767281305a191b"
+      ],
+      "consumers": [
+        "symbol-instance:46a23d697bac14854a669d5dbc75caf6",
+        "symbol-instance:fdce98742d55c232730a7e782c527b8b"
+      ]
+    },
+    {
+      "id": "claim:check-recreate-cache-plan-by-sql-patch",
+      "kind": "claim",
+      "title": "CheckRecreateCachePlanBySqlPatch 的判定条件与语义边界",
+      "body": "版本不足或XactReadOnly时返回false；否则仅比较 plansource.sql_patch_sequence 是否小于原子读取的全局序号。该函数不直接访问补丁目录或修改有效性。GlobalPlanCache::CheckRecreateCachePlan 在非 ENABLE_MULTIPLE_NODES 条件下调用它；共享对象路径的锁由调用方管理。序号落后不等价于存在匹配补丁，false也不能排除其它失效机制。",
+      "conditions": [
+        "版本达到SQL_PATCH_VERSION_NUM；分支行为按所引源码分别判断。",
+        "仅证明所引用函数及调用点，不声称穷尽所有共享计划入口。"
+      ],
+      "counterexamples": [
+        "低版本、只读、序号相等都不会由此谓词要求重建；其它失效原因不在此断言内。"
+      ],
+      "source_refs": [
+        "evidence:841936ca2c14996525e87f0e3b880d51",
+        "evidence:fda27942c43e38d127c662694c565820",
+        "evidence:10d59aa4356a443588101cdfa8fbbef7"
+      ],
+      "review_mode": "independent_review"
+    },
+    {
+      "id": "claim:revalidate-gplan-by-sql-patch",
+      "kind": "claim",
+      "title": "RevalidateGplanBySqlPatch 的快速返回、目录/QueryIsPatched 判定与失效后续处理",
+      "body": "版本不足时直接返回；否则仅在 !XactReadOnly 且本地序号>=全局值时快速返回。遍历query_list时跳过uniqueSQLId==0；QueryIsPatched命中会置plansource及已有gplan无效并continue；目录按uniqueSQLId命中也会置无效并break。整轮未命中仅追平本地序号。RevalidateCachedQuery在oneshot、事务语句、共享对象及空raw_parse_tree等提前返回后才会到达调用点；后续重解析及序号刷新由其实现负责。GetPatchTuple传给systable_beginscan的snapshot参数是NULL，本轮未追默认快照的具体语义，因此不据此证明快照类型、隔离级别或并发漏应用结论。",
+      "conditions": [
+        "调用点须能到达SQL Patch重验证分支；版本门控成立。",
+        "目录可见性、并发及原子内存序仍待专门核对。"
+      ],
+      "counterexamples": [
+        "只读并不自动失效，仍需标记或目录命中；uniqueSQLId全为0时不进入有效目录探测。"
+      ],
+      "source_refs": [
+        "evidence:c7ba3e12228c241d9d91bcdd3661b2eb",
+        "evidence:5a6ce491cfd6521d1f76ca08df66b79b",
+        "evidence:70c3e157465bf79367ca39ebbde31ed1",
+        "evidence:a0b91a802f118c15adbf8c159549f18a",
+        "evidence:e6c8169db713aa94fbfb7b9905346bb2",
+        "evidence:6a1d15b53a43b9100e5b2c485ad79f5f",
+        "evidence:10d59aa4356a443588101cdfa8fbbef7",
+        "evidence:817efa5b7a2630e098e779e15924acf0"
+      ],
+      "review_mode": "independent_review"
+    },
+    {
+      "id": "claim:sql-patch-sequence-producer",
+      "kind": "claim",
+      "title": "全局补丁序号的类型、初始化与所引提交推进点",
+      "body": "所引knl_instance初始化代码把实例级原子序号设为0。所引CommitTransaction收尾调用AtEOXact_Proceed_PatchSeq：会话xact_modify_sql_patch为true时，原子加1并清除此标志。所引SQL Patch写入口设置标志，show入口不设置。CachedPlanSource创建时读取全局序号。此次只证明这些具体定义和调用；不把局部检索未命中当作所有回滚、子事务和会话重置路径无清理的证明，也不承诺序号永不回绕。",
+      "conditions": [
+        "所引提交路径与旗标条件成立；多次写入共用一个布尔旗标。",
+        "当前原子实现的内存序、回绕处理及完整回滚清理尚未核实。"
+      ],
+      "counterexamples": [
+        "旗标为false时该辅助函数不推进序号。",
+        "回滚后的旗标状态及后续提交是否额外推进属于未决问题，不能作为既定预期。"
+      ],
+      "source_refs": [
+        "evidence:1cd88c7beef1680212e07f7444a7e261",
+        "evidence:1487a4d5cd3ae0c8b26f45c3775694b1",
+        "evidence:9cc0ea04839487ab7dbac9050964439d",
+        "evidence:1cfacc7cc853db702b4406ddb2966a63",
+        "evidence:a7b176a0db6c0958531c71af73d877bc",
+        "evidence:b1a2d1f2fe859bed4e9e94655c235ab9",
+        "evidence:edc41b889c4829b77d2bc301c525907c"
+      ],
+      "review_mode": "independent_review"
+    },
+    {
+      "id": "feature:sqlpatch-sequence-driven-plan-invalidation",
+      "kind": "feature",
+      "title": "特性：以实例级补丁序号驱动计划缓存失效与重解析",
+      "body": "本研究覆盖SQL Patch序号通知与计划缓存判定：写入口设置会话标志、提交收尾推进实例序号、缓存计划记录序号；共享路径使用布尔比较，私有路径检查补丁标记/目录命中并更新有效性。特性知识仅覆盖已引用机制，不表示SQL Patch全模块、宏配置或运行效果已完成。",
+      "conditions": [
+        "按版本、构建、对象状态和只读条件使用下级判定事实。"
+      ],
+      "counterexamples": [
+        "序号推进不证明某条查询一定重解析或一定应用补丁。"
+      ],
+      "source_refs": [
+        "evidence:fda27942c43e38d127c662694c565820",
+        "evidence:dcd95fc10ea6256588c9aec094c2a39b",
+        "evidence:c92a948bbb1a17dfee73db9c992f74a2",
+        "evidence:70c3e157465bf79367ca39ebbde31ed1",
+        "evidence:c7ba3e12228c241d9d91bcdd3661b2eb"
+      ],
+      "review_mode": "independent_review"
+    },
+    {
+      "id": "feature:sqlpatch-shared-plan-recreate-boundary",
+      "kind": "feature",
+      "title": "特性子项：共享计划的补丁重建走 GPC 检查与复制重建，不原地失效",
+      "body": "共享与私有路径有不同边界。RevalidateCachedQuery对InShareTable提前返回；共享路径另在GlobalPlanCache::CheckRecreateCachePlan中检查补丁序号。所引SPI调用者展示hasGetLock释放与复制重建流程，不能据此宣称已覆盖所有外层调用、CopyCachedPlan实现或发布时序。",
+      "conditions": [
+        "仅描述所引共享检查、SPI消费与私有重验证调用点。"
+      ],
+      "counterexamples": [
+        "其它调用方、对象复制后状态、发布与并发协议仍需额外证据。"
+      ],
+      "source_refs": [
+        "evidence:70c3e157465bf79367ca39ebbde31ed1",
+        "evidence:fda27942c43e38d127c662694c565820",
+        "evidence:dcd95fc10ea6256588c9aec094c2a39b",
+        "evidence:c92a948bbb1a17dfee73db9c992f74a2"
+      ],
+      "review_mode": "independent_review"
+    },
+    {
+      "id": "observation:sql-patch-visibility-boundaries",
+      "kind": "observation",
+      "title": "源码分支差异与回滚、快照和同步待核问题",
+      "body": "源码显示共享谓词在只读时false，而私有重验证在只读时不满足序号快速返回条件。这是条件分支差异，不等于某种SQL执行必定不应用补丁。待核问题：完整abort/subabort/会话重置是否清理旗标；NULL快照在系统目录扫描中的解释；目录读取与序号读取的同步、内存序及其它失效机制；这些尚不能证明旗标残留、漏失效或缺陷。",
+      "conditions": [
+        "只作明确限定的源码观察和研究问题。"
+      ],
+      "counterexamples": [
+        "不能以局部没有读到清理代码作不存在的证明；没有运行并发用例。"
+      ],
+      "source_refs": [
+        "evidence:841936ca2c14996525e87f0e3b880d51",
+        "evidence:c7ba3e12228c241d9d91bcdd3661b2eb",
+        "evidence:70c3e157465bf79367ca39ebbde31ed1",
+        "evidence:1cd88c7beef1680212e07f7444a7e261",
+        "evidence:1487a4d5cd3ae0c8b26f45c3775694b1",
+        "evidence:9cc0ea04839487ab7dbac9050964439d",
+        "evidence:b1a2d1f2fe859bed4e9e94655c235ab9",
+        "evidence:edc41b889c4829b77d2bc301c525907c"
+      ],
+      "review_mode": "independent_review"
+    },
+    {
+      "id": "responsibility:sqlpatch-plan-cache-consistency",
+      "kind": "responsibility",
+      "title": "SQL Patch 模块的职责：维护补丁目录与计划缓存之间的版本一致性",
+      "body": "sqlpatch模块实现补丁目录的逻辑读写入口及缓存判定端点；实例序号在所引事务收尾推进，缓存对象的后续重解析/重建由消费者管理。此职责记录本次追踪的生产消费边界；它既不声称模块不维护目录，也不把存储层物理访问当作本模块自有实现。",
+      "conditions": [
+        "当前快照和构建条件；两个缓存端点含运行版本门控。"
+      ],
+      "counterexamples": [
+        "多节点入口限制不等价于函数内部所有路径都额外检查多节点宏。"
+      ],
+      "source_refs": [
+        "evidence:edc41b889c4829b77d2bc301c525907c",
+        "evidence:841936ca2c14996525e87f0e3b880d51",
+        "evidence:c7ba3e12228c241d9d91bcdd3661b2eb",
+        "evidence:5a6ce491cfd6521d1f76ca08df66b79b"
+      ],
+      "review_mode": "independent_review"
+    }
+  ],
+  "paths": [
+    {
+      "id": "flow:sql-patch-commit-to-plan-revalidation",
+      "body": "阶段链：补丁逻辑写入与会话标志→所引CommitTransaction收尾的条件性原子推进→CachedPlanSource保存/比较序号→共享检查或私有补丁探测→命中时设置失效字段，由消费者管理后续重解析。steps中的call仅保留已核对的两个直接调用，其余是数据/状态阶段。目录快照、提交发布原子性、下一次必重试、回滚残留与回绕均不在已证结论中。",
+      "steps": [
+        {
+          "detail": "SQL patch DDL 写 gs_sql_patch 行或改其 enable/status，并置 u_sess->opt_cxt.xact_modify_sql_patch=true；未提交前对其它会话不可见。",
+          "kind": "data_stage",
+          "name": "patch_ddl_write_and_flag"
+        },
+        {
+          "detail": "CommitTransaction 收尾调用 AtEOXact_Proceed_PatchSeq；旗标为真时原子加 1 并清旗标。",
+          "from": "sql_patch_sequence_id=N, xact_modify_sql_patch=true",
+          "kind": "state_transition",
+          "to": "sql_patch_sequence_id=N+1, xact_modify_sql_patch=false",
+          "trigger": "事务成功提交"
+        },
+        {
+          "condition": "#ifndef ENABLE_MULTIPLE_NODES 且 psrc->gpc.status.InShareTable()",
+          "kind": "call",
+          "note": "仅此处所引用的直接调用成立；其余运行与发布协议仍按条件核实。",
+          "symbol": "symbol-instance:46a23d697bac14854a669d5dbc75caf6",
+          "target": "symbol-instance:ea5002b322d5ebccd17e00745342a2dd"
+        },
+        {
+          "detail": "version < SQL_PATCH_VERSION_NUM 或 XactReadOnly 直接 false；否则 plansource->sql_patch_sequence < 全局序号才为 true。",
+          "kind": "state_transition",
+          "name": "shared_plan_recreate_decision"
+        },
+        {
+          "condition": "非共享、非 oneshot/事务语句计划",
+          "kind": "call",
+          "note": "仅此处所引用的直接调用成立；其余运行与发布协议仍按条件核实。",
+          "symbol": "symbol-instance:fdce98742d55c232730a7e782c527b8b",
+          "target": "symbol-instance:76a5026d6cd83bb9b6767281305a191b"
+        },
+        {
+          "detail": "仅当 !XactReadOnly 且本地序号 >= 全局序号时快速返回；否则遍历 query_list 做 QueryIsPatched 或 gs_sql_patch 目录探测。",
+          "kind": "data_stage",
+          "name": "local_plan_patch_probe"
+        },
+        {
+          "detail": "命中补丁上下文或目录行：plansource->is_valid=false 且 gplan->is_valid=false，交给重解析/重规划；无命中：仅把 plansource->sql_patch_sequence 追平全局序号。",
+          "kind": "state_transition",
+          "name": "invalidate_or_catch_up"
+        }
+      ],
+      "source_refs": [
+        "evidence:1cd88c7beef1680212e07f7444a7e261",
+        "evidence:73e98c8fa1273cdb369e14f1c9887ca2",
+        "evidence:410266982540147399d090adbff3e641",
+        "evidence:b6ff6d66d0a97925342b124129130f96",
+        "evidence:047bb2f1eeb16d85b74ca7f708b5729c",
+        "evidence:fda27942c43e38d127c662694c565820",
+        "evidence:07ce6bb0a4ad07b18c9c14ce240c6658",
+        "evidence:300c9a22b467b5a29420a2bf09db5af7",
+        "evidence:70c3e157465bf79367ca39ebbde31ed1",
+        "evidence:18b3d234ce5465c635b0b64d5481f5e1"
+      ]
+    }
+  ],
+  "impacts": {
+    "confirmed_dependencies": [
+      {
+        "contract": "contract:sql-patch-plan-cache-invalidation",
+        "producers": [
+          "symbol-instance:ea5002b322d5ebccd17e00745342a2dd",
+          "symbol-instance:76a5026d6cd83bb9b6767281305a191b"
+        ],
+        "consumers": [
+          "symbol-instance:46a23d697bac14854a669d5dbc75caf6",
+          "symbol-instance:fdce98742d55c232730a7e782c527b8b"
+        ],
+        "conditions": [
+          "只适用于所引源码及实际构建条件；图为静态证据。",
+          "共享与私有对象、版本和只读条件必须分开。"
+        ],
+        "source_refs": [
+          "evidence:841936ca2c14996525e87f0e3b880d51",
+          "evidence:c7ba3e12228c241d9d91bcdd3661b2eb",
+          "evidence:70c3e157465bf79367ca39ebbde31ed1",
+          "evidence:fda27942c43e38d127c662694c565820",
+          "evidence:dcd95fc10ea6256588c9aec094c2a39b",
+          "evidence:c92a948bbb1a17dfee73db9c992f74a2",
+          "evidence:e6c8169db713aa94fbfb7b9905346bb2"
+        ],
+        "meaning": "reviewed dependency; actual change effect requires diff analysis"
+      }
+    ],
+    "candidate_risks": [],
+    "unresolved": []
+  },
+  "test_obligations": [
+    {
+      "id": "test_obligation:sql-patch-sequence-boundaries",
+      "body": "未运行测试义务：按源码谓词构造版本低于阈值/达到阈值、只读/非只读、序号小于/等于/大于、query标记有无、uniqueSQLId为0/非0、目录命中/不命中、gplan为空/非空的组合。预期只限函数分支及有效性字段：共享谓词低版本或只读为false，其他比较；私有路径非只读且已追平快速返回，否则按命中条件置失效或追平。集成SQL需先核实真实入口、GUC和目录快照。回滚旗标、并发可见性及uint64边界是待研究/实验问题，当前不提供确定运行预期。",
+      "expected_from": {
+        "kind": "contract",
+        "ref": "contract:sql-patch-plan-cache-invalidation"
+      },
+      "execution_status": "not_run",
+      "conditions": [
+        "函数前置条件和分支输入需能建立；集成入口及运行配置待核。"
+      ],
+      "source_refs": [
+        "evidence:841936ca2c14996525e87f0e3b880d51",
+        "evidence:c7ba3e12228c241d9d91bcdd3661b2eb",
+        "evidence:fda27942c43e38d127c662694c565820",
+        "evidence:70c3e157465bf79367ca39ebbde31ed1",
+        "evidence:1cd88c7beef1680212e07f7444a7e261"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "asset": "server/src/gausskernel/optimizer/sqlpatch/sqlpatch.cpp",
+      "asset_sha": "cac8c041a5600ceb300a9060a1a9816470e6f962321a88531b08d0585b6420fe",
+      "end": 761,
+      "id": "evidence:841936ca2c14996525e87f0e3b880d51",
+      "quote_sha256": "1f60fa2ed72ad45d2bc8d0a519bd5433d83cbbaab8af1b04b000a44525d417b7",
+      "sha": "cac8c041a5600ceb300a9060a1a9816470e6f962321a88531b08d0585b6420fe",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6",
+      "start": 751,
+      "view": "source",
+      "text": "bool CheckRecreateCachePlanBySqlPatch(const CachedPlanSource *plansource)\r\n{\r\n    if (t_thrd.proc->workingVersionNum < SQL_PATCH_VERSION_NUM) {\r\n        return false;\r\n    }\r\n    if (u_sess->attr.attr_common.XactReadOnly) {\r\n        return false;\r\n    }\r\n    return plansource->sql_patch_sequence <\r\n        pg_atomic_read_u64(&g_instance.cost_cxt.sql_patch_sequence_id);\r\n}\r\n",
+      "truncated": false,
+      "returned_chars": 376,
+      "total_chars": 376
+    },
+    {
+      "asset": "server/src/gausskernel/optimizer/sqlpatch/sqlpatch.cpp",
+      "asset_sha": "cac8c041a5600ceb300a9060a1a9816470e6f962321a88531b08d0585b6420fe",
+      "end": 830,
+      "id": "evidence:c7ba3e12228c241d9d91bcdd3661b2eb",
+      "quote_sha256": "6c8b2eb2bf901eac2325ee8f7dd568d551ba91b052f7052788c576b9b3142a55",
+      "sha": "cac8c041a5600ceb300a9060a1a9816470e6f962321a88531b08d0585b6420fe",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6",
+      "start": 763,
+      "view": "source",
+      "text": "void RevalidateGplanBySqlPatch(CachedPlanSource *plansource)\r\n{\r\n    if (t_thrd.proc->workingVersionNum < SQL_PATCH_VERSION_NUM) {\r\n        return;\r\n    }\r\n    bool needRevalidate = false;\r\n    /* skip if no SQL patch is modified since gplan is built */\r\n    if (!u_sess->attr.attr_common.XactReadOnly &&\r\n        (plansource->sql_patch_sequence >=\r\n            pg_atomic_read_u64(&g_instance.cost_cxt.sql_patch_sequence_id))) {\r\n        return;\r\n    }\r\n\r\n    Relation rel_gs_sql_patch = NULL;\r\n    uint64 uniqueSQLId = 0;\r\n\r\n    ListCell* lc = NULL;\r\n    foreach (lc, plansource->query_list) {\r\n        Query* query = (Query*)lfirst(lc);\r\n        if (query->uniqueSQLId == 0) {\r\n            continue;\r\n        }\r\n\r\n        /* Patched query needs to be revalidate anyway in case of drop/disable patch */\r\n        if (QueryIsPatched(query)) {\r\n            if (plansource->gplan != NULL) {\r\n                plansource->gplan->is_valid = false;\r\n            }\r\n            plansource->is_valid = false;\r\n            needRevalidate = true;\r\n            ereport(DEBUG2,\r\n                (errmodule(MOD_SQLPATCH), errmsg(\"[SQLPatch] %lu is already patched, need revalidate\",\r\n                query->uniqueSQLId)));\r\n            continue;\r\n        }\r\n\r\n        uniqueSQLId = query->uniqueSQLId;\r\n        if (rel_gs_sql_patch == NULL) {\r\n            rel_gs_sql_patch = heap_open(GsSqlPatchRelationId, AccessShareLock);\r\n        }\r\n        HeapTuple tup = GetPatchTuple(UInt64GetDatum(query->uniqueSQLId), rel_gs_sql_patch, USE_UNIQUE_SQL_ID);\r\n        if (HeapTupleIsValid(tup)) {\r\n            heap_freetuple(tup);\r\n            if (plansource->gplan != NULL) {\r\n                plansource->gplan->is_valid = false;\r\n            }\r\n            plansource->is_valid = false;\r\n            needRevalidate = true;\r\n            ereport(DEBUG2,\r\n                (errmodule(MOD_SQLPATCH), errmsg(\"[SQLPatch] %lu found matching patch, need revalidate\",\r\n                query->uniqueSQLId)));\r\n            break;\r\n        }\r\n    }\r\n\r\n    if (!needRevalidate) {\r\n        ereport(DEBUG2,\r\n            (errmodule(MOD_SQLPATCH), errmsg(\"[SQLPatch] %lu no matching patch, update patch sequence id \"\r\n            \"from %lu to %lu\", uniqueSQLId, plansource->sql_patch_sequence,\r\n            pg_atomic_read_u64(&g_instance.cost_cxt.sql_patch_sequence_id))));\r\n        plansource->sql_patch_sequence = pg_atomic_read_u64(&g_instance.cost_cxt.sql_patch_sequence_id);\r\n    }\r\n\r\n    if (rel_gs_sql_patch != NULL) {\r\n        heap_close(rel_gs_sql_patch, AccessShareLock);\r\n    }\r\n    /* plansource->sql_patch_sequence will be set to global id after parsed again */\r\n}\r\n",
+      "truncated": false,
+      "returned_chars": 2639,
+      "total_chars": 2639
+    },
+    {
+      "asset": "server/src/common/backend/utils/cache/plancache.cpp",
+      "asset_sha": "7be2d1eaa9f2055d9bcad22778f578b9f98d554f352b9bcf2266bdfbfa4a5aae",
+      "end": 930,
+      "id": "evidence:70c3e157465bf79367ca39ebbde31ed1",
+      "quote_sha256": "c46514ddbea8e85555e3663c52dd58173375d341f8adebbce3d02c703bea136e",
+      "sha": "7be2d1eaa9f2055d9bcad22778f578b9f98d554f352b9bcf2266bdfbfa4a5aae",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6",
+      "start": 845,
+      "view": "source",
+      "text": "     * assumed the query is parsed, planned, and executed in one transaction,\r\n     * so that no lock re-acquisition is necessary.\r\n     */\r\n    if (plansource->is_oneshot || IsTransactionStmtPlan(plansource)) {\r\n        Assert(plansource->is_valid);\r\n        return NIL;\r\n    }\r\n    /* if is shared plan, we should acquire plan lock before check recreate plan */\r\n    if (plansource->gpc.status.InShareTable()) {\r\n        Assert(plansource->is_valid);\r\n        return NIL;\r\n    }\r\n    /*\r\n     * If there were no parsetrees, we don't need to check the the plan is whether invalid or not cause we do nothing but call\r\n     *  NullCommand() in the execute stage.\r\n     */\r\n    if (plansource->raw_parse_tree == NULL) {\r\n        plansource->is_valid = true;\r\n        return NIL;\r\n    }\r\n\r\n    /*\r\n     * If the query is currently valid, we should have a saved search_path ---\r\n     * check to see if that matches the current environment.  If not, we want\r\n     * to force replan.\r\n     */\r\n    if (plansource->is_valid) {\r\n        Assert(plansource->search_path != NULL);\r\n        if (!OverrideSearchPathMatchesCurrent(plansource->search_path)) {\r\n            /* Invalidate the querytree and generic plan */\r\n            plansource->is_valid = false;\r\n            if (plansource->gplan) {\r\n                plansource->gplan->is_valid = false;\r\n            }\r\n            /* generic root and all candidate plans need to be rebuilt. */\r\n            if (ENABLE_CACHEDPLAN_MGR && plansource->planManager != NULL) {\r\n                ereport(DEBUG2,\r\n                    (errmodule(MOD_OPT),\r\n                     errmsg(\"SearchPath has been changed, invalid planManager; query: \\\"%s\\\"\",\r\n                     plansource->query_string)));\r\n                plansource->planManager->is_valid = false;\r\n            }\r\n        }\r\n    }\r\n\r\n    RevalidateGplanBySqlPatch(plansource);\r\n\r\n    /*\r\n     * If the query rewrite phase had a possible RLS dependency, we must redo\r\n     * it if either the role setting has changed.\r\n     */\r\n    if (plansource->is_valid && \r\n        ((plansource->dependsOnRole && (plansource->rewriteRoleId != GetUserId())) ||\r\n            plansource->param_collation != GetCollationConnection())) {\r\n        plansource->is_valid = false;\r\n    }\r\n\r\n    /*\r\n     * If the query is currently valid, acquire locks on the referenced\r\n     * objects; then check again.  We need to do it this way to cover the race\r\n     * condition that an invalidation message arrives before we get the locks.\r\n     */\r\n    if (plansource->is_valid) {\r\n        AcquirePlannerLocks(plansource->query_list, true);\r\n\r\n#ifdef ENABLE_MOT\r\n        /*\r\n         * In case the plan is valid, We must revalidate MOT JIT context early\r\n         * enough before success is declared, but after plan locks are taken.\r\n         * We want to make sure that in case JIT context was invalidated and\r\n         * cannot be revalidated, then the opfusion object should be discarded,\r\n         * since it must be recreated, this time without JIT.\r\n         * This use case can happen with select from stored procedure, where\r\n         * some sub-query was invalidated, or even the stored procedure itself\r\n         * was modified.\r\n         * ATTENTION: This case relates only to MOT tables, since we have a\r\n         * ready MOT JIT context.\r\n         */\r\n        if (plansource->is_valid) {\r\n            if (plansource->mot_jit_context != nullptr) {\r\n                MotTryRevalidateJitContext(plansource);\r\n            } else {\r\n                bool checkMotJitCodegen = (!IS_PGXC_COORDINATOR && (u_sess->SPI_cxt._connected == -1) &&\r\n                                            (plansource->checkedMotJitCodegen == false));\r\n                if (checkMotJitCodegen) {\r\n                    // generate JIT code here\r\n",
+      "truncated": false,
+      "returned_chars": 3790,
+      "total_chars": 3790
+    },
+    {
+      "asset": "server/src/gausskernel/process/globalplancache/globalplancache.cpp",
+      "asset_sha": "77788085ca348807e8792e7773713b4d989020b58e39e4ca2c024481ed2e00da",
+      "end": 626,
+      "id": "evidence:fda27942c43e38d127c662694c565820",
+      "quote_sha256": "771f271d983921715eafe7beb9e2cec4a9a3dc8abd8739a0a1741d487e865384",
+      "sha": "77788085ca348807e8792e7773713b4d989020b58e39e4ca2c024481ed2e00da",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6",
+      "start": 556,
+      "view": "source",
+      "text": "bool GlobalPlanCache::CheckRecreateCachePlan(CachedPlanSource* psrc, bool* hasGetLock)\r\n{\r\n    if (IsAbortedTransactionBlockState() && (!IsTransactionExitStmt(psrc->raw_parse_tree)))\r\n        ereport(ERROR,\r\n            (errcode(ERRCODE_IN_FAILED_SQL_TRANSACTION),\r\n                errmsg(\"current transaction is aborted, \"\r\n                    \"commands ignored until end of transaction block, firstChar[%c]\",\r\n                    u_sess->proc_cxt.firstChar),\r\n                errdetail_abort()));\r\n    /*\r\n     * Start up a transaction command so we can run parse analysis etc. (Note\r\n     * that this will normally change current memory context.) Nothing happens\r\n     * if we are already in one.\r\n     */\r\n    start_xact_command();\r\n    Assert(psrc->magic == CACHEDPLANSOURCE_MAGIC);\r\n    /* get lock before check plan is valid or not, release it if need recreate plan */\r\n    if (psrc->gpc.status.InShareTable()) {\r\n        AcquirePlannerLocks(psrc->query_list, true);\r\n        if (psrc->gplan) {\r\n            AcquireExecutorLocks(psrc->gplan->stmt_list, true);\r\n        }\r\n        *hasGetLock = true;\r\n    }\r\n\r\n#ifdef ENABLE_MULTIPLE_NODES\r\n    if (IS_PGXC_COORDINATOR && !psrc->gpc.status.InShareTable()) {\r\n        return false;\r\n    }\r\n#else\r\n    if (!psrc->gpc.status.InShareTable()) {\r\n        return false;\r\n    }\r\n\r\n    /* If query_dop alreadly change, need build plan again. */\r\n    if (psrc->stream_enabled != IsStreamSupport()) {\r\n        return true;\r\n    }\r\n#endif\r\n\r\n    if (u_sess->pcache_cxt.gpc_in_ddl == true) {\r\n        return true;\r\n    }\r\n    if (!psrc->gpc.status.IsValid()) {\r\n        return true;\r\n    }\r\n    if (psrc->dependsOnRole && (psrc->rewriteRoleId != GetUserId())) {\r\n        return true;\r\n    }\r\n    if ((psrc->gplan != NULL && TransactionIdIsValid(psrc->gplan->saved_xmin))) {\r\n        return true;\r\n    }\r\n\r\n    if (psrc->search_path && !OverrideSearchPathMatchesCurrent(psrc->search_path)) {\r\n        return true;\r\n    }\r\n\r\n    /* If enable_expr_fusion or query_dop alreadly change, need build plan again. */\r\n    if (psrc->cq_is_flt_frame !=\r\n        (u_sess->attr.attr_common.enable_expr_fusion && u_sess->attr.attr_sql.query_dop_tmp == 1)) {\r\n        return true;\r\n    }\r\n\r\n#ifndef ENABLE_MULTIPLE_NODES\r\n    if (CheckRecreateCachePlanBySqlPatch(psrc)) {\r\n        return true;\r\n    }\r\n#endif\r\n\r\n    return false;\r\n}\r\n",
+      "truncated": false,
+      "returned_chars": 2362,
+      "total_chars": 2362
+    },
+    {
+      "asset": "server/src/gausskernel/process/globalplancache/globalplancache.cpp",
+      "asset_sha": "77788085ca348807e8792e7773713b4d989020b58e39e4ca2c024481ed2e00da",
+      "end": 660,
+      "id": "evidence:dcd95fc10ea6256588c9aec094c2a39b",
+      "quote_sha256": "c8fcaf35e1e64072d6fc8a7d91f46d99726528978d1f2e531c83831df9179cd5",
+      "sha": "77788085ca348807e8792e7773713b4d989020b58e39e4ca2c024481ed2e00da",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6",
+      "start": 628,
+      "view": "source",
+      "text": "bool GlobalPlanCache::CheckRecreateSPICachePlan(SPIPlanPtr spi_plan)\r\n{\r\n    ListCell* cell = NULL;\r\n    Assert(spi_plan->magic == _SPI_PLAN_MAGIC);\r\n    foreach(cell, spi_plan->plancache_list) {\r\n        CachedPlanSource* plansource = (CachedPlanSource*)lfirst(cell);\r\n        bool hasGetLock = false;\r\n        if (CheckRecreateCachePlan(plansource, &hasGetLock)) {\r\n            if (hasGetLock) {\r\n                AcquirePlannerLocks(plansource->query_list, false);\r\n                if (plansource->gplan) {\r\n                    AcquireExecutorLocks(plansource->gplan->stmt_list, false);\r\n                }\r\n            }\r\n            return true;\r\n        }\r\n    }\r\n    return false;\r\n}\r\n\r\nvoid GlobalPlanCache::RecreateSPICachePlan(SPIPlanPtr spiplan)\r\n{\r\n    ListCell* cell = NULL;\r\n    Assert(spiplan->magic == _SPI_PLAN_MAGIC);\r\n    /* push error context stack */\r\n    ErrorContextCallback spi_err_context;\r\n    spi_err_context.callback = _SPI_error_callback;\r\n    spi_err_context.arg = NULL; /* we'll fill this below */\r\n    spi_err_context.previous = t_thrd.log_cxt.error_context_stack;\r\n    t_thrd.log_cxt.error_context_stack = &spi_err_context;\r\n    foreach(cell, spiplan->plancache_list) {\r\n        CachedPlanSource* oldsource = (CachedPlanSource*)lfirst(cell);\r\n        if (!oldsource->gpc.status.InShareTable())\r\n",
+      "truncated": false,
+      "returned_chars": 1326,
+      "total_chars": 1326
+    },
+    {
+      "asset": "server/src/gausskernel/process/globalplancache/globalplancache.cpp",
+      "asset_sha": "77788085ca348807e8792e7773713b4d989020b58e39e4ca2c024481ed2e00da",
+      "end": 780,
+      "id": "evidence:c92a948bbb1a17dfee73db9c992f74a2",
+      "quote_sha256": "ce0a3978777178537ca6f020b27442d7478b00a9abfbb5464df23c1a80f7ed62",
+      "sha": "77788085ca348807e8792e7773713b4d989020b58e39e4ca2c024481ed2e00da",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6",
+      "start": 690,
+      "view": "source",
+      "text": "void GlobalPlanCache::RecreateCachePlan(CachedPlanSource* oldsource, const char* stmt_name, PreparedStatement* entry,\r\n                                        SPIPlanPtr spiplan, ListCell* spiplanCell, bool hasGetLock,\r\n                                        void* paramCachedKey)\r\n{\r\n    GPC_LOG(\"recreate plan\", oldsource, oldsource->stmt_name);\r\n    /* these operator may throw error, make sure shared plan is invalid first */\r\n    CachedPlanSource *newsource = NULL;\r\n    PG_TRY();\r\n    {\r\n        if (hasGetLock) {\r\n            AcquirePlannerLocks(oldsource->query_list, false);\r\n            if (oldsource->gplan) {\r\n                AcquireExecutorLocks(oldsource->gplan->stmt_list, false);\r\n            }\r\n        }\r\n        newsource = CopyCachedPlan(oldsource, true);\r\n        MemoryContext oldcxt = MemoryContextSwitchTo(newsource->context);\r\n        newsource->stream_enabled = IsStreamSupport();\r\n        u_sess->exec_cxt.CurrentOpFusionObj = NULL;\r\n        Assert (oldsource->gpc.status.IsSharePlan());\r\n        newsource->gpc.status.ShareInit();\r\n        // If the planSource is set to invalid, the AST must be analyzed again\r\n        // because the meta has changed.\r\n        newsource->is_valid = false;\r\n        newsource->gpc_lockid = -1;\r\n        bool has_lp = false;\r\n\r\n        if (spiplan != NULL) {\r\n            t_thrd.log_cxt.error_context_stack->arg = (void *)newsource->query_string;\r\n            newsource->spi_signature = oldsource->spi_signature;\r\n            newsource->parserSetup = spiplan->parserSetup;\r\n            newsource->parserSetupArg = spiplan->parserSetupArg;\r\n        } else if (IS_PGXC_DATANODE) {\r\n            newsource->stmt_name = pstrdup(stmt_name);\r\n        } else {\r\n            newsource->stmt_name = pstrdup(stmt_name);\r\n#ifdef ENABLE_MULTIPLE_NODES\r\n            has_lp = (oldsource->single_exec_node != NULL && oldsource->gplan == NULL && oldsource->cplan == NULL);\r\n            /* clean session's datanode statment on cn */\r\n            if (has_lp) {\r\n                /* no lp in newsource, delete old lp */\r\n                GPCDropLPIfNecessary(stmt_name, false, true, NULL);\r\n            } else if (oldsource->gplan != NULL) {\r\n                /* Close any active planned Datanode statements, recreate in BuildCachedPlan later */\r\n                GPCCleanDatanodeStatement(oldsource->gplan->dn_stmt_num, stmt_name);\r\n            }\r\n#endif\r\n        }\r\n        (void)RevalidateCachedQuery(newsource, has_lp);\r\n        MemoryContextSwitchTo(oldcxt);\r\n    }\r\n    PG_CATCH();\r\n    {\r\n        /* catch only move invalid plansource into gpc invalid list when error occurs */\r\n        MoveIntoInvalidPlanList(oldsource);\r\n        PG_RE_THROW();\r\n    }\r\n    PG_END_TRY();\r\n\r\n    /* newsource has reference on session, forget resource owner */\r\n    ResourceOwnerForgetGMemContext(t_thrd.utils_cxt.TopTransactionResourceOwner, newsource->context);\r\n    if (!oldsource->is_param) {\r\n        newsource->next_saved = u_sess->pcache_cxt.first_saved_plan;\r\n        u_sess->pcache_cxt.first_saved_plan = newsource;\r\n    } else {\r\n        newsource->next_saved = u_sess->param_cxt.first_saved_plan;\r\n        u_sess->param_cxt.first_saved_plan = newsource;\r\n        newsource->is_param = true;\r\n        newsource->entry = oldsource->entry;\r\n        ((ParamCachedPlan*)(paramCachedKey))->psrc = newsource;\r\n    }\r\n\r\n    newsource->is_saved = true;\r\n    newsource->gpc.status.SetLoc(GPC_SHARE_IN_LOCAL_SAVE_PLAN_LIST);\r\n    if (spiplan != NULL)\r\n        spiplanCell->data.ptr_value = newsource;\r\n    else {\r\n#ifdef ENABLE_MULTIPLE_NODES\r\n        if (IS_PGXC_DATANODE)\r\n            u_sess->pcache_cxt.cur_stmt_psrc = newsource;\r\n        else\r\n            entry->plansource = newsource;\r\n#else\r\n        if (entry != NULL) {\r\n            entry->plansource = newsource;\r\n        }\r\n#endif\r\n    }\r\n\r\n    RemovePlanSource<ACTION_RECREATE>(oldsource, stmt_name);\r\n}\r\n",
+      "truncated": false,
+      "returned_chars": 3894,
+      "total_chars": 3894
+    },
+    {
+      "asset": "server/src/common/backend/utils/cache/plancache.cpp",
+      "asset_sha": "7be2d1eaa9f2055d9bcad22778f578b9f98d554f352b9bcf2266bdfbfa4a5aae",
+      "end": 1080,
+      "id": "evidence:e6c8169db713aa94fbfb7b9905346bb2",
+      "quote_sha256": "4618e0febaa266569750454e10534c7103a14cd9f9b76375564853f8b52dbc7e",
+      "sha": "7be2d1eaa9f2055d9bcad22778f578b9f98d554f352b9bcf2266bdfbfa4a5aae",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6",
+      "start": 1000,
+      "view": "source",
+      "text": "     * reasonably sane state.  (The generic plan won't get unlinked yet, but\r\n     * that's acceptable.)\r\n     */\r\n    if (plansource->query_context) {\r\n        MemoryContext qcxt = plansource->query_context;\r\n\r\n        plansource->query_context = NULL;\r\n        MemoryContextDelete(qcxt);\r\n    }\r\n\r\n    /*\r\n     * Now re-do parse analysis and rewrite.  This not incidentally acquires\r\n     * the locks we need to do planning safely.\r\n     */\r\n    Assert(plansource->is_complete);\r\n\r\n    /*\r\n     * If a snapshot is already set (the normal case), we can just use that\r\n     * for parsing/planning.  But if it isn't, install one.  Note: no point in\r\n     * checking whether parse analysis requires a snapshot; utility commands\r\n     * don't have invalidatable plans, so we'd not get here for such a\r\n     * command.\r\n     */\r\n    snapshot_set = false;\r\n    if (!ActiveSnapshotSet()) {\r\n        PushActiveSnapshot(GetTransactionSnapshot(GTM_LITE_MODE));\r\n        snapshot_set = true;\r\n    }\r\n\r\n    /*\r\n     * Query Tree is about to be rebuilt, reset is_top_unique_sql, otherwise, unique sql id\r\n     * can not be set.\r\n     */\r\n    if (IS_UNIQUE_SQL_TRACK_TOP)\r\n        SetIsTopUniqueSQL(false);\r\n\r\n    /*\r\n     * Run parse analysis and rule rewriting.  The parser tends to scribble on\r\n     * its input, so we must copy the raw parse tree to prevent corruption of\r\n     * the cache.\r\n     */\r\n    rawtree = (Node*)copyObject(plansource->raw_parse_tree);\r\n    if (plansource->parserSetup != NULL)\r\n        tlist = pg_analyze_and_rewrite_params(\r\n            rawtree, plansource->query_string, plansource->parserSetup, plansource->parserSetupArg);\r\n    else\r\n        tlist =\r\n            pg_analyze_and_rewrite(rawtree, plansource->query_string, plansource->param_types, plansource->num_params);\r\n\r\n    ereport(DEBUG2, (errmodule(MOD_SQLPATCH),\r\n        errmsg(\"[SQLPatch] %lu after revalidation update from %lu to %lu\", u_sess->unique_sql_cxt.unique_sql_id,\r\n        plansource->sql_patch_sequence, pg_atomic_read_u64(&g_instance.cost_cxt.sql_patch_sequence_id))));\r\n    plansource->sql_patch_sequence = pg_atomic_read_u64(&g_instance.cost_cxt.sql_patch_sequence_id);\r\n    plansource->nextval_default_expr_type = u_sess->opt_cxt.nextval_default_expr_type;\r\n\r\n    /* Release snapshot if we got one */\r\n    if (snapshot_set)\r\n        PopActiveSnapshot();\r\n\r\n    /*\r\n     * Check or update the result tupdesc.\tXXX should we use a weaker\r\n     * condition than equalTupleDescs() here?\r\n     *\r\n     * We assume the parameter types didn't change from the first time, so no\r\n     * need to update that.\r\n     */\r\n    resultDesc = PlanCacheComputeResultDesc(tlist);\r\n    if (resultDesc == NULL && plansource->resultDesc == NULL) {\r\n        /* OK, doesn't return tuples */\r\n    } else if (resultDesc == NULL || plansource->resultDesc == NULL ||\r\n               !equalTupleDescs(resultDesc, plansource->resultDesc)) {\r\n        /* can we give a better error message? */\r\n        if (plansource->fixed_result) {\r\n            ereport(ERROR, (errcode(ERRCODE_INVALID_CACHE_PLAN),\r\n                            errmsg(\"cached plan must not change result type\")));\r\n        } else if (!FORCE_VALIDATE_PLANCACHE_RESULT) {\r\n            /* If result type validation is turned off, better notice the caller */\r\n            ereport(NOTICE, (errmsg(\"cached plan's result type has changed\"),\r\n                             errdetail(\"plan cache result type validation is turned off\")));\r\n        }\r\n\r\n",
+      "truncated": false,
+      "returned_chars": 3475,
+      "total_chars": 3475
+    },
+    {
+      "asset": "server/src/include/utils/plancache.h",
+      "asset_sha": "ffd1f9d59e3147318ee16774a154ba1df4dcd45cc8b87131e82a775e8295756c",
+      "end": 420,
+      "id": "evidence:10d59aa4356a443588101cdfa8fbbef7",
+      "quote_sha256": "db82944dcccd4bd0a0a0474c5b1249ab436402716349cb1a3cc3c778e0920d72",
+      "sha": "ffd1f9d59e3147318ee16774a154ba1df4dcd45cc8b87131e82a775e8295756c",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6",
+      "start": 410,
+      "view": "source",
+      "text": "\n    bool gplan_is_fqs;      /* if gplan is a fqs plan, use generic plan if\n                    so when enable_pbe_optimization is on */\n    bool force_custom_plan; /* force to use custom plan */\n    bool single_shard_stmt;  /* single shard stmt? */\n#endif\n    uint64 sql_patch_sequence; /* should match g_instance.cost_cxt.sql_patch_sequence_id */\n    PlanManager *planManager;\n    int gpc_lockid;\n    /*\n     * PBE scenario for explain opteval:\n",
+      "truncated": false,
+      "returned_chars": 447,
+      "total_chars": 447
+    },
+    {
+      "asset": "server/src/gausskernel/optimizer/sqlpatch/sqlpatch.cpp",
+      "asset_sha": "cac8c041a5600ceb300a9060a1a9816470e6f962321a88531b08d0585b6420fe",
+      "end": 839,
+      "id": "evidence:5a6ce491cfd6521d1f76ca08df66b79b",
+      "quote_sha256": "569606a08832ca18640bfbf12f904ed2cd25f87ef3581d7fd376d9b235f9bf03",
+      "sha": "cac8c041a5600ceb300a9060a1a9816470e6f962321a88531b08d0585b6420fe",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6",
+      "start": 832,
+      "view": "source",
+      "text": "static bool QueryIsPatched(const Query* query)\r\n{\r\n    if (query->hintState == NULL) {\r\n        return false;\r\n    }\r\n\r\n    return query->hintState->from_sql_patch;\r\n}\r\n",
+      "truncated": false,
+      "returned_chars": 169,
+      "total_chars": 169
+    },
+    {
+      "asset": "server/src/common/backend/utils/cache/plancache.cpp",
+      "asset_sha": "7be2d1eaa9f2055d9bcad22778f578b9f98d554f352b9bcf2266bdfbfa4a5aae",
+      "end": 1010,
+      "id": "evidence:a0b91a802f118c15adbf8c159549f18a",
+      "quote_sha256": "b950927b8f9c737e2b3ec5afdb0392bfe9cd0d772c2b5c205124a37fd001a78f",
+      "sha": "7be2d1eaa9f2055d9bcad22778f578b9f98d554f352b9bcf2266bdfbfa4a5aae",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6",
+      "start": 950,
+      "view": "source",
+      "text": "         * functions will have marked the query invalid.\r\n         */\r\n        if (plansource->is_valid) {\r\n            /* Successfully revalidated and locked the query. */\r\n            if (plansource->opFusionObj) {\r\n                ((OpFusion*)plansource->opFusionObj)->m_hasRelationLock = true;\r\n            }\r\n            return NIL;\r\n        }\r\n\r\n        /* Ooops, the race case happened.  Release useless locks. */\r\n        AcquirePlannerLocks(plansource->query_list, false);\r\n    }\r\n\r\n    Assert(!plansource->gpc.status.InShareTable());\r\n\r\n#ifdef ENABLE_MOT\r\n    /*\r\n     * CachedPlanSource is no longer valid. Invalidate MOT JIT context forcefully,\r\n     * so that it will be re-validated in the next execution.\r\n     * ATTENTION: This case relates only to MOT tables, since we have a\r\n     * ready MOT JIT context.\r\n     */\r\n    if (plansource->mot_jit_context != nullptr) {\r\n        JitExec::ForceJitContextInvalidation(plansource->mot_jit_context);\r\n    }\r\n    plansource->checkedMotJitCodegen = false;\r\n#endif\r\n\r\n    /*\r\n     * Discard the no-longer-useful query tree.  (Note: we don't want to do\r\n     * this any earlier, else we'd not have been able to release locks\r\n     * correctly in the race condition case.)\r\n     */\r\n    plansource->is_valid = false;\r\n    if (plansource->planManager != NULL) {\r\n        plansource->planManager->is_valid = false;\r\n    }\r\n    plansource->operator_reuse_state = NULL;\r\n    plansource->query_list = NIL;\r\n    plansource->relationOids = NIL;\r\n    plansource->invalItems = NIL;\r\n    plansource->search_path = NULL;\r\n    ResetRowDescPlanCache(plansource);\r\n    if (plansource->single_exec_node) {\r\n        need_reset_singlenode = true;\r\n    }\r\n    /*\r\n     * Free the query_context.\tWe don't really expect MemoryContextDelete to\r\n     * fail, but just in case, make sure the CachedPlanSource is left in a\r\n     * reasonably sane state.  (The generic plan won't get unlinked yet, but\r\n     * that's acceptable.)\r\n     */\r\n    if (plansource->query_context) {\r\n        MemoryContext qcxt = plansource->query_context;\r\n\r\n        plansource->query_context = NULL;\r\n        MemoryContextDelete(qcxt);\r\n    }\r\n\r\n    /*\r\n",
+      "truncated": false,
+      "returned_chars": 2163,
+      "total_chars": 2163
+    },
+    {
+      "asset": "server/src/common/backend/utils/cache/plancache.cpp",
+      "asset_sha": "7be2d1eaa9f2055d9bcad22778f578b9f98d554f352b9bcf2266bdfbfa4a5aae",
+      "end": 335,
+      "id": "evidence:6a1d15b53a43b9100e5b2c485ad79f5f",
+      "quote_sha256": "6e4325772dfb0b72a7fb51c2e42df9f9698edc0a561ec686ff7a590067274ae0",
+      "sha": "7be2d1eaa9f2055d9bcad22778f578b9f98d554f352b9bcf2266bdfbfa4a5aae",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6",
+      "start": 295,
+      "view": "source",
+      "text": "    /* Initialize gplan_is_fqs is true, and set to false when find it's not fqs */\r\n    plansource->gplan_is_fqs = true;\r\n#endif\r\n\r\n    plansource->query_list = NIL;\r\n    plansource->relationOids = NIL;\r\n    plansource->invalItems = NIL;\r\n    plansource->query_context = NULL;\r\n    plansource->gplan = NULL;\r\n    plansource->is_oneshot = false;\r\n    plansource->is_complete = false;\r\n    plansource->is_saved = false;\r\n    plansource->is_valid = false;\r\n    plansource->generation = 0;\r\n    plansource->next_saved = NULL;\r\n    plansource->generic_cost = -1;\r\n    plansource->total_custom_cost = 0;\r\n    plansource->num_custom_plans = 0;\r\n    plansource->opFusionObj = NULL;\r\n    plansource->is_checked_opfusion = false;\r\n    plansource->is_support_gplan = false;\r\n    plansource->spi_signature = {(uint32)-1, 0, (uint32)-1, -1};\r\n    plansource->sql_patch_sequence = pg_atomic_read_u64(&g_instance.cost_cxt.sql_patch_sequence_id);\r\n    plansource->planManager = NULL;\r\n    plansource->hasSubQuery = false;\r\n    plansource->gpc_lockid = -1;\r\n    plansource->hasSubQuery = false;\r\n    plansource->param_collation = GetCollationConnection();\r\n    if (!enable_pbe_gpc && !(ENABLE_CN_GPC && enable_spi_gpc)) {\r\n        plansource->describe_buf_context = CreateRowDescBufContext(source_context);\r\n    }\r\n\r\n\r\n#ifdef ENABLE_MOT\r\n    plansource->storageEngineType = SE_TYPE_UNSPECIFIED;\r\n    plansource->checkedMotJitCodegen = false;\r\n    plansource->mot_jit_context = NULL;\r\n#endif\r\n\r\n    if (enable_pbe_gpc) {\r\n        plansource->gpc.status.ShareInit();\r\n",
+      "truncated": false,
+      "returned_chars": 1549,
+      "total_chars": 1549
+    },
+    {
+      "asset": "server/src/common/backend/utils/cache/plancache.cpp",
+      "asset_sha": "7be2d1eaa9f2055d9bcad22778f578b9f98d554f352b9bcf2266bdfbfa4a5aae",
+      "end": 400,
+      "id": "evidence:817efa5b7a2630e098e779e15924acf0",
+      "quote_sha256": "4c916eac0424bb748579f31e5a2bbb7461e7c726e33dc04f8a13e85277961589",
+      "sha": "7be2d1eaa9f2055d9bcad22778f578b9f98d554f352b9bcf2266bdfbfa4a5aae",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6",
+      "start": 330,
+      "view": "source",
+      "text": "    plansource->checkedMotJitCodegen = false;\r\n    plansource->mot_jit_context = NULL;\r\n#endif\r\n\r\n    if (enable_pbe_gpc) {\r\n        plansource->gpc.status.ShareInit();\r\n    } else if (ENABLE_CN_GPC && enable_spi_gpc) {\r\n        Assert(u_sess->SPI_cxt._current->plan_id >= 0);\r\n        plansource->gpc.status.ShareInit();\r\n        plansource->spi_signature.spi_key = u_sess->SPI_cxt._current->spi_hash_key;\r\n        plansource->spi_signature.func_oid = u_sess->SPI_cxt._current->func_oid;\r\n        plansource->spi_signature.spi_id = u_sess->SPI_cxt._current->visit_id;\r\n        plansource->spi_signature.plansource_id = u_sess->SPI_cxt._current->plan_id;\r\n    }\r\n\r\n    MemoryContextSwitchTo(oldcxt);\r\n    GPC_LOG(\"create plancache\", plansource, plansource->stmt_name);\r\n\r\n    return plansource;\r\n}\r\n\r\n/*\r\n * CreateOneShotCachedPlan: initially create a one-shot plan cache entry.\r\n *\r\n * This variant of CreateCachedPlan creates a plan cache entry that is meant\r\n * to be used only once.  No data copying occurs: all data structures remain\r\n * in the caller's memory context (which typically should get cleared after\r\n * completing execution).  The CachedPlanSource struct itself is also created\r\n * in that context.\r\n *\r\n * A one-shot plan cannot be saved or copied, since we make no effort to\r\n * preserve the raw parse tree unmodified.  There is also no support for\r\n * invalidation, so plan use must be completed in the current transaction,\r\n * and DDL that might invalidate the querytree_list must be avoided as well.\r\n *\r\n * raw_parse_tree: output of raw_parser()\r\n * query_string: original query text\r\n * commandTag: compile-time-constant tag for query, or NULL if empty query\r\n */\r\nCachedPlanSource* CreateOneShotCachedPlan(Node* raw_parse_tree, const char* query_string, const char* commandTag)\r\n{\r\n    Assert(query_string != NULL); /* required as of 8.4 */\r\n\r\n    /* palloc0 zeroes all fields; only set non-zero ones below */\r\n    CachedPlanSource* plansource = (CachedPlanSource*)palloc0(sizeof(CachedPlanSource));\r\n    plansource->magic = CACHEDPLANSOURCE_MAGIC;\r\n    plansource->raw_parse_tree = raw_parse_tree;\r\n    plansource->query_string = query_string;\r\n    plansource->commandTag = commandTag;\r\n    plansource->rewriteRoleId = InvalidOid;\r\n    plansource->cq_is_flt_frame =\r\n        (u_sess->attr.attr_common.enable_expr_fusion && u_sess->attr.attr_sql.query_dop_tmp == 1);\r\n    plansource->context = CurrentMemoryContext;\r\n    plansource->is_oneshot = true;\r\n    plansource->generic_cost = -1;\r\n    plansource->spi_signature = {(uint32)-1, 0, (uint32)-1, -1};\r\n    plansource->param_collation = GetCollationConnection();\r\n\r\n#ifdef ENABLE_MOT\r\n    plansource->storageEngineType = SE_TYPE_UNSPECIFIED;\r\n    plansource->checkedMotJitCodegen = false;\r\n    plansource->mot_jit_context = NULL;\r\n#endif\r\n\r\n#ifdef PGXC\r\n    plansource->stream_enabled = IsStreamSupport();\r\n    plansource->cplan = NULL;\r\n    plansource->single_exec_node = NULL;\r\n    plansource->is_read_only = false;\r\n    plansource->lightProxyObj = NULL;\r\n#endif\r\n",
+      "truncated": false,
+      "returned_chars": 3043,
+      "total_chars": 3043
+    },
+    {
+      "asset": "server/src/gausskernel/storage/access/transam/xact.cpp",
+      "asset_sha": "a82ae7122e78f2be0979bb1f094c8dcd71f63ceaf07ea790c2ee0a12113a7894",
+      "end": 8675,
+      "id": "evidence:1cd88c7beef1680212e07f7444a7e261",
+      "quote_sha256": "7a741c035ac2beec6263017c38b2716b039f4296c2db68ee101f7e7e114ee3f8",
+      "sha": "a82ae7122e78f2be0979bb1f094c8dcd71f63ceaf07ea790c2ee0a12113a7894",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6",
+      "start": 8660,
+      "view": "source",
+      "text": "{\r\n    return CurrentTransactionState->name;\r\n}\r\n\r\nstatic void AtEOXact_Proceed_PatchSeq()\r\n{\r\n    /* proceed the instance-level patch id */\r\n    if (u_sess->opt_cxt.xact_modify_sql_patch) {\r\n        (void)pg_atomic_add_fetch_u64(&g_instance.cost_cxt.sql_patch_sequence_id, 1);\r\n        ereport(DEBUG2, (errmodule(MOD_SQLPATCH),\r\n            errmsg(\"[SQLPatch] global patch sequence id is proceeded to %lu\",\r\n            pg_atomic_read_u64(&g_instance.cost_cxt.sql_patch_sequence_id))));\r\n        u_sess->opt_cxt.xact_modify_sql_patch = false;\r\n    }\r\n}\r\n\r\n",
+      "truncated": false,
+      "returned_chars": 557,
+      "total_chars": 557
+    },
+    {
+      "asset": "server/src/gausskernel/storage/access/transam/xact.cpp",
+      "asset_sha": "a82ae7122e78f2be0979bb1f094c8dcd71f63ceaf07ea790c2ee0a12113a7894",
+      "end": 3210,
+      "id": "evidence:1487a4d5cd3ae0c8b26f45c3775694b1",
+      "quote_sha256": "0ce16f895b64ae548e8bb7cffd14d9e41a32dd22fafc529e5215d96436f06e5c",
+      "sha": "a82ae7122e78f2be0979bb1f094c8dcd71f63ceaf07ea790c2ee0a12113a7894",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6",
+      "start": 3195,
+      "view": "source",
+      "text": "    oldstate = s->state;\r\n    s->state = TRANS_DEFAULT;\r\n\r\n    if (module_logging_is_on(MOD_TRANS_XACT)) {\r\n        ereport(LOG, (errmodule(MOD_TRANS_XACT),\r\n                      errmsg(\"Local Node %s: local commit process completed, trans state : %s -> %s\",\r\n                             g_instance.attr.attr_common.PGXCNodeName, TransStateAsString(oldstate),\r\n                             TransStateAsString(s->state))));\r\n    }\r\n\r\n    RESUME_INTERRUPTS();\r\n\r\n    AtEOXact_Proceed_PatchSeq();\r\n    AtEOXact_Remote();\r\n    /* flush all profile log about this worker thread */\r\n    flush_plog();\r\n",
+      "truncated": false,
+      "returned_chars": 598,
+      "total_chars": 598
+    },
+    {
+      "asset": "server/src/gausskernel/storage/access/transam/xact.cpp",
+      "asset_sha": "a82ae7122e78f2be0979bb1f094c8dcd71f63ceaf07ea790c2ee0a12113a7894",
+      "end": 2640,
+      "id": "evidence:9cc0ea04839487ab7dbac9050964439d",
+      "quote_sha256": "ef8b538cb62ce40576fa58721e4585117ffdd2718e119b34994b5a7bf6483f85",
+      "sha": "a82ae7122e78f2be0979bb1f094c8dcd71f63ceaf07ea790c2ee0a12113a7894",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6",
+      "start": 2620,
+      "view": "source",
+      "text": " *\tCommitTransaction\r\n *\r\n * NB: if you change this routine, better look at PrepareTransaction too!\r\n */\r\nstatic void CommitTransaction(bool STP_commit)\r\n{\r\n    u_sess->exec_cxt.isLockRows = false;\r\n    u_sess->need_report_top_xid = false;\r\n    TransactionState s = CurrentTransactionState;\r\n    TransactionId latestXid;\r\n    bool barrierLockHeld = false;\r\n#ifdef ENABLE_MULTIPLE_NODES\r\n        checkAndDoUpdateSequence();\r\n#endif\r\n\r\n    ShowTransactionState(\"CommitTransaction\");\r\n\r\n#ifndef ENABLE_MULTIPLE_NODES\r\n    LockPartitionDDLOperation();\r\n    ResetPartitionLockInfo();\r\n#endif\r\n",
+      "truncated": false,
+      "returned_chars": 588,
+      "total_chars": 588
+    },
+    {
+      "asset": "server/src/gausskernel/process/threadpool/knl_instance.cpp",
+      "asset_sha": "ff53bf84ed3d14f9089177f738346c6a5750f47ef3bb00b45ead9a3d2e966e17",
+      "end": 75,
+      "id": "evidence:1cfacc7cc853db702b4406ddb2966a63",
+      "quote_sha256": "1694c31f37c7f52ee232dfb99b4ab9691e15f08da9e2b4984a89cb31fd11030a",
+      "sha": "ff53bf84ed3d14f9089177f738346c6a5750f47ef3bb00b45ead9a3d2e966e17",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6",
+      "start": 66,
+      "view": "source",
+      "text": "static void knl_g_cost_init(knl_g_cost_context* cost_cxt)\r\n{\r\n    cost_cxt->cpu_hash_cost = DEFAULT_CPU_HASH_COST;\r\n    cost_cxt->send_kdata_cost = DEFAULT_SEND_KDATA_COST;\r\n    cost_cxt->receive_kdata_cost = DEFAULT_RECEIVE_KDATA_COST;\r\n    cost_cxt->disable_cost = 1.0e10;\r\n    cost_cxt->disable_cost_enlarge_factor = 10;\r\n    cost_cxt->sql_patch_sequence_id = 0;\r\n}\r\n\r\n",
+      "truncated": false,
+      "returned_chars": 372,
+      "total_chars": 372
+    },
+    {
+      "asset": "server/src/include/knl/knl_instance.h",
+      "asset_sha": "2f9c2a166969fd163dc54723701bc044e5bd20a27dc8e937e0a19e31ebe7e6aa",
+      "end": 226,
+      "id": "evidence:a7b176a0db6c0958531c71af73d877bc",
+      "quote_sha256": "bdb2fc4983cc8a5008eadd3fb3c031122c6f86c7772161f049687fb7b3de2636",
+      "sha": "2f9c2a166969fd163dc54723701bc044e5bd20a27dc8e937e0a19e31ebe7e6aa",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6",
+      "start": 215,
+      "view": "source",
+      "text": "\r\n    double send_kdata_cost;\r\n\r\n    double receive_kdata_cost;\r\n\r\n    Cost disable_cost;\r\n\r\n    Cost disable_cost_enlarge_factor;\r\n\r\n    pg_atomic_uint64 sql_patch_sequence_id; /* self-incremental sequence id for sql patch */\r\n} knl_g_cost_context;\r\n\r\n",
+      "truncated": false,
+      "returned_chars": 253,
+      "total_chars": 253
+    }
+  ],
+  "unknowns": [
+    {
+      "code": "index_partial",
+      "coverage": {
+        "available_tus": 2412,
+        "call_binding": {
+          "ambiguous_definitions": 195821,
+          "declaration_only": 81809,
+          "legacy_usr_candidate": 0,
+          "linked_definitions": 713356
+        },
+        "deferred_tus": 0,
+        "failed_tus": 0,
+        "parsed_tus": 818,
+        "partial_tus": 1594,
+        "relations": 1994720,
+        "semantic_completeness": "not_certified",
+        "source_evidence_files": 4032,
+        "symbols": 398544,
+        "translation_units": 2412
+      }
+    },
+    {
+      "code": "stale_knowledge",
+      "id": "obs:scope-unknowns",
+      "reasons": [
+        {
+          "code": "method_version_changed",
+          "id": "obs:scope-unknowns"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "module:geqo"
+        }
+      ]
+    },
+    {
+      "code": "stale_knowledge",
+      "id": "module:geqo",
+      "reasons": [
+        {
+          "code": "method_version_changed",
+          "id": "module:geqo"
+        }
+      ]
+    },
+    {
+      "code": "stale_knowledge",
+      "id": "mech:guc",
+      "reasons": [
+        {
+          "code": "method_version_changed",
+          "id": "mech:guc"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-params"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-root"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:optimizer"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:sql-engine"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "module:geqo"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:geqo-guc"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:geqo-root"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:connect-order-opt"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:sql-capability"
+        }
+      ]
+    },
+    {
+      "code": "stale_knowledge",
+      "id": "decision:dev-review",
+      "reasons": [
+        {
+          "code": "method_version_changed",
+          "id": "decision:dev-review"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "contract:pool-spread"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "mech:pool-ordering"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:geqo-population"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:geqo-root"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:connect-order-opt"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:sql-capability"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "module:geqo"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "claim:erx-unconditional"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "mech:erx-alias"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-crossover"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-root"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:optimizer"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:sql-engine"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:geqo-variants"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "mech:memory-context"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-storage"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-eval"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "mech:errors"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-clump"
+        }
+      ]
+    },
+    {
+      "code": "stale_knowledge",
+      "id": "obs:geqo-existing-regression",
+      "reasons": [
+        {
+          "code": "method_version_changed",
+          "id": "obs:geqo-existing-regression"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:geqo-gate"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-driver"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-root"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:optimizer"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:sql-engine"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "module:geqo"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:geqo-root"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:connect-order-opt"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:sql-capability"
+        }
+      ]
+    },
+    {
+      "code": "stale_knowledge",
+      "id": "mech:errors",
+      "reasons": [
+        {
+          "code": "method_version_changed",
+          "id": "mech:errors"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-crossover"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "mech:erx-alias"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "claim:erx-unconditional"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:geqo-variants"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:geqo-root"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:connect-order-opt"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:sql-capability"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "module:geqo"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-root"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:optimizer"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:sql-engine"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-clump"
+        }
+      ]
+    },
+    {
+      "code": "stale_knowledge",
+      "id": "feat:geqo-root",
+      "reasons": [
+        {
+          "code": "method_version_changed",
+          "id": "feat:geqo-root"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:connect-order-opt"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:sql-capability"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "module:geqo"
+        }
+      ]
+    },
+    {
+      "code": "stale_knowledge",
+      "id": "claim:variants-unreachable",
+      "reasons": [
+        {
+          "code": "method_version_changed",
+          "id": "claim:variants-unreachable"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "claim:erx-unconditional"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "mech:erx-alias"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-crossover"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-root"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:optimizer"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:sql-engine"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "module:geqo"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:geqo-variants"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:geqo-root"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:connect-order-opt"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:sql-capability"
+        }
+      ]
+    },
+    {
+      "code": "stale_knowledge",
+      "id": "test:geqo-existing-regression-baseline",
+      "reasons": [
+        {
+          "code": "method_version_changed",
+          "id": "test:geqo-existing-regression-baseline"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:geqo-gate"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-driver"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-root"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:optimizer"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:sql-engine"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "module:geqo"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:geqo-root"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:connect-order-opt"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:sql-capability"
+        }
+      ]
+    },
+    {
+      "code": "stale_knowledge",
+      "id": "claim:erx-unconditional",
+      "reasons": [
+        {
+          "code": "method_version_changed",
+          "id": "claim:erx-unconditional"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "mech:erx-alias"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-crossover"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-root"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:optimizer"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:sql-engine"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "module:geqo"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:geqo-variants"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:geqo-root"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:connect-order-opt"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:sql-capability"
+        }
+      ]
+    },
+    {
+      "code": "stale_knowledge",
+      "id": "feat:geqo-variants",
+      "reasons": [
+        {
+          "code": "method_version_changed",
+          "id": "feat:geqo-variants"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "claim:erx-unconditional"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "mech:erx-alias"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-crossover"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-root"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:optimizer"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:sql-engine"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "module:geqo"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:geqo-root"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:connect-order-opt"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:sql-capability"
+        }
+      ]
+    },
+    {
+      "code": "stale_knowledge",
+      "id": "mech:erx-alias",
+      "reasons": [
+        {
+          "code": "method_version_changed",
+          "id": "mech:erx-alias"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "claim:erx-unconditional"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:geqo-variants"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:geqo-root"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:connect-order-opt"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "feat:sql-capability"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "module:geqo"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-crossover"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:geqo-root"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:optimizer"
+        },
+        {
+          "code": "method_version_changed",
+          "id": "resp:sql-engine"
+        }
+      ]
+    },
+    {
+      "code": "evidence_partial",
+      "meaning": "Expand cited evidence to read its complete range"
+    }
+  ],
+  "refresh_tasks": [],
+  "retrieval": {
+    "seed_symbols": [],
+    "knowledge_ids": [
+      "claim:check-recreate-cache-plan-by-sql-patch",
+      "claim:revalidate-gplan-by-sql-patch",
+      "claim:sql-patch-sequence-producer",
+      "contract:sql-patch-plan-cache-invalidation",
+      "feature:sqlpatch-sequence-driven-plan-invalidation",
+      "feature:sqlpatch-shared-plan-recreate-boundary",
+      "flow:sql-patch-commit-to-plan-revalidation",
+      "observation:sql-patch-visibility-boundaries",
+      "responsibility:sqlpatch-plan-cache-consistency",
+      "test_obligation:sql-patch-sequence-boundaries"
+    ],
+    "modes": [
+      "character_word",
+      "lexical_hash"
+    ],
+    "matched_knowledge_count": 10,
+    "semantic_embedding": null
+  },
+  "truncated": true,
+  "runtime_validation": "not_run",
+  "budget": {
+    "requested_tokens": 64000,
+    "counting": "conservative_utf8_bytes",
+    "omitted_items": 9,
+    "evidence_read_truncated": false,
+    "omitted_kinds": [
+      "evidence"
+    ],
+    "returned_utf8_bytes": 61717
+  },
+  "status": "budget_partial"
+}

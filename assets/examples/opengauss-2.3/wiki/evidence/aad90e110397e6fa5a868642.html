@@ -1,0 +1,87 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/geqo/geqo_recombination.cpp:1-86</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/geqo/geqo_recombination.cpp:1-86</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>/* ------------------------------------------------------------------------
+ *
+ * geqo_recombination.cpp
+ *	 misc recombination procedures
+ *
+ * IDENTIFICATION
+ * src/gausskernel/optimizer/geqo/geqo_recombination.cpp
+ *
+ * -------------------------------------------------------------------------
+ */
+/* contributed by:
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+   *  Martin Utesch				 * Institute of Automatic Control	   *
+   =							 = University of Mining and Technology =
+   *  utesch@aut.tu-freiberg.de  * Freiberg, Germany				   *
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+ */
+/* -- parts of this are adapted from D. Whitley&#x27;s Genitor algorithm -- */
+#include &quot;postgres.h&quot;
+#include &quot;knl/knl_variable.h&quot;
+
+#include &quot;optimizer/geqo_random.h&quot;
+#include &quot;optimizer/geqo_recombination.h&quot;
+
+/*
+ * init_tour
+ *
+ *	 Randomly generates a legal &quot;traveling salesman&quot; tour
+ *	 (i.e. where each point is visited only once.)
+ *	 Essentially, this routine fills an array with all possible
+ *	 points on the tour and randomly chooses the &#x27;next&#x27; city from
+ *	 this array.  When a city is chosen, the array is shortened
+ *	 and the procedure repeated.
+ */
+void init_tour(PlannerInfo* root, Gene* tour, int num_gene)
+{
+    Gene* tmp = NULL;
+    int remainder;
+    int next, i;
+
+    /* Fill a temp array with the IDs of all not-yet-visited cities */
+    tmp = (Gene*)palloc(num_gene * sizeof(Gene));
+
+    for (i = 0; i &lt; num_gene; i++)
+        tmp[i] = (Gene)(i + 1);
+
+    remainder = num_gene - 1;
+
+    for (i = 0; i &lt; num_gene; i++) {
+        /* choose value between 0 and remainder inclusive */
+        next = geqo_randint(root, remainder, 0);
+        /* output that element of the tmp array */
+        tour[i] = tmp[next];
+        /* and delete it */
+        tmp[next] = tmp[remainder];
+        remainder--;
+    }
+
+    pfree_ext(tmp);
+}
+
+/* alloc_city_table
+ *
+ *	 allocate memory for city table
+ */
+City* alloc_city_table(PlannerInfo* root, int num_gene)
+{
+    City* city_table = NULL;
+
+    /*
+     * palloc one extra location so that nodes numbered 1..n can be indexed
+     * directly; 0 will not be used
+     */
+    city_table = (City*)palloc((num_gene + 1) * sizeof(City));
+
+    return city_table;
+}
+
+/* free_city_table
+ *
+ *	  deallocate memory of city table
+ */
+void free_city_table(PlannerInfo* root, City* city_table)
+{
+    pfree_ext(city_table);
+}
+</pre><p>evidence:bbf4a84b58fc11edd7b30262d2413c68</p><p>SHA-256 513058b050771efc8b2df68c1949a9a21239a1fa5a9f1d2a9c0567070cbba2b8</p></main></html>

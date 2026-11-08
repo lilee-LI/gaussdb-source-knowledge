@@ -1,0 +1,23 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/include/optimizer/geqo.h:30-51</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/include/optimizer/geqo.h:30-51</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>#define ERX
+
+/*
+ * Configuration options
+ *
+ * If you change these, update backend/utils/misc/postgresql.conf.sample
+ */
+#define DEFAULT_GEQO_EFFORT 5
+#define MIN_GEQO_EFFORT 1
+#define MAX_GEQO_EFFORT 10
+
+#define DEFAULT_GEQO_SELECTION_BIAS 2.0
+#define MIN_GEQO_SELECTION_BIAS 1.5
+#define MAX_GEQO_SELECTION_BIAS 2.0
+
+/*
+ * Private state for a GEQO run --- accessible via root-&gt;join_search_private
+ */
+typedef struct {
+    List* initial_rels;             /* the base relations we are joining */
+    unsigned short random_state[3]; /* state for pg_erand48() */
+} GeqoPrivateData;
+</pre><p>evidence:67ed103d8949a8b24f5df64bc2f78e8f</p><p>SHA-256 c551a8121985bc922b786daa3dcd39edbc950c0b3638ec665aec12df15c347b9</p></main></html>

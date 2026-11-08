@@ -1,0 +1,32 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/include/utils/elog.h:700-730</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/include/utils/elog.h:700-730</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>void freeSecurityFuncSpace(const char* charList, ...);
+extern void ErrPlpgsqlProcedure(const char* plpgsqlProcedure);
+extern void ErrPlpgsqlLine(int plpgsqlLine);
+
+extern void SimpleLogToServer(int elevel, bool silent, const char* fmt, ...)
+    __attribute__((format(PG_PRINTF_ATTRIBUTE, 3, 4)));
+
+#define TRANSLATE_ERRNO (translate_errno(errno))
+
+/* helpful macro */
+#define AssertEreport(condition, module, msg)                                                   \
+    do {                                                                                        \
+        Assert(condition);                                                                      \
+        if (unlikely(!(condition)))                                                             \
+            ereport(ERROR,                                                                      \
+                (errmodule(module),                                                             \
+                    errcode(ERRORCODE_ASSERT_FAILED),                                           \
+                    errmsg(&quot;failed on assertion in %s line %d. %s&quot;, __FILE__, __LINE__, msg))); \
+    } while (0)
+
+/* This Macro reports an error when touching distributed features in single node DB */
+#define DISTRIBUTED_FEATURE_NOT_SUPPORTED()                                            \
+    do {                                                                               \
+        ereport(ERROR,                                                                 \
+            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),                                   \
+                errmsg(&quot;Un-support feature&quot;),                                          \
+                errdetail(&quot;The distributed capability is not supported currently.&quot;))); \
+    } while (0)
+
+/* This Macro reports an error when touching on the lite mode */
+#define FEATURE_ON_LITE_MODE_NOT_SUPPORTED()                                            \
+</pre><p>evidence:69331ef6e1cca8c7ae880a5e7bd39892</p><p>SHA-256 4a33e21d4039fe16e3c70ec1273d8963df951f525b79fbdbf32832dc4090bdf8</p></main></html>

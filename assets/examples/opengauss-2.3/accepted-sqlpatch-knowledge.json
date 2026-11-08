@@ -1,0 +1,1025 @@
+{
+  "claim:check-recreate-cache-plan-by-sql-patch": {
+    "_binding": {
+      "dependencies": [
+        {
+          "fingerprint": "bab264e83471dc51af47b5319e31fc18e1f5cb1e6c0f5d6dba1e9e7252c20a82",
+          "ref": "server/src/gausskernel/optimizer/sqlpatch/sqlpatch.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "2e28ec4899cfb20b5a0c559c39704367293296a09e792c735c18cd09cecf0821",
+          "ref": "server/src/gausskernel/process/globalplancache/globalplancache.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "ca9ca372449aa33899794dee7bcfcc437fe5487d3f2210721ee2ff8c20a74512",
+          "ref": "server/src/include/utils/plancache.h",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "c79eba1c2a2983e5080ee2a0d8ced60130d6f6aff94256c15d74c8703719ac62",
+          "ref": "symbol:d1a1eacd4d242a6e2a49f91372e803e2",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "c637ec15460017a0fe44ba718cea70d41527579dab4cad07ddcf9f73cb26a74a",
+          "ref": "symbol:fc4d50c444497686ad72c688d61cf2cb",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "ed267dbb6be9d520703b964e14919d7e2e7909aa42787042038be14fec8332f9",
+          "ref": "linux-native",
+          "type": "profile"
+        }
+      ],
+      "knowledge_dependencies": [],
+      "methods_digest": "2105f393fcf2f9cbace8ed2a18c743a6932a2d1a904b3f45685af1889bdb508a",
+      "profile": "linux-native",
+      "run": "ecs-study-reference:16036114d9a15c9bb7f85e2e1363fc67",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6"
+    },
+    "body": "版本不足或XactReadOnly时返回false；否则仅比较 plansource.sql_patch_sequence 是否小于原子读取的全局序号。该函数不直接访问补丁目录或修改有效性。GlobalPlanCache::CheckRecreateCachePlan 在非 ENABLE_MULTIPLE_NODES 条件下调用它；共享对象路径的锁由调用方管理。序号落后不等价于存在匹配补丁，false也不能排除其它失效机制。",
+    "conditions": [
+      "版本达到SQL_PATCH_VERSION_NUM；分支行为按所引源码分别判断。",
+      "仅证明所引用函数及调用点，不声称穷尽所有共享计划入口。"
+    ],
+    "content_hash": "29588681852f80fa0a4f9dcec291c5190f5d9656d17a2eeb04b98aafbe4f1632",
+    "counterexamples": [
+      "低版本、只读、序号相等都不会由此谓词要求重建；其它失效原因不在此断言内。"
+    ],
+    "editorial_provenance": {
+      "generator": "Claude Code 2.1.310 / deepseek-v4-1-flash-261017",
+      "reason": "Correct unsupported rollback/snapshot/concurrency assertions after source review; not human expert acceptance",
+      "source_editor": "Codex AI"
+    },
+    "id": "claim:check-recreate-cache-plan-by-sql-patch",
+    "kind": "claim",
+    "knowledge_refs": [],
+    "review": {
+      "at": "2026-11-08T09:34:37.726568+00:00",
+      "mode": "independent_review",
+      "notes": "Codex AI源码审阅，非人工专家验收：所引版本/只读/序号和命中分支、提交推进点及两个直接调用已核对；不支持的回滚/快照/并发保证已移为待核，source editor来源明确。仅接受本机制的限定知识，不接受全模块/全仓完成。",
+      "proposal": "proposal:d9f7ab963ad54269c29f14c29ab85dcf",
+      "proposal_digest": "48cc4b4bdba283591fe0251c4611d64b45f1e636f7799f3e03d75fa6c5c46785",
+      "reviewer": "codex-source-reviewer",
+      "runtime_validation": "not_run",
+      "verdict": "accept"
+    },
+    "source_refs": [
+      "evidence:841936ca2c14996525e87f0e3b880d51",
+      "evidence:fda27942c43e38d127c662694c565820",
+      "evidence:10d59aa4356a443588101cdfa8fbbef7"
+    ],
+    "statement": "该函数在版本不足或只读时false，否则返回序号比较结果；函数内部没有显式锁获取或目录访问，底层原子的内存序及实现另外核实。",
+    "symbol_refs": [
+      "symbol-instance:ea5002b322d5ebccd17e00745342a2dd",
+      "symbol-instance:46a23d697bac14854a669d5dbc75caf6"
+    ],
+    "title": "CheckRecreateCachePlanBySqlPatch 的判定条件与语义边界"
+  },
+  "claim:revalidate-gplan-by-sql-patch": {
+    "_binding": {
+      "dependencies": [
+        {
+          "fingerprint": "bab264e83471dc51af47b5319e31fc18e1f5cb1e6c0f5d6dba1e9e7252c20a82",
+          "ref": "server/src/gausskernel/optimizer/sqlpatch/sqlpatch.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "b0dbd6c0ca4f00e3c2c9debdd46da1d7b4572959d2dbb076355102b3af91c174",
+          "ref": "server/src/common/backend/utils/cache/plancache.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "ca9ca372449aa33899794dee7bcfcc437fe5487d3f2210721ee2ff8c20a74512",
+          "ref": "server/src/include/utils/plancache.h",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "174251f79110120b306087596e093743258b7be450b70bdac3432be77aa2d318",
+          "ref": "symbol:cd5c49fb1dd81f531501e95b6ce754f4",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "2cceaaba0a758f01e6c49fb0d3ae60bfdec0251c7c81a6496da47a76c41081a8",
+          "ref": "symbol:ff3a04b2d90ec74c6c9f92a8edb852ff",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "76c7ec4af195584f389578b7e89dbfb98cf51260ad64c4ea78cbd3b8dd871a8d",
+          "ref": "symbol:c11099754df7c4775fa0f5f63363611b",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "ed267dbb6be9d520703b964e14919d7e2e7909aa42787042038be14fec8332f9",
+          "ref": "linux-native",
+          "type": "profile"
+        }
+      ],
+      "knowledge_dependencies": [],
+      "methods_digest": "2105f393fcf2f9cbace8ed2a18c743a6932a2d1a904b3f45685af1889bdb508a",
+      "profile": "linux-native",
+      "run": "ecs-study-reference:16036114d9a15c9bb7f85e2e1363fc67",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6"
+    },
+    "body": "版本不足时直接返回；否则仅在 !XactReadOnly 且本地序号>=全局值时快速返回。遍历query_list时跳过uniqueSQLId==0；QueryIsPatched命中会置plansource及已有gplan无效并continue；目录按uniqueSQLId命中也会置无效并break。整轮未命中仅追平本地序号。RevalidateCachedQuery在oneshot、事务语句、共享对象及空raw_parse_tree等提前返回后才会到达调用点；后续重解析及序号刷新由其实现负责。GetPatchTuple传给systable_beginscan的snapshot参数是NULL，本轮未追默认快照的具体语义，因此不据此证明快照类型、隔离级别或并发漏应用结论。",
+    "conditions": [
+      "调用点须能到达SQL Patch重验证分支；版本门控成立。",
+      "目录可见性、并发及原子内存序仍待专门核对。"
+    ],
+    "content_hash": "4991ba7c77f1db1e510b061dc771292620ba256b0afdd7e13cf67cd8b0ec8f3f",
+    "counterexamples": [
+      "只读并不自动失效，仍需标记或目录命中；uniqueSQLId全为0时不进入有效目录探测。"
+    ],
+    "editorial_provenance": {
+      "generator": "Claude Code 2.1.310 / deepseek-v4-1-flash-261017",
+      "reason": "Correct unsupported rollback/snapshot/concurrency assertions after source review; not human expert acceptance",
+      "source_editor": "Codex AI"
+    },
+    "id": "claim:revalidate-gplan-by-sql-patch",
+    "kind": "claim",
+    "knowledge_refs": [],
+    "review": {
+      "at": "2026-11-08T09:34:37.835378+00:00",
+      "mode": "independent_review",
+      "notes": "Codex AI源码审阅，非人工专家验收：所引版本/只读/序号和命中分支、提交推进点及两个直接调用已核对；不支持的回滚/快照/并发保证已移为待核，source editor来源明确。仅接受本机制的限定知识，不接受全模块/全仓完成。",
+      "proposal": "proposal:d9f7ab963ad54269c29f14c29ab85dcf",
+      "proposal_digest": "48cc4b4bdba283591fe0251c4611d64b45f1e636f7799f3e03d75fa6c5c46785",
+      "reviewer": "codex-source-reviewer",
+      "runtime_validation": "not_run",
+      "verdict": "accept"
+    },
+    "source_refs": [
+      "evidence:c7ba3e12228c241d9d91bcdd3661b2eb",
+      "evidence:5a6ce491cfd6521d1f76ca08df66b79b",
+      "evidence:70c3e157465bf79367ca39ebbde31ed1",
+      "evidence:a0b91a802f118c15adbf8c159549f18a",
+      "evidence:e6c8169db713aa94fbfb7b9905346bb2",
+      "evidence:6a1d15b53a43b9100e5b2c485ad79f5f",
+      "evidence:10d59aa4356a443588101cdfa8fbbef7",
+      "evidence:817efa5b7a2630e098e779e15924acf0"
+    ],
+    "statement": "RevalidateGplanBySqlPatch 仅在非只读且 plansource 序号已追平时快速返回；只读事务虽绕过快速返回，但仍需 QueryIsPatched(query) 为真或 gs_sql_patch 目录按 uniqueSQLId 命中，才会把 plansource 及其 gplan 置为失效；无命中时只把 plansource 序号刷新为全局值。",
+    "symbol_refs": [
+      "symbol-instance:76a5026d6cd83bb9b6767281305a191b",
+      "symbol-instance:a8b52f8dfa37c6333ebf2ef9f00e3a4d",
+      "symbol-instance:fdce98742d55c232730a7e782c527b8b"
+    ],
+    "title": "RevalidateGplanBySqlPatch 的快速返回、目录/QueryIsPatched 判定与失效后续处理"
+  },
+  "claim:sql-patch-sequence-producer": {
+    "_binding": {
+      "dependencies": [
+        {
+          "fingerprint": "e42b8ad2792e36249e55a95504e19323fbcbe6b3e2adc843c3ef14644b91afdb",
+          "ref": "server/src/gausskernel/storage/access/transam/xact.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "644e870e256538132b84f3d0895c83d2118a76b26520c3ac5120d1f4fa0e0083",
+          "ref": "server/src/gausskernel/process/threadpool/knl_instance.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "1ce2445eacc6295137328a88ce53943f914cb8df7aeb11be75f3e1e5f5017a0a",
+          "ref": "server/src/include/knl/knl_instance.h",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "bab264e83471dc51af47b5319e31fc18e1f5cb1e6c0f5d6dba1e9e7252c20a82",
+          "ref": "server/src/gausskernel/optimizer/sqlpatch/sqlpatch.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "ed267dbb6be9d520703b964e14919d7e2e7909aa42787042038be14fec8332f9",
+          "ref": "linux-native",
+          "type": "profile"
+        }
+      ],
+      "knowledge_dependencies": [],
+      "methods_digest": "2105f393fcf2f9cbace8ed2a18c743a6932a2d1a904b3f45685af1889bdb508a",
+      "profile": "linux-native",
+      "run": "ecs-study-reference:16036114d9a15c9bb7f85e2e1363fc67",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6"
+    },
+    "body": "所引knl_instance初始化代码把实例级原子序号设为0。所引CommitTransaction收尾调用AtEOXact_Proceed_PatchSeq：会话xact_modify_sql_patch为true时，原子加1并清除此标志。所引SQL Patch写入口设置标志，show入口不设置。CachedPlanSource创建时读取全局序号。此次只证明这些具体定义和调用；不把局部检索未命中当作所有回滚、子事务和会话重置路径无清理的证明，也不承诺序号永不回绕。",
+    "conditions": [
+      "所引提交路径与旗标条件成立；多次写入共用一个布尔旗标。",
+      "当前原子实现的内存序、回绕处理及完整回滚清理尚未核实。"
+    ],
+    "content_hash": "745247aebfa0bf3fe14624a9a4d360edd5457f692b761c682aa04abced6684b0",
+    "counterexamples": [
+      "旗标为false时该辅助函数不推进序号。",
+      "回滚后的旗标状态及后续提交是否额外推进属于未决问题，不能作为既定预期。"
+    ],
+    "editorial_provenance": {
+      "generator": "Claude Code 2.1.310 / deepseek-v4-1-flash-261017",
+      "reason": "Correct unsupported rollback/snapshot/concurrency assertions after source review; not human expert acceptance",
+      "source_editor": "Codex AI"
+    },
+    "id": "claim:sql-patch-sequence-producer",
+    "kind": "claim",
+    "knowledge_refs": [],
+    "review": {
+      "at": "2026-11-08T09:34:37.939635+00:00",
+      "mode": "independent_review",
+      "notes": "Codex AI源码审阅，非人工专家验收：所引版本/只读/序号和命中分支、提交推进点及两个直接调用已核对；不支持的回滚/快照/并发保证已移为待核，source editor来源明确。仅接受本机制的限定知识，不接受全模块/全仓完成。",
+      "proposal": "proposal:d9f7ab963ad54269c29f14c29ab85dcf",
+      "proposal_digest": "48cc4b4bdba283591fe0251c4611d64b45f1e636f7799f3e03d75fa6c5c46785",
+      "reviewer": "codex-source-reviewer",
+      "runtime_validation": "not_run",
+      "verdict": "accept"
+    },
+    "source_refs": [
+      "evidence:1cd88c7beef1680212e07f7444a7e261",
+      "evidence:1487a4d5cd3ae0c8b26f45c3775694b1",
+      "evidence:9cc0ea04839487ab7dbac9050964439d",
+      "evidence:1cfacc7cc853db702b4406ddb2966a63",
+      "evidence:a7b176a0db6c0958531c71af73d877bc",
+      "evidence:b1a2d1f2fe859bed4e9e94655c235ab9",
+      "evidence:edc41b889c4829b77d2bc301c525907c"
+    ],
+    "statement": "g_instance.cost_cxt.sql_patch_sequence_id 由 CommitTransaction 尾部的 AtEOXact_Proceed_PatchSeq 以原子 +1 递增，前提是本会话本事务内执行过 SQL Patch DDL 并把 u_sess->opt_cxt.xact_modify_sql_patch 置 true；该字段进程级初始化 0，CachedPlanSource 在创建时记录其快照。",
+    "symbol_refs": [],
+    "title": "全局补丁序号的类型、初始化与所引提交推进点"
+  },
+  "contract:sql-patch-plan-cache-invalidation": {
+    "_binding": {
+      "dependencies": [
+        {
+          "fingerprint": "bab264e83471dc51af47b5319e31fc18e1f5cb1e6c0f5d6dba1e9e7252c20a82",
+          "ref": "server/src/gausskernel/optimizer/sqlpatch/sqlpatch.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "b0dbd6c0ca4f00e3c2c9debdd46da1d7b4572959d2dbb076355102b3af91c174",
+          "ref": "server/src/common/backend/utils/cache/plancache.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "2e28ec4899cfb20b5a0c559c39704367293296a09e792c735c18cd09cecf0821",
+          "ref": "server/src/gausskernel/process/globalplancache/globalplancache.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "c79eba1c2a2983e5080ee2a0d8ced60130d6f6aff94256c15d74c8703719ac62",
+          "ref": "symbol:d1a1eacd4d242a6e2a49f91372e803e2",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "174251f79110120b306087596e093743258b7be450b70bdac3432be77aa2d318",
+          "ref": "symbol:cd5c49fb1dd81f531501e95b6ce754f4",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "c637ec15460017a0fe44ba718cea70d41527579dab4cad07ddcf9f73cb26a74a",
+          "ref": "symbol:fc4d50c444497686ad72c688d61cf2cb",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "76c7ec4af195584f389578b7e89dbfb98cf51260ad64c4ea78cbd3b8dd871a8d",
+          "ref": "symbol:c11099754df7c4775fa0f5f63363611b",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "ed267dbb6be9d520703b964e14919d7e2e7909aa42787042038be14fec8332f9",
+          "ref": "linux-native",
+          "type": "profile"
+        }
+      ],
+      "knowledge_dependencies": [
+        {
+          "fingerprint": "29588681852f80fa0a4f9dcec291c5190f5d9656d17a2eeb04b98aafbe4f1632",
+          "ref": "claim:check-recreate-cache-plan-by-sql-patch"
+        },
+        {
+          "fingerprint": "4991ba7c77f1db1e510b061dc771292620ba256b0afdd7e13cf67cd8b0ec8f3f",
+          "ref": "claim:revalidate-gplan-by-sql-patch"
+        }
+      ],
+      "methods_digest": "2105f393fcf2f9cbace8ed2a18c743a6932a2d1a904b3f45685af1889bdb508a",
+      "profile": "linux-native",
+      "run": "ecs-study-reference:16036114d9a15c9bb7f85e2e1363fc67",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6"
+    },
+    "body": "SQL Patch提供两个不同端点。共享计划消费者在所引非多节点分支调用CheckRecreateCachePlanBySqlPatch；布尔结果只是重建判据的一部分。私有计划消费者RevalidateCachedQuery在提前返回检查后调用RevalidateGplanBySqlPatch，由后者按标记或目录命中设置有效性字段，再由消费者处理重解析。锁、对象复制和发布属于调用方协议，必须分别检查入口，不从一个SPI调用点推断所有调用方。两处实际静态调用与数据/状态阶段分开记录；两个消费模块尚需分别核对本契约。",
+    "conditions": [
+      "只适用于所引源码及实际构建条件；图为静态证据。",
+      "共享与私有对象、版本和只读条件必须分开。"
+    ],
+    "consumers": [
+      "symbol-instance:46a23d697bac14854a669d5dbc75caf6",
+      "symbol-instance:fdce98742d55c232730a7e782c527b8b"
+    ],
+    "content_hash": "be0634069068e2b25dcd2c7e061affe05b8bf5c12dab23a25322bf017b22c4a5",
+    "counterexamples": [
+      "低版本或提前返回路径不会走到同样的补丁处理。",
+      "单方核对不能充当两个消费模块的验收。"
+    ],
+    "editorial_provenance": {
+      "generator": "Claude Code 2.1.310 / deepseek-v4-1-flash-261017",
+      "reason": "Correct unsupported rollback/snapshot/concurrency assertions after source review; not human expert acceptance",
+      "source_editor": "Codex AI"
+    },
+    "ensures": [
+      "共享谓词只返回序号比较结果",
+      "私有重验证在源码命中条件下设置有效性字段，未命中追平序号"
+    ],
+    "id": "contract:sql-patch-plan-cache-invalidation",
+    "invariants": [
+      "共享和私有分支不能互相代替",
+      "原子序号不是目录快照或完整并发正确性的证明"
+    ],
+    "kind": "contract",
+    "knowledge_refs": [
+      {
+        "relation": "DEPENDS_ON",
+        "target": "claim:check-recreate-cache-plan-by-sql-patch"
+      },
+      {
+        "relation": "DEPENDS_ON",
+        "target": "claim:revalidate-gplan-by-sql-patch"
+      }
+    ],
+    "producers": [
+      "symbol-instance:ea5002b322d5ebccd17e00745342a2dd",
+      "symbol-instance:76a5026d6cd83bb9b6767281305a191b"
+    ],
+    "requires": [
+      "版本、编译与对象分支符合所引入口条件",
+      "调用方维护对象/锁与重建协议"
+    ],
+    "review": {
+      "at": "2026-11-08T09:34:38.044603+00:00",
+      "mode": "independent_review",
+      "notes": "Codex AI源码审阅，非人工专家验收：所引版本/只读/序号和命中分支、提交推进点及两个直接调用已核对；不支持的回滚/快照/并发保证已移为待核，source editor来源明确。仅接受本机制的限定知识，不接受全模块/全仓完成。",
+      "proposal": "proposal:d9f7ab963ad54269c29f14c29ab85dcf",
+      "proposal_digest": "48cc4b4bdba283591fe0251c4611d64b45f1e636f7799f3e03d75fa6c5c46785",
+      "reviewer": "codex-source-reviewer",
+      "runtime_validation": "not_run",
+      "verdict": "accept"
+    },
+    "source_refs": [
+      "evidence:841936ca2c14996525e87f0e3b880d51",
+      "evidence:c7ba3e12228c241d9d91bcdd3661b2eb",
+      "evidence:70c3e157465bf79367ca39ebbde31ed1",
+      "evidence:fda27942c43e38d127c662694c565820",
+      "evidence:dcd95fc10ea6256588c9aec094c2a39b",
+      "evidence:c92a948bbb1a17dfee73db9c992f74a2",
+      "evidence:e6c8169db713aa94fbfb7b9905346bb2"
+    ],
+    "title": "SQL Patch 序号失效端点与全局计划缓存/RevalidateCachedQuery 的调用契约"
+  },
+  "feature:sqlpatch-sequence-driven-plan-invalidation": {
+    "_binding": {
+      "dependencies": [
+        {
+          "fingerprint": "2e28ec4899cfb20b5a0c559c39704367293296a09e792c735c18cd09cecf0821",
+          "ref": "server/src/gausskernel/process/globalplancache/globalplancache.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "b0dbd6c0ca4f00e3c2c9debdd46da1d7b4572959d2dbb076355102b3af91c174",
+          "ref": "server/src/common/backend/utils/cache/plancache.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "bab264e83471dc51af47b5319e31fc18e1f5cb1e6c0f5d6dba1e9e7252c20a82",
+          "ref": "server/src/gausskernel/optimizer/sqlpatch/sqlpatch.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "c637ec15460017a0fe44ba718cea70d41527579dab4cad07ddcf9f73cb26a74a",
+          "ref": "symbol:fc4d50c444497686ad72c688d61cf2cb",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "c79eba1c2a2983e5080ee2a0d8ced60130d6f6aff94256c15d74c8703719ac62",
+          "ref": "symbol:d1a1eacd4d242a6e2a49f91372e803e2",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "174251f79110120b306087596e093743258b7be450b70bdac3432be77aa2d318",
+          "ref": "symbol:cd5c49fb1dd81f531501e95b6ce754f4",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "76c7ec4af195584f389578b7e89dbfb98cf51260ad64c4ea78cbd3b8dd871a8d",
+          "ref": "symbol:c11099754df7c4775fa0f5f63363611b",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "ed267dbb6be9d520703b964e14919d7e2e7909aa42787042038be14fec8332f9",
+          "ref": "linux-native",
+          "type": "profile"
+        }
+      ],
+      "knowledge_dependencies": [],
+      "methods_digest": "2105f393fcf2f9cbace8ed2a18c743a6932a2d1a904b3f45685af1889bdb508a",
+      "profile": "linux-native",
+      "run": "ecs-study-reference:16036114d9a15c9bb7f85e2e1363fc67",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6"
+    },
+    "body": "本研究覆盖SQL Patch序号通知与计划缓存判定：写入口设置会话标志、提交收尾推进实例序号、缓存计划记录序号；共享路径使用布尔比较，私有路径检查补丁标记/目录命中并更新有效性。特性知识仅覆盖已引用机制，不表示SQL Patch全模块、宏配置或运行效果已完成。",
+    "conditions": [
+      "按版本、构建、对象状态和只读条件使用下级判定事实。"
+    ],
+    "content_hash": "c9be7f0fdda4dc08683c8ed5d79a3a7ec9e5775bae680c8abc50139facc00615",
+    "counterexamples": [
+      "序号推进不证明某条查询一定重解析或一定应用补丁。"
+    ],
+    "editorial_provenance": {
+      "generator": "Claude Code 2.1.310 / deepseek-v4-1-flash-261017",
+      "reason": "Correct unsupported rollback/snapshot/concurrency assertions after source review; not human expert acceptance",
+      "source_editor": "Codex AI"
+    },
+    "id": "feature:sqlpatch-sequence-driven-plan-invalidation",
+    "kind": "feature",
+    "knowledge_refs": [],
+    "level": 1,
+    "parent": null,
+    "review": {
+      "at": "2026-11-08T09:34:38.150638+00:00",
+      "mode": "independent_review",
+      "notes": "Codex AI源码审阅，非人工专家验收：所引版本/只读/序号和命中分支、提交推进点及两个直接调用已核对；不支持的回滚/快照/并发保证已移为待核，source editor来源明确。仅接受本机制的限定知识，不接受全模块/全仓完成。",
+      "proposal": "proposal:d9f7ab963ad54269c29f14c29ab85dcf",
+      "proposal_digest": "48cc4b4bdba283591fe0251c4611d64b45f1e636f7799f3e03d75fa6c5c46785",
+      "reviewer": "codex-source-reviewer",
+      "runtime_validation": "not_run",
+      "verdict": "accept"
+    },
+    "source_refs": [
+      "evidence:fda27942c43e38d127c662694c565820",
+      "evidence:dcd95fc10ea6256588c9aec094c2a39b",
+      "evidence:c92a948bbb1a17dfee73db9c992f74a2",
+      "evidence:70c3e157465bf79367ca39ebbde31ed1",
+      "evidence:c7ba3e12228c241d9d91bcdd3661b2eb"
+    ],
+    "symbol_refs": [
+      "symbol-instance:46a23d697bac14854a669d5dbc75caf6",
+      "symbol-instance:ea5002b322d5ebccd17e00745342a2dd",
+      "symbol-instance:76a5026d6cd83bb9b6767281305a191b",
+      "symbol-instance:fdce98742d55c232730a7e782c527b8b"
+    ],
+    "title": "特性：以实例级补丁序号驱动计划缓存失效与重解析"
+  },
+  "feature:sqlpatch-shared-plan-recreate-boundary": {
+    "_binding": {
+      "dependencies": [
+        {
+          "fingerprint": "b0dbd6c0ca4f00e3c2c9debdd46da1d7b4572959d2dbb076355102b3af91c174",
+          "ref": "server/src/common/backend/utils/cache/plancache.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "2e28ec4899cfb20b5a0c559c39704367293296a09e792c735c18cd09cecf0821",
+          "ref": "server/src/gausskernel/process/globalplancache/globalplancache.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "c637ec15460017a0fe44ba718cea70d41527579dab4cad07ddcf9f73cb26a74a",
+          "ref": "symbol:fc4d50c444497686ad72c688d61cf2cb",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "c79eba1c2a2983e5080ee2a0d8ced60130d6f6aff94256c15d74c8703719ac62",
+          "ref": "symbol:d1a1eacd4d242a6e2a49f91372e803e2",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "76c7ec4af195584f389578b7e89dbfb98cf51260ad64c4ea78cbd3b8dd871a8d",
+          "ref": "symbol:c11099754df7c4775fa0f5f63363611b",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "ed267dbb6be9d520703b964e14919d7e2e7909aa42787042038be14fec8332f9",
+          "ref": "linux-native",
+          "type": "profile"
+        }
+      ],
+      "knowledge_dependencies": [],
+      "methods_digest": "2105f393fcf2f9cbace8ed2a18c743a6932a2d1a904b3f45685af1889bdb508a",
+      "profile": "linux-native",
+      "run": "ecs-study-reference:16036114d9a15c9bb7f85e2e1363fc67",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6"
+    },
+    "body": "共享与私有路径有不同边界。RevalidateCachedQuery对InShareTable提前返回；共享路径另在GlobalPlanCache::CheckRecreateCachePlan中检查补丁序号。所引SPI调用者展示hasGetLock释放与复制重建流程，不能据此宣称已覆盖所有外层调用、CopyCachedPlan实现或发布时序。",
+    "conditions": [
+      "仅描述所引共享检查、SPI消费与私有重验证调用点。"
+    ],
+    "content_hash": "14d2730a7368d389b079d2aced38c17b17b024c11c4864649a90be6a07f647ae",
+    "counterexamples": [
+      "其它调用方、对象复制后状态、发布与并发协议仍需额外证据。"
+    ],
+    "editorial_provenance": {
+      "generator": "Claude Code 2.1.310 / deepseek-v4-1-flash-261017",
+      "reason": "Correct unsupported rollback/snapshot/concurrency assertions after source review; not human expert acceptance",
+      "source_editor": "Codex AI"
+    },
+    "id": "feature:sqlpatch-shared-plan-recreate-boundary",
+    "kind": "feature",
+    "knowledge_refs": [],
+    "level": 2,
+    "parent": "feature:sqlpatch-sequence-driven-plan-invalidation",
+    "review": {
+      "at": "2026-11-08T09:34:38.256674+00:00",
+      "mode": "independent_review",
+      "notes": "Codex AI源码审阅，非人工专家验收：所引版本/只读/序号和命中分支、提交推进点及两个直接调用已核对；不支持的回滚/快照/并发保证已移为待核，source editor来源明确。仅接受本机制的限定知识，不接受全模块/全仓完成。",
+      "proposal": "proposal:d9f7ab963ad54269c29f14c29ab85dcf",
+      "proposal_digest": "48cc4b4bdba283591fe0251c4611d64b45f1e636f7799f3e03d75fa6c5c46785",
+      "reviewer": "codex-source-reviewer",
+      "runtime_validation": "not_run",
+      "verdict": "accept"
+    },
+    "source_refs": [
+      "evidence:70c3e157465bf79367ca39ebbde31ed1",
+      "evidence:fda27942c43e38d127c662694c565820",
+      "evidence:dcd95fc10ea6256588c9aec094c2a39b",
+      "evidence:c92a948bbb1a17dfee73db9c992f74a2"
+    ],
+    "symbol_refs": [
+      "symbol-instance:46a23d697bac14854a669d5dbc75caf6",
+      "symbol-instance:ea5002b322d5ebccd17e00745342a2dd",
+      "symbol-instance:fdce98742d55c232730a7e782c527b8b"
+    ],
+    "title": "特性子项：共享计划的补丁重建走 GPC 检查与复制重建，不原地失效"
+  },
+  "flow:sql-patch-commit-to-plan-revalidation": {
+    "_binding": {
+      "dependencies": [
+        {
+          "fingerprint": "e42b8ad2792e36249e55a95504e19323fbcbe6b3e2adc843c3ef14644b91afdb",
+          "ref": "server/src/gausskernel/storage/access/transam/xact.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "1ce2445eacc6295137328a88ce53943f914cb8df7aeb11be75f3e1e5f5017a0a",
+          "ref": "server/src/include/knl/knl_instance.h",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "644e870e256538132b84f3d0895c83d2118a76b26520c3ac5120d1f4fa0e0083",
+          "ref": "server/src/gausskernel/process/threadpool/knl_instance.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "2e28ec4899cfb20b5a0c559c39704367293296a09e792c735c18cd09cecf0821",
+          "ref": "server/src/gausskernel/process/globalplancache/globalplancache.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "b0dbd6c0ca4f00e3c2c9debdd46da1d7b4572959d2dbb076355102b3af91c174",
+          "ref": "server/src/common/backend/utils/cache/plancache.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "bab264e83471dc51af47b5319e31fc18e1f5cb1e6c0f5d6dba1e9e7252c20a82",
+          "ref": "server/src/gausskernel/optimizer/sqlpatch/sqlpatch.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "c637ec15460017a0fe44ba718cea70d41527579dab4cad07ddcf9f73cb26a74a",
+          "ref": "symbol:fc4d50c444497686ad72c688d61cf2cb",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "c79eba1c2a2983e5080ee2a0d8ced60130d6f6aff94256c15d74c8703719ac62",
+          "ref": "symbol:d1a1eacd4d242a6e2a49f91372e803e2",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "76c7ec4af195584f389578b7e89dbfb98cf51260ad64c4ea78cbd3b8dd871a8d",
+          "ref": "symbol:c11099754df7c4775fa0f5f63363611b",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "174251f79110120b306087596e093743258b7be450b70bdac3432be77aa2d318",
+          "ref": "symbol:cd5c49fb1dd81f531501e95b6ce754f4",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "ed267dbb6be9d520703b964e14919d7e2e7909aa42787042038be14fec8332f9",
+          "ref": "linux-native",
+          "type": "profile"
+        }
+      ],
+      "knowledge_dependencies": [
+        {
+          "fingerprint": "745247aebfa0bf3fe14624a9a4d360edd5457f692b761c682aa04abced6684b0",
+          "ref": "claim:sql-patch-sequence-producer"
+        },
+        {
+          "fingerprint": "29588681852f80fa0a4f9dcec291c5190f5d9656d17a2eeb04b98aafbe4f1632",
+          "ref": "claim:check-recreate-cache-plan-by-sql-patch"
+        },
+        {
+          "fingerprint": "4991ba7c77f1db1e510b061dc771292620ba256b0afdd7e13cf67cd8b0ec8f3f",
+          "ref": "claim:revalidate-gplan-by-sql-patch"
+        },
+        {
+          "fingerprint": "be0634069068e2b25dcd2c7e061affe05b8bf5c12dab23a25322bf017b22c4a5",
+          "ref": "contract:sql-patch-plan-cache-invalidation"
+        }
+      ],
+      "methods_digest": "2105f393fcf2f9cbace8ed2a18c743a6932a2d1a904b3f45685af1889bdb508a",
+      "profile": "linux-native",
+      "run": "ecs-study-reference:16036114d9a15c9bb7f85e2e1363fc67",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6"
+    },
+    "body": "阶段链：补丁逻辑写入与会话标志→所引CommitTransaction收尾的条件性原子推进→CachedPlanSource保存/比较序号→共享检查或私有补丁探测→命中时设置失效字段，由消费者管理后续重解析。steps中的call仅保留已核对的两个直接调用，其余是数据/状态阶段。目录快照、提交发布原子性、下一次必重试、回滚残留与回绕均不在已证结论中。",
+    "conditions": [
+      "所引版本、编译、只读与对象状态条件。"
+    ],
+    "content_hash": "dd006fcced5eaf9faed3be71db9dcc6b3e3886fa1ac7501177adbddb5bff74e6",
+    "counterexamples": [
+      "共享提前返回、低版本、只读共享谓词和目录无命中产生不同结果；不能串成无条件线性调用栈。"
+    ],
+    "editorial_provenance": {
+      "generator": "Claude Code 2.1.310 / deepseek-v4-1-flash-261017",
+      "reason": "Correct unsupported rollback/snapshot/concurrency assertions after source review; not human expert acceptance",
+      "source_editor": "Codex AI"
+    },
+    "id": "flow:sql-patch-commit-to-plan-revalidation",
+    "kind": "flow",
+    "knowledge_refs": [
+      {
+        "relation": "DEPENDS_ON",
+        "target": "claim:sql-patch-sequence-producer"
+      },
+      {
+        "relation": "DEPENDS_ON",
+        "target": "claim:check-recreate-cache-plan-by-sql-patch"
+      },
+      {
+        "relation": "DEPENDS_ON",
+        "target": "claim:revalidate-gplan-by-sql-patch"
+      },
+      {
+        "relation": "DEPENDS_ON",
+        "target": "contract:sql-patch-plan-cache-invalidation"
+      }
+    ],
+    "review": {
+      "at": "2026-11-08T09:34:38.364139+00:00",
+      "mode": "independent_review",
+      "notes": "Codex AI源码审阅，非人工专家验收：所引版本/只读/序号和命中分支、提交推进点及两个直接调用已核对；不支持的回滚/快照/并发保证已移为待核，source editor来源明确。仅接受本机制的限定知识，不接受全模块/全仓完成。",
+      "proposal": "proposal:d9f7ab963ad54269c29f14c29ab85dcf",
+      "proposal_digest": "48cc4b4bdba283591fe0251c4611d64b45f1e636f7799f3e03d75fa6c5c46785",
+      "reviewer": "codex-source-reviewer",
+      "runtime_validation": "not_run",
+      "verdict": "accept"
+    },
+    "source_refs": [
+      "evidence:1cd88c7beef1680212e07f7444a7e261",
+      "evidence:73e98c8fa1273cdb369e14f1c9887ca2",
+      "evidence:410266982540147399d090adbff3e641",
+      "evidence:b6ff6d66d0a97925342b124129130f96",
+      "evidence:047bb2f1eeb16d85b74ca7f708b5729c",
+      "evidence:fda27942c43e38d127c662694c565820",
+      "evidence:07ce6bb0a4ad07b18c9c14ce240c6658",
+      "evidence:300c9a22b467b5a29420a2bf09db5af7",
+      "evidence:70c3e157465bf79367ca39ebbde31ed1",
+      "evidence:18b3d234ce5465c635b0b64d5481f5e1"
+    ],
+    "steps": [
+      {
+        "detail": "SQL patch DDL 写 gs_sql_patch 行或改其 enable/status，并置 u_sess->opt_cxt.xact_modify_sql_patch=true；未提交前对其它会话不可见。",
+        "kind": "data_stage",
+        "name": "patch_ddl_write_and_flag"
+      },
+      {
+        "detail": "CommitTransaction 收尾调用 AtEOXact_Proceed_PatchSeq；旗标为真时原子加 1 并清旗标。",
+        "from": "sql_patch_sequence_id=N, xact_modify_sql_patch=true",
+        "kind": "state_transition",
+        "to": "sql_patch_sequence_id=N+1, xact_modify_sql_patch=false",
+        "trigger": "事务成功提交"
+      },
+      {
+        "condition": "#ifndef ENABLE_MULTIPLE_NODES 且 psrc->gpc.status.InShareTable()",
+        "kind": "call",
+        "note": "仅此处所引用的直接调用成立；其余运行与发布协议仍按条件核实。",
+        "symbol": "symbol-instance:46a23d697bac14854a669d5dbc75caf6",
+        "target": "symbol-instance:ea5002b322d5ebccd17e00745342a2dd"
+      },
+      {
+        "detail": "version < SQL_PATCH_VERSION_NUM 或 XactReadOnly 直接 false；否则 plansource->sql_patch_sequence < 全局序号才为 true。",
+        "kind": "state_transition",
+        "name": "shared_plan_recreate_decision"
+      },
+      {
+        "condition": "非共享、非 oneshot/事务语句计划",
+        "kind": "call",
+        "note": "仅此处所引用的直接调用成立；其余运行与发布协议仍按条件核实。",
+        "symbol": "symbol-instance:fdce98742d55c232730a7e782c527b8b",
+        "target": "symbol-instance:76a5026d6cd83bb9b6767281305a191b"
+      },
+      {
+        "detail": "仅当 !XactReadOnly 且本地序号 >= 全局序号时快速返回；否则遍历 query_list 做 QueryIsPatched 或 gs_sql_patch 目录探测。",
+        "kind": "data_stage",
+        "name": "local_plan_patch_probe"
+      },
+      {
+        "detail": "命中补丁上下文或目录行：plansource->is_valid=false 且 gplan->is_valid=false，交给重解析/重规划；无命中：仅把 plansource->sql_patch_sequence 追平全局序号。",
+        "kind": "state_transition",
+        "name": "invalidate_or_catch_up"
+      }
+    ],
+    "symbol_refs": [
+      "symbol-instance:46a23d697bac14854a669d5dbc75caf6",
+      "symbol-instance:ea5002b322d5ebccd17e00745342a2dd",
+      "symbol-instance:fdce98742d55c232730a7e782c527b8b",
+      "symbol-instance:76a5026d6cd83bb9b6767281305a191b"
+    ],
+    "title": "SQL patch 从提交推进序号到共享/本地计划重验证的流程"
+  },
+  "observation:sql-patch-visibility-boundaries": {
+    "_binding": {
+      "dependencies": [
+        {
+          "fingerprint": "bab264e83471dc51af47b5319e31fc18e1f5cb1e6c0f5d6dba1e9e7252c20a82",
+          "ref": "server/src/gausskernel/optimizer/sqlpatch/sqlpatch.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "b0dbd6c0ca4f00e3c2c9debdd46da1d7b4572959d2dbb076355102b3af91c174",
+          "ref": "server/src/common/backend/utils/cache/plancache.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "e42b8ad2792e36249e55a95504e19323fbcbe6b3e2adc843c3ef14644b91afdb",
+          "ref": "server/src/gausskernel/storage/access/transam/xact.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "c79eba1c2a2983e5080ee2a0d8ced60130d6f6aff94256c15d74c8703719ac62",
+          "ref": "symbol:d1a1eacd4d242a6e2a49f91372e803e2",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "174251f79110120b306087596e093743258b7be450b70bdac3432be77aa2d318",
+          "ref": "symbol:cd5c49fb1dd81f531501e95b6ce754f4",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "76c7ec4af195584f389578b7e89dbfb98cf51260ad64c4ea78cbd3b8dd871a8d",
+          "ref": "symbol:c11099754df7c4775fa0f5f63363611b",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "ed267dbb6be9d520703b964e14919d7e2e7909aa42787042038be14fec8332f9",
+          "ref": "linux-native",
+          "type": "profile"
+        }
+      ],
+      "knowledge_dependencies": [
+        {
+          "fingerprint": "4991ba7c77f1db1e510b061dc771292620ba256b0afdd7e13cf67cd8b0ec8f3f",
+          "ref": "claim:revalidate-gplan-by-sql-patch"
+        },
+        {
+          "fingerprint": "745247aebfa0bf3fe14624a9a4d360edd5457f692b761c682aa04abced6684b0",
+          "ref": "claim:sql-patch-sequence-producer"
+        }
+      ],
+      "methods_digest": "2105f393fcf2f9cbace8ed2a18c743a6932a2d1a904b3f45685af1889bdb508a",
+      "profile": "linux-native",
+      "run": "ecs-study-reference:16036114d9a15c9bb7f85e2e1363fc67",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6"
+    },
+    "body": "源码显示共享谓词在只读时false，而私有重验证在只读时不满足序号快速返回条件。这是条件分支差异，不等于某种SQL执行必定不应用补丁。待核问题：完整abort/subabort/会话重置是否清理旗标；NULL快照在系统目录扫描中的解释；目录读取与序号读取的同步、内存序及其它失效机制；这些尚不能证明旗标残留、漏失效或缺陷。",
+    "conditions": [
+      "只作明确限定的源码观察和研究问题。"
+    ],
+    "content_hash": "c02855e5825e837b664b9f350878578e72ef69b2ed3a94818ed6e76a247e4025",
+    "counterexamples": [
+      "不能以局部没有读到清理代码作不存在的证明；没有运行并发用例。"
+    ],
+    "editorial_provenance": {
+      "generator": "Claude Code 2.1.310 / deepseek-v4-1-flash-261017",
+      "reason": "Correct unsupported rollback/snapshot/concurrency assertions after source review; not human expert acceptance",
+      "source_editor": "Codex AI"
+    },
+    "id": "observation:sql-patch-visibility-boundaries",
+    "kind": "observation",
+    "knowledge_refs": [
+      {
+        "relation": "DEPENDS_ON",
+        "target": "claim:revalidate-gplan-by-sql-patch"
+      },
+      {
+        "relation": "DEPENDS_ON",
+        "target": "claim:sql-patch-sequence-producer"
+      }
+    ],
+    "review": {
+      "at": "2026-11-08T09:34:38.476744+00:00",
+      "mode": "independent_review",
+      "notes": "Codex AI源码审阅，非人工专家验收：所引版本/只读/序号和命中分支、提交推进点及两个直接调用已核对；不支持的回滚/快照/并发保证已移为待核，source editor来源明确。仅接受本机制的限定知识，不接受全模块/全仓完成。",
+      "proposal": "proposal:d9f7ab963ad54269c29f14c29ab85dcf",
+      "proposal_digest": "48cc4b4bdba283591fe0251c4611d64b45f1e636f7799f3e03d75fa6c5c46785",
+      "reviewer": "codex-source-reviewer",
+      "runtime_validation": "not_run",
+      "verdict": "accept"
+    },
+    "source_refs": [
+      "evidence:841936ca2c14996525e87f0e3b880d51",
+      "evidence:c7ba3e12228c241d9d91bcdd3661b2eb",
+      "evidence:70c3e157465bf79367ca39ebbde31ed1",
+      "evidence:1cd88c7beef1680212e07f7444a7e261",
+      "evidence:1487a4d5cd3ae0c8b26f45c3775694b1",
+      "evidence:9cc0ea04839487ab7dbac9050964439d",
+      "evidence:b1a2d1f2fe859bed4e9e94655c235ab9",
+      "evidence:edc41b889c4829b77d2bc301c525907c"
+    ],
+    "symbol_refs": [
+      "symbol-instance:ea5002b322d5ebccd17e00745342a2dd",
+      "symbol-instance:76a5026d6cd83bb9b6767281305a191b",
+      "symbol-instance:fdce98742d55c232730a7e782c527b8b"
+    ],
+    "title": "源码分支差异与回滚、快照和同步待核问题"
+  },
+  "responsibility:sqlpatch-plan-cache-consistency": {
+    "_binding": {
+      "dependencies": [
+        {
+          "fingerprint": "bab264e83471dc51af47b5319e31fc18e1f5cb1e6c0f5d6dba1e9e7252c20a82",
+          "ref": "server/src/gausskernel/optimizer/sqlpatch/sqlpatch.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "c79eba1c2a2983e5080ee2a0d8ced60130d6f6aff94256c15d74c8703719ac62",
+          "ref": "symbol:d1a1eacd4d242a6e2a49f91372e803e2",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "174251f79110120b306087596e093743258b7be450b70bdac3432be77aa2d318",
+          "ref": "symbol:cd5c49fb1dd81f531501e95b6ce754f4",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "ed267dbb6be9d520703b964e14919d7e2e7909aa42787042038be14fec8332f9",
+          "ref": "linux-native",
+          "type": "profile"
+        }
+      ],
+      "knowledge_dependencies": [],
+      "methods_digest": "2105f393fcf2f9cbace8ed2a18c743a6932a2d1a904b3f45685af1889bdb508a",
+      "profile": "linux-native",
+      "run": "ecs-study-reference:16036114d9a15c9bb7f85e2e1363fc67",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6"
+    },
+    "body": "sqlpatch模块实现补丁目录的逻辑读写入口及缓存判定端点；实例序号在所引事务收尾推进，缓存对象的后续重解析/重建由消费者管理。此职责记录本次追踪的生产消费边界；它既不声称模块不维护目录，也不把存储层物理访问当作本模块自有实现。",
+    "conditions": [
+      "当前快照和构建条件；两个缓存端点含运行版本门控。"
+    ],
+    "content_hash": "b80dd28553e65a3ac255a237c787138931192167eb4cfeb1ed069455659c13f5",
+    "counterexamples": [
+      "多节点入口限制不等价于函数内部所有路径都额外检查多节点宏。"
+    ],
+    "editorial_provenance": {
+      "generator": "Claude Code 2.1.310 / deepseek-v4-1-flash-261017",
+      "reason": "Correct unsupported rollback/snapshot/concurrency assertions after source review; not human expert acceptance",
+      "source_editor": "Codex AI"
+    },
+    "id": "responsibility:sqlpatch-plan-cache-consistency",
+    "kind": "responsibility",
+    "knowledge_refs": [],
+    "level": 1,
+    "parent": null,
+    "review": {
+      "at": "2026-11-08T09:34:38.578962+00:00",
+      "mode": "independent_review",
+      "notes": "Codex AI源码审阅，非人工专家验收：所引版本/只读/序号和命中分支、提交推进点及两个直接调用已核对；不支持的回滚/快照/并发保证已移为待核，source editor来源明确。仅接受本机制的限定知识，不接受全模块/全仓完成。",
+      "proposal": "proposal:d9f7ab963ad54269c29f14c29ab85dcf",
+      "proposal_digest": "48cc4b4bdba283591fe0251c4611d64b45f1e636f7799f3e03d75fa6c5c46785",
+      "reviewer": "codex-source-reviewer",
+      "runtime_validation": "not_run",
+      "verdict": "accept"
+    },
+    "source_refs": [
+      "evidence:edc41b889c4829b77d2bc301c525907c",
+      "evidence:841936ca2c14996525e87f0e3b880d51",
+      "evidence:c7ba3e12228c241d9d91bcdd3661b2eb",
+      "evidence:5a6ce491cfd6521d1f76ca08df66b79b"
+    ],
+    "symbol_refs": [
+      "symbol-instance:ea5002b322d5ebccd17e00745342a2dd",
+      "symbol-instance:76a5026d6cd83bb9b6767281305a191b"
+    ],
+    "title": "SQL Patch 模块的职责：维护补丁目录与计划缓存之间的版本一致性"
+  },
+  "test_obligation:sql-patch-sequence-boundaries": {
+    "_binding": {
+      "dependencies": [
+        {
+          "fingerprint": "bab264e83471dc51af47b5319e31fc18e1f5cb1e6c0f5d6dba1e9e7252c20a82",
+          "ref": "server/src/gausskernel/optimizer/sqlpatch/sqlpatch.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "2e28ec4899cfb20b5a0c559c39704367293296a09e792c735c18cd09cecf0821",
+          "ref": "server/src/gausskernel/process/globalplancache/globalplancache.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "b0dbd6c0ca4f00e3c2c9debdd46da1d7b4572959d2dbb076355102b3af91c174",
+          "ref": "server/src/common/backend/utils/cache/plancache.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "e42b8ad2792e36249e55a95504e19323fbcbe6b3e2adc843c3ef14644b91afdb",
+          "ref": "server/src/gausskernel/storage/access/transam/xact.cpp",
+          "type": "asset"
+        },
+        {
+          "fingerprint": "c79eba1c2a2983e5080ee2a0d8ced60130d6f6aff94256c15d74c8703719ac62",
+          "ref": "symbol:d1a1eacd4d242a6e2a49f91372e803e2",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "174251f79110120b306087596e093743258b7be450b70bdac3432be77aa2d318",
+          "ref": "symbol:cd5c49fb1dd81f531501e95b6ce754f4",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "c637ec15460017a0fe44ba718cea70d41527579dab4cad07ddcf9f73cb26a74a",
+          "ref": "symbol:fc4d50c444497686ad72c688d61cf2cb",
+          "type": "symbol"
+        },
+        {
+          "fingerprint": "ed267dbb6be9d520703b964e14919d7e2e7909aa42787042038be14fec8332f9",
+          "ref": "linux-native",
+          "type": "profile"
+        }
+      ],
+      "knowledge_dependencies": [
+        {
+          "fingerprint": "be0634069068e2b25dcd2c7e061affe05b8bf5c12dab23a25322bf017b22c4a5",
+          "ref": "contract:sql-patch-plan-cache-invalidation"
+        },
+        {
+          "fingerprint": "c02855e5825e837b664b9f350878578e72ef69b2ed3a94818ed6e76a247e4025",
+          "ref": "observation:sql-patch-visibility-boundaries"
+        }
+      ],
+      "methods_digest": "2105f393fcf2f9cbace8ed2a18c743a6932a2d1a904b3f45685af1889bdb508a",
+      "profile": "linux-native",
+      "run": "ecs-study-reference:16036114d9a15c9bb7f85e2e1363fc67",
+      "snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6"
+    },
+    "body": "未运行测试义务：按源码谓词构造版本低于阈值/达到阈值、只读/非只读、序号小于/等于/大于、query标记有无、uniqueSQLId为0/非0、目录命中/不命中、gplan为空/非空的组合。预期只限函数分支及有效性字段：共享谓词低版本或只读为false，其他比较；私有路径非只读且已追平快速返回，否则按命中条件置失效或追平。集成SQL需先核实真实入口、GUC和目录快照。回滚旗标、并发可见性及uint64边界是待研究/实验问题，当前不提供确定运行预期。",
+    "conditions": [
+      "函数前置条件和分支输入需能建立；集成入口及运行配置待核。"
+    ],
+    "content_hash": "082a14094ff352ddfa23078589d4a80059aec6893e7cf6074eec28d95566e971",
+    "counterexamples": [
+      "不能断言回滚后的下一提交必然多加1；不能用此知识声称已经测出并发缺陷。"
+    ],
+    "editorial_provenance": {
+      "generator": "Claude Code 2.1.310 / deepseek-v4-1-flash-261017",
+      "reason": "Correct unsupported rollback/snapshot/concurrency assertions after source review; not human expert acceptance",
+      "source_editor": "Codex AI"
+    },
+    "execution_status": "not_run",
+    "expected_from": {
+      "kind": "contract",
+      "ref": "contract:sql-patch-plan-cache-invalidation"
+    },
+    "id": "test_obligation:sql-patch-sequence-boundaries",
+    "kind": "test_obligation",
+    "knowledge_refs": [
+      {
+        "relation": "DEPENDS_ON",
+        "target": "contract:sql-patch-plan-cache-invalidation"
+      },
+      {
+        "relation": "DEPENDS_ON",
+        "target": "observation:sql-patch-visibility-boundaries"
+      }
+    ],
+    "review": {
+      "at": "2026-11-08T09:34:38.679096+00:00",
+      "mode": "independent_review",
+      "notes": "Codex AI源码审阅，非人工专家验收：所引版本/只读/序号和命中分支、提交推进点及两个直接调用已核对；不支持的回滚/快照/并发保证已移为待核，source editor来源明确。仅接受本机制的限定知识，不接受全模块/全仓完成。",
+      "proposal": "proposal:d9f7ab963ad54269c29f14c29ab85dcf",
+      "proposal_digest": "48cc4b4bdba283591fe0251c4611d64b45f1e636f7799f3e03d75fa6c5c46785",
+      "reviewer": "codex-source-reviewer",
+      "runtime_validation": "not_run",
+      "verdict": "accept"
+    },
+    "source_refs": [
+      "evidence:841936ca2c14996525e87f0e3b880d51",
+      "evidence:c7ba3e12228c241d9d91bcdd3661b2eb",
+      "evidence:fda27942c43e38d127c662694c565820",
+      "evidence:70c3e157465bf79367ca39ebbde31ed1",
+      "evidence:1cd88c7beef1680212e07f7444a7e261"
+    ],
+    "symbol_refs": [
+      "symbol-instance:ea5002b322d5ebccd17e00745342a2dd",
+      "symbol-instance:76a5026d6cd83bb9b6767281305a191b",
+      "symbol-instance:46a23d697bac14854a669d5dbc75caf6"
+    ],
+    "title": "测试义务：补丁序号在只读/共享/回滚/并发窗口下的边界行为"
+  }
+}

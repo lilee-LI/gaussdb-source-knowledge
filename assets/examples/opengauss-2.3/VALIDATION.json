@@ -1,0 +1,13 @@
+{
+  "source_snapshot": "snapshot:53bf0e1006c0c8ed389600202e1a97c6",
+  "run": "ecs-study-reference:16036114d9a15c9bb7f85e2e1363fc67",
+  "knowledge_revision": "knowledge:742c722ab8652fa5c3e3b1e36e636058",
+  "modules": 535,
+  "assets": 15629,
+  "native_generated_units": 10,
+  "source_edited_units": 10,
+  "use_check": "passed",
+  "module_coverage": "incomplete",
+  "global_coverage": "incomplete",
+  "review_limit": "AI source editing and checks in one Codex session, not independent human product acceptance"
+}

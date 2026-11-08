@@ -1,0 +1,210 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/geqo/geqo_pool.cpp:1-209</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/geqo/geqo_pool.cpp:1-209</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>/* ------------------------------------------------------------------------
+ *
+ * geqo_pool.cpp
+ *	  Genetic Algorithm (GA) pool stuff
+ *
+ * Portions Copyright (c) 2020 Huawei Technologies Co.,Ltd.
+ * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1994, Regents of the University of California
+ *
+ * IDENTIFICATION
+ * src/gausskernel/optimizer/geqo/geqo_pool.cpp
+ *
+ * -------------------------------------------------------------------------
+ */
+/* contributed by:
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+   *  Martin Utesch				 * Institute of Automatic Control	   *
+   =							 = University of Mining and Technology =
+   *  utesch@aut.tu-freiberg.de  * Freiberg, Germany				   *
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+ */
+/* -- parts of this are adapted from D. Whitley&#x27;s Genitor algorithm -- */
+#include &quot;postgres.h&quot;
+#include &quot;knl/knl_variable.h&quot;
+
+#include &lt;float.h&gt;
+#include &lt;limits.h&gt;
+#include &lt;math.h&gt;
+
+#include &quot;optimizer/geqo_copy.h&quot;
+#include &quot;optimizer/geqo_pool.h&quot;
+#include &quot;optimizer/geqo_recombination.h&quot;
+
+static int compare(const void* arg1, const void* arg2);
+
+/*
+ * alloc_pool
+ *		allocates memory for GA pool
+ */
+Pool* alloc_pool(PlannerInfo* root, int pool_size, int string_length)
+{
+    Pool* new_pool = NULL;
+    Chromosome* chromo = NULL;
+    int i;
+
+    /* pool */
+    new_pool = (Pool*)palloc(sizeof(Pool));
+    new_pool-&gt;size = (int)pool_size;
+    new_pool-&gt;string_length = (int)string_length;
+
+    /* all chromosome */
+    new_pool-&gt;data = (Chromosome*)palloc(pool_size * sizeof(Chromosome));
+
+    /* all gene */
+    chromo = (Chromosome*)new_pool-&gt;data; /* vector of all chromos */
+    for (i = 0; i &lt; pool_size; i++)
+        chromo[i].string = (Gene*)palloc((string_length + 1) * sizeof(Gene));
+
+    return new_pool;
+}
+
+/*
+ * free_pool
+ *		deallocates memory for GA pool
+ */
+void free_pool(PlannerInfo* root, Pool* pool)
+{
+    Chromosome* chromo = NULL;
+    int i;
+
+    /* all gene */
+    chromo = (Chromosome*)pool-&gt;data; /* vector of all chromos */
+    for (i = 0; i &lt; pool-&gt;size; i++)
+        pfree_ext(chromo[i].string);
+
+    /* all chromosome */
+    pfree_ext(pool-&gt;data);
+
+    /* pool */
+    pfree_ext(pool);
+}
+
+void random_init_pool(PlannerInfo* root, Pool* pool)
+{
+    Chromosome* chromo = (Chromosome*)pool-&gt;data;
+    int i;
+
+    for (i = 0; i &lt; pool-&gt;size; i++) {
+        init_tour(root, chromo[i].string, pool-&gt;string_length);
+        pool-&gt;data[i].worth = geqo_eval(root, chromo[i].string, pool-&gt;string_length);
+    }
+}
+
+/*
+ * sort_pool
+ *	 sorts input pool according to worth, from smallest to largest
+ *
+ *	 maybe you have to change compare() for different ordering ...
+ */
+void sort_pool(PlannerInfo* root, Pool* pool)
+{
+    qsort(pool-&gt;data, pool-&gt;size, sizeof(Chromosome), compare);
+}
+
+/*
+ * compare
+ *	 qsort comparison function for sort_pool
+ */
+static int compare(const void* arg1, const void* arg2)
+{
+    const Chromosome* chromo1 = (const Chromosome*)arg1;
+    const Chromosome* chromo2 = (const Chromosome*)arg2;
+
+    if (chromo1-&gt;worth - chromo2-&gt;worth == 0)
+        return 0;
+    else if (chromo1-&gt;worth &gt; chromo2-&gt;worth)
+        return 1;
+    else
+        return -1;
+}
+
+/* alloc_chromo
+ *	  allocates a chromosome and string space
+ */
+Chromosome* alloc_chromo(PlannerInfo* root, int string_length)
+{
+    Chromosome* chromo = NULL;
+
+    chromo = (Chromosome*)palloc(sizeof(Chromosome));
+    chromo-&gt;string = (Gene*)palloc((string_length + 1) * sizeof(Gene));
+
+    return chromo;
+}
+
+/* free_chromo
+ *	  deallocates a chromosome and string space
+ */
+void free_chromo(PlannerInfo* root, Chromosome* chromo)
+{
+    pfree_ext(chromo-&gt;string);
+    pfree_ext(chromo);
+}
+
+/* spread_chromo
+ *	 inserts a new chromosome into the pool, displacing worst gene in pool
+ *	 assumes best-&gt;worst = smallest-&gt;largest
+ */
+void spread_chromo(PlannerInfo* root, Chromosome* chromo, Pool* pool)
+{
+    int top, mid, bot;
+    int i, index;
+    Chromosome swap_chromo, tmp_chromo;
+
+    /* new chromo is so bad we can&#x27;t use it */
+    if (chromo-&gt;worth &gt; pool-&gt;data[pool-&gt;size - 1].worth)
+        return;
+
+    /* do a binary search to find the index of the new chromo */
+    top = 0;
+    mid = pool-&gt;size / 2;
+    bot = pool-&gt;size - 1;
+    index = -1;
+
+    while (index == -1) {
+        /* these 4 cases find a new location */
+        if (chromo-&gt;worth &lt;= pool-&gt;data[top].worth) {
+            index = top;
+        } else if (chromo-&gt;worth - pool-&gt;data[mid].worth == 0) {
+            index = mid;
+        } else if (chromo-&gt;worth - pool-&gt;data[bot].worth == 0) {
+            index = bot;
+        } else if (bot - top &lt;= 1) {
+            index = bot;
+        } else if (chromo-&gt;worth &lt; pool-&gt;data[mid].worth) {
+        /*
+         * these 2 cases move the search indices since a new location has not
+         * yet been found.
+         */
+            bot = mid;
+            mid = top + ((bot - top) / 2);
+        } else { /* (chromo-&gt;worth &gt; pool-&gt;data[mid].worth) */
+            top = mid;
+            mid = top + ((bot - top) / 2);
+        }
+    } /* ... while */
+
+    /* now we have index for chromo */
+    /*
+     * move every gene from index on down one position to make room for chromo
+     */
+    /*
+     * copy new gene into pool storage; always replace worst gene in pool
+     */
+    geqo_copy(root, &amp;pool-&gt;data[pool-&gt;size - 1], chromo, pool-&gt;string_length);
+
+    swap_chromo.string = pool-&gt;data[pool-&gt;size - 1].string;
+    swap_chromo.worth = pool-&gt;data[pool-&gt;size - 1].worth;
+
+    for (i = index; i &lt; pool-&gt;size; i++) {
+        tmp_chromo.string = pool-&gt;data[i].string;
+        tmp_chromo.worth = pool-&gt;data[i].worth;
+
+        pool-&gt;data[i].string = swap_chromo.string;
+        pool-&gt;data[i].worth = swap_chromo.worth;
+
+        swap_chromo.string = tmp_chromo.string;
+        swap_chromo.worth = tmp_chromo.worth;
+    }
+}
+</pre><p>evidence:d5dc94bb57ffc52cc652e5002fd1f0b3</p><p>SHA-256 8d6be56785a3893d3a7a4c4f1108d4deb8b84b2263c735f2206f3c07580c1c42</p></main></html>

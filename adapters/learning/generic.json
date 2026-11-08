@@ -1,0 +1,9 @@
+{
+  "schema":"whole-learning-policy/v1",
+  "id":"generic-whole",
+  "version":"1",
+  "partition_max_files":80,
+  "max_pending_per_worker":4,
+  "domains":[{"id":"repository","title":"源码、接口与材料","patterns":["*"]}],
+  "templates":[]
+}

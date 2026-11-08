@@ -1,0 +1,72 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/process/globalplancache/globalplancache.cpp:556-626</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/process/globalplancache/globalplancache.cpp:556-626</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>bool GlobalPlanCache::CheckRecreateCachePlan(CachedPlanSource* psrc, bool* hasGetLock)
+{
+    if (IsAbortedTransactionBlockState() &amp;&amp; (!IsTransactionExitStmt(psrc-&gt;raw_parse_tree)))
+        ereport(ERROR,
+            (errcode(ERRCODE_IN_FAILED_SQL_TRANSACTION),
+                errmsg(&quot;current transaction is aborted, &quot;
+                    &quot;commands ignored until end of transaction block, firstChar[%c]&quot;,
+                    u_sess-&gt;proc_cxt.firstChar),
+                errdetail_abort()));
+    /*
+     * Start up a transaction command so we can run parse analysis etc. (Note
+     * that this will normally change current memory context.) Nothing happens
+     * if we are already in one.
+     */
+    start_xact_command();
+    Assert(psrc-&gt;magic == CACHEDPLANSOURCE_MAGIC);
+    /* get lock before check plan is valid or not, release it if need recreate plan */
+    if (psrc-&gt;gpc.status.InShareTable()) {
+        AcquirePlannerLocks(psrc-&gt;query_list, true);
+        if (psrc-&gt;gplan) {
+            AcquireExecutorLocks(psrc-&gt;gplan-&gt;stmt_list, true);
+        }
+        *hasGetLock = true;
+    }
+
+#ifdef ENABLE_MULTIPLE_NODES
+    if (IS_PGXC_COORDINATOR &amp;&amp; !psrc-&gt;gpc.status.InShareTable()) {
+        return false;
+    }
+#else
+    if (!psrc-&gt;gpc.status.InShareTable()) {
+        return false;
+    }
+
+    /* If query_dop alreadly change, need build plan again. */
+    if (psrc-&gt;stream_enabled != IsStreamSupport()) {
+        return true;
+    }
+#endif
+
+    if (u_sess-&gt;pcache_cxt.gpc_in_ddl == true) {
+        return true;
+    }
+    if (!psrc-&gt;gpc.status.IsValid()) {
+        return true;
+    }
+    if (psrc-&gt;dependsOnRole &amp;&amp; (psrc-&gt;rewriteRoleId != GetUserId())) {
+        return true;
+    }
+    if ((psrc-&gt;gplan != NULL &amp;&amp; TransactionIdIsValid(psrc-&gt;gplan-&gt;saved_xmin))) {
+        return true;
+    }
+
+    if (psrc-&gt;search_path &amp;&amp; !OverrideSearchPathMatchesCurrent(psrc-&gt;search_path)) {
+        return true;
+    }
+
+    /* If enable_expr_fusion or query_dop alreadly change, need build plan again. */
+    if (psrc-&gt;cq_is_flt_frame !=
+        (u_sess-&gt;attr.attr_common.enable_expr_fusion &amp;&amp; u_sess-&gt;attr.attr_sql.query_dop_tmp == 1)) {
+        return true;
+    }
+
+#ifndef ENABLE_MULTIPLE_NODES
+    if (CheckRecreateCachePlanBySqlPatch(psrc)) {
+        return true;
+    }
+#endif
+
+    return false;
+}
+</pre><p>evidence:fda27942c43e38d127c662694c565820</p><p>SHA-256 771f271d983921715eafe7beb9e2cec4a9a3dc8abd8739a0a1741d487e865384</p></main></html>

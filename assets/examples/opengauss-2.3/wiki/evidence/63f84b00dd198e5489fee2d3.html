@@ -1,0 +1,30 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/include/optimizer/geqo_selection.h:1-29</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/include/optimizer/geqo_selection.h:1-29</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>/* -------------------------------------------------------------------------
+ *
+ * geqo_selection.h
+ *	  prototypes for selection routines in optimizer/geqo
+ *
+ * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1994, Regents of the University of California
+ *
+ * src/include/optimizer/geqo_selection.h
+ *
+ * -------------------------------------------------------------------------
+ */
+
+/* contributed by:
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+   *  Martin Utesch				 * Institute of Automatic Control	   *
+   =							 = University of Mining and Technology =
+   *  utesch@aut.tu-freiberg.de  * Freiberg, Germany				   *
+   =*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=
+ */
+
+#ifndef GEQO_SELECTION_H
+#define GEQO_SELECTION_H
+
+#include &quot;optimizer/geqo.h&quot;
+
+extern void geqo_selection(PlannerInfo* root, Chromosome* momma, Chromosome* daddy, Pool* pool, double bias);
+
+#endif /* GEQO_SELECTION_H */
+</pre><p>evidence:a3fe5c8ec4cacadf9d6eec9d0676ffa0</p><p>SHA-256 97eeca196f947e17271f336e9aaa337dc04d02d7789efa3bcb74467b978d5b7e</p></main></html>

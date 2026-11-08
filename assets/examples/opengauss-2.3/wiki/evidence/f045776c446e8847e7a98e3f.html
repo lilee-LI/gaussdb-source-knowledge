@@ -1,0 +1,20 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/common/backend/utils/misc/guc/guc_sql.cpp:1028-1046</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/common/backend/utils/misc/guc/guc_sql.cpp:1028-1046</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>            false,
+            NULL,
+            NULL,
+            NULL},
+
+        {{&quot;geqo&quot;,
+            PGC_USERSET,
+            NODE_ALL,
+            QUERY_TUNING_GEQO,
+            gettext_noop(&quot;Enables genetic query optimization.&quot;),
+            gettext_noop(&quot;This algorithm attempts to do planning without &quot;
+                        &quot;exhaustive searching.&quot;)},
+            &amp;u_sess-&gt;attr.attr_sql.enable_geqo,
+            true,
+            NULL,
+            NULL,
+            NULL},
+        {{&quot;restart_after_crash&quot;,
+            PGC_SIGHUP,
+</pre><p>evidence:5c3e0b25bb86ff85829579998b92088b</p><p>SHA-256 e0710e8dff74722db988a88fdd497bdffd29430941c6249ff9c5d3bf651bd054</p></main></html>

@@ -114,10 +114,14 @@ def publish(store, output, *, revision=None, allow_partial=False):
     require(units, "Cannot publish empty knowledge")
     require(doctor(store)["passed"], "Workspace integrity/Git mirror check failed")
     index = store.record("runs", record["run"])
+    from . import whole
+    program=whole.current(store,False)
+    coverage=whole.audit(store) if program else None
+    require(allow_partial or not coverage or coverage['status']=='accepted','Whole-repository coverage is not accepted; inspect coverage, or explicitly publish a partial scope with --allow-partial')
     stale = {uid: reasons for uid, unit in units.items()
              if (reasons := freshness(store, unit, record["snapshot"], record["run"], units))}
     tasks = dict(store.db.execute("SELECT status,count(*) FROM tasks WHERE run=? GROUP BY status", (record["run"],)))
-    partial = bool(stale or index["status"] != "ready" or any(k != "accepted" and v for k, v in tasks.items()))
+    partial = bool(stale or index["status"] != "ready" or any(k != "accepted" and v for k, v in tasks.items()) or coverage and coverage['status']!='accepted')
     require(allow_partial or not partial, "Scope has pending knowledge/index/tasks; explicit allow_partial is required")
     output.mkdir(parents=True)
     try:

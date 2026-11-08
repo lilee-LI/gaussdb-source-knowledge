@@ -1,4 +1,4 @@
-"""Build the offline ZIP from the exact files in a Git revision or index."""
+"""Build an offline ZIP from the Git index or an explicitly selected working tree."""
 
 import argparse
 import hashlib
@@ -11,7 +11,11 @@ ROOT = Path(__file__).resolve().parents[1]
 from unified_knowledge import __version__ as VERSION
 
 
-def package(output):
+def package(output, *, source="index", include=()):
+    if source not in {"index","working-tree"}:
+        raise ValueError("Choose index or working-tree source")
+    if include and source!="working-tree":
+        raise ValueError("Explicit extra files require --source working-tree")
     listing = subprocess.check_output(["git", "ls-files", "--stage", "-z"], cwd=ROOT)
     files = {}
     for record in listing.split(b"\0"):
@@ -27,6 +31,13 @@ def package(output):
         if path in {".gitignore", ".gitattributes"}:
             continue
         files[path] = sha.decode("ascii")
+    for name in include:
+        relative=Path(name)
+        path=(ROOT/relative).resolve()
+        allowed=(relative.parts and relative.parts[0] in {"scripts","tests","docs","adapters","assets","references","skills","engine"}) or (len(relative.parts)==1 and relative.suffix==".md")
+        if relative.is_absolute() or ".." in relative.parts or not allowed or not path.is_relative_to(ROOT.resolve()) or not path.is_file() or (ROOT/relative).is_symlink():
+            raise ValueError("Invalid explicit release source: "+name)
+        files[relative.as_posix()]=None
     if (
         not {"README.md", "kb.cmd", "scripts/unified_kb.py", "docs/DESIGN.md"}
         <= files.keys()
@@ -37,12 +48,18 @@ def package(output):
 
     output = Path(output).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
+    head=subprocess.run(["git","rev-parse","--verify","HEAD"],cwd=ROOT,capture_output=True,text=True)
     with TemporaryDirectory(dir=output.parent) as tmp:
+        if not Path(tmp).resolve().is_relative_to(output.parent):
+            raise ValueError("Temporary output escaped the release directory")
         built = Path(tmp) / "release.zip"
         manifest = {
             "schema": "gaussdb-source-knowledge-release/v2",
             "version": VERSION,
             "files": {},
+            "source_mode": source,
+            "git_head": head.stdout.strip() if head.returncode==0 else None,
+            "release_status": "working_tree_candidate" if source=="working-tree" else "index_snapshot",
         }
         prefix = "gaussdb-source-knowledge-" + VERSION + "/"
 
@@ -54,9 +71,15 @@ def package(output):
 
         with zipfile.ZipFile(built, "w") as archive:
             for name, oid in sorted(files.items()):
-                raw = subprocess.check_output(
-                    ["git", "cat-file", "blob", oid], cwd=ROOT
-                )
+                if source=="working-tree":
+                    path=(ROOT/name).resolve()
+                    if not path.is_relative_to(ROOT.resolve()) or not path.is_file() or (ROOT/name).is_symlink():
+                        raise ValueError("Invalid working-tree release source: "+name)
+                    raw=path.read_bytes()
+                    if name.endswith(".sh"):
+                        raw=raw.replace(b"\r\n",b"\n")
+                else:
+                    raw = subprocess.check_output(["git", "cat-file", "blob", oid], cwd=ROOT)
                 manifest["files"][name] = {
                     "sha256": hashlib.sha256(raw).hexdigest(),
                     "bytes": len(raw),
@@ -82,4 +105,7 @@ if __name__ == "__main__":
         type=Path,
         default=ROOT / "dist" / ("gaussdb-source-knowledge-" + VERSION + ".zip"),
     )
-    print(json.dumps(package(p.parse_args().out)))
+    p.add_argument("--source",choices=("index","working-tree"),default="index",help="working-tree includes tested tracked edits without staging or changing the Git index")
+    p.add_argument("--include",action="append",default=[],help="Explicit new source/document file; never automatically includes untracked runtime or credentials")
+    args=p.parse_args()
+    print(json.dumps(package(args.out,source=args.source,include=args.include)))

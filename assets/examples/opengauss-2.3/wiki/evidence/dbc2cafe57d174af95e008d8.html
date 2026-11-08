@@ -1,0 +1,121 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/storage/access/transam/xact.cpp:8590-8709</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/storage/access/transam/xact.cpp:8590-8709</h1><small>openGauss · content-addressed · linux-native · 完整引用区间</small><pre>}
+
+/*
+ *  * CanPerformUndoActions - Returns true, if the current transaction can
+ *   * perform undo actions, false otherwise.
+ *    */
+bool
+CanPerformUndoActions(void)
+{
+    TransactionState s = CurrentTransactionState;
+
+    return s-&gt;perform_undo;
+}
+
+/*
+ * With longjump after ERROR, some resource, such as Snapshot, are not released as done by normal.
+ * Some cleanup are required for subtransactions inside PL exception block. This acts much like
+ * AbortSubTransaction except for dealing with more than one as read only and keeping them going.
+ *
+ * head: the first subtransaction in this Exception block, cleanup is required for all after this.
+ */
+void XactCleanExceptionSubTransaction(SubTransactionId head)
+{
+    TransactionState s = CurrentTransactionState;
+
+    t_thrd.xact_cxt.bInAbortTransaction = true;
+
+    AbortSubTxnRuntimeContext(s, true);
+
+    /* Prevent cancel/die interrupt while cleaning up */
+    HOLD_INTERRUPTS();
+
+    while (s-&gt;subTransactionId &gt;= head &amp;&amp; s-&gt;parent != NULL) {
+        if (IS_PGXC_DATANODE) {
+            OpFusion::ClearInSubUnexpectSituation(s-&gt;curTransactionOwner);
+        }
+
+        /* reset cursor&#x27;s attribute var */
+        ResetPortalCursor(s-&gt;subTransactionId, InvalidOid, 0);
+
+        /*
+         * We can skip all this stuff if the subxact failed before creating a
+         * ResourceOwner...
+         */
+        if (s-&gt;curTransactionOwner) {
+            AtSubAbort_Portals(s-&gt;subTransactionId, s-&gt;parent-&gt;subTransactionId,
+                               s-&gt;curTransactionOwner, s-&gt;parent-&gt;curTransactionOwner, true);
+
+            CallSubXactCallbacks(SUBXACT_EVENT_CLEANUP_SUB, s-&gt;subTransactionId, s-&gt;parent-&gt;subTransactionId);
+
+            ResourceOwnerRelease(s-&gt;curTransactionOwner, RESOURCE_RELEASE_BEFORE_LOCKS, false, false);
+            ResourceOwnerRelease(s-&gt;curTransactionOwner, RESOURCE_RELEASE_AFTER_LOCKS, false, false);
+
+            AtEOSubXact_HashTables(false, s-&gt;nestingLevel);
+            AtEOSubXact_PgStat(false, s-&gt;nestingLevel);
+            AtSubAbort_Snapshot(s-&gt;nestingLevel);
+        }
+
+        s = s-&gt;parent;
+    }
+
+    t_thrd.xact_cxt.bInAbortTransaction = false;
+
+    RESUME_INTERRUPTS();
+}
+
+/*
+ * Get Current Transaction&#x27;s name.
+ */
+char* GetCurrentTransactionName()
+{
+    return CurrentTransactionState-&gt;name;
+}
+
+static void AtEOXact_Proceed_PatchSeq()
+{
+    /* proceed the instance-level patch id */
+    if (u_sess-&gt;opt_cxt.xact_modify_sql_patch) {
+        (void)pg_atomic_add_fetch_u64(&amp;g_instance.cost_cxt.sql_patch_sequence_id, 1);
+        ereport(DEBUG2, (errmodule(MOD_SQLPATCH),
+            errmsg(&quot;[SQLPatch] global patch sequence id is proceeded to %lu&quot;,
+            pg_atomic_read_u64(&amp;g_instance.cost_cxt.sql_patch_sequence_id))));
+        u_sess-&gt;opt_cxt.xact_modify_sql_patch = false;
+    }
+}
+
+bool IsTransactionInProgressState()
+{
+    TransactionState s = CurrentTransactionState;
+    return (s-&gt;blockState == TBLOCK_INPROGRESS) || (s-&gt;blockState == TBLOCK_SUBINPROGRESS);
+}
+
+void BeginTxnForAutoCommitOff()
+{
+    TransactionState s = CurrentTransactionState;
+    if (s-&gt;blockState == TBLOCK_STARTED) {
+        s-&gt;blockState = TBLOCK_INPROGRESS;
+    }
+}
+
+void SetTxnInfoForSSLibpqsw(TransactionId xid, CommandId cid)
+{
+    CurrentTransactionState-&gt;transactionId = xid;
+    SnapshotSetCommandId(cid);
+}
+
+void ClearTxnInfoForSSLibpqsw()
+{
+    CurrentTransactionState-&gt;transactionId = InvalidTransactionId;
+    SnapshotSetCommandId(0);
+}
+
+static void CreateNewTryCatchSavePoint(TransactionTryCatchContext* trycatchContext)
+{
+    Assert(trycatchContext-&gt;status == TRY_CATCH_IN_TRY);
+    Assert(!trycatchContext-&gt;hasSavepoint);
+    GetCurrentTransactionId();
+    DefineSavepoint(&quot;__trycatch_savepoint&quot;);
+    trycatchContext-&gt;hasSavepoint = true;
+}
+</pre><p>evidence:b1a2d1f2fe859bed4e9e94655c235ab9</p><p>SHA-256 36a05e10f9df95eff67be9515b18ac789bcd6811e95e6aca88be102475bac55e</p></main></html>
