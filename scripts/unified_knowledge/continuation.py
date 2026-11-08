@@ -60,6 +60,7 @@ def run(store,*,worker,module=None,steps=1,timeout=1800,budget=3,executable=None
             prompt+=' 这是同一有效租约的断点续作，不要再次claim或release。当前租约token='+continuation+'；先task_context查看active_drafts和active_progress，复用本租约已读证据与已暂存内容。若草稿已完整，核对后直接finish_research；不要重建整套草稿或输出token。'
         atomic_write(folder/'prompt.txt',prompt)
         args=[command,'-p','--strict-mcp-config','--mcp-config',str(mcp),'--allowedTools','mcp__gaussdb_knowledge__*',
+              '--disallowedTools','Bash,Read,Write,Edit,Glob,Grep,NotebookEdit,WebFetch,WebSearch,Agent,Task',
               '--permission-mode','dontAsk','--max-budget-usd',str(budget),'--output-format','stream-json','--verbose','--no-session-persistence']
         begin=time.monotonic();timed_out=False;stopped_after_submission=False
         with (folder/'stdout.jsonl').open('wb') as output,(folder/'stderr.log').open('wb') as errors:
