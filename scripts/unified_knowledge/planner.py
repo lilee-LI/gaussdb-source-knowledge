@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from copy import deepcopy
 import json
 import re
 import time
@@ -187,12 +188,17 @@ def lease(store, task, worker, *, seconds=1800, action="claim", token=None, chec
         value = task_status(store, task)
         if action == "claim":
             b = value["bundle"]
+            from .dispatch import candidate_allowed, authorized_delegate
+            require(candidate_allowed(store, worker, value), "Delegated worker is outside its active task scope")
             if b.get("module") and b.get("plan_id"):
                 assignment = store.get_meta("assignment:" + b["plan_id"] + ":" + b["module"])
-                require(not assignment or assignment["worker"] == worker, "Module belongs to another worker")
+                require(not assignment or assignment["worker"] == worker or
+                        authorized_delegate(store, worker, assignment["worker"], value), "Module belongs to another worker")
             require(value["status"] in {"queued", "needs_research"} or
                     (value["status"] == "leased" and value["deadline"] < time.time()), "Task is not claimable")
             require(all(v == "accepted" for v in value["dependency_states"].values()), "Task dependencies not accepted")
+            from . import curriculum
+            require(not curriculum.prerequisites(store, value), "Task knowledge prerequisites are not ready")
             token = uuid.uuid4().hex
             store.db.execute("UPDATE tasks SET status='leased',owner=?,token=?,deadline=?,attempt=attempt+1 WHERE id=?",
                              (worker, token, time.time() + seconds, task))
@@ -342,6 +348,17 @@ def submit(store, task, worker, token, result, *, expected_drafts=None, expected
         for item in result.get("claims", []):
             evidence.update(item.get("source_refs", []))
         complete = _complete_reads(store, task, worker, token)
+        from . import curriculum
+        if curriculum.current(store):
+            # Keep open questions on the reviewed module report. Turning each
+            # question into its own task recreates the fine-grained queue that
+            # the module/feature curriculum is meant to replace.
+            progress=deepcopy(result.get('progress') or {})
+            gaps=progress.setdefault('gaps',[]);seen={g['question'] for g in gaps}
+            for item in result['coverage']:
+                if item['status']=='open' and item['question'] not in seen:
+                    gaps.append({'question':item['question'],'reason':item['explanation']});seen.add(item['question'])
+            if gaps:result={**result,'progress':progress}
         if result.get('progress'):
             from .whole import validate_progress
             result={**result,'progress':validate_progress(store,task_status(store,task),result['progress'],
@@ -378,7 +395,8 @@ def review_task(store, task, review):
             if result.get('progress'):
                 from .whole import apply_reviewed_locked
                 apply_reviewed_locked(store,value,result,review)
-            for item in result["coverage"]:
+            from .curriculum import current as curriculum_current
+            for item in ([] if curriculum_current(store) else result["coverage"]):
                 if item["status"] == "open":
                     followups.append(create_task(store, snapshot=value["snapshot"], run=value["run"], profile=value["profile"],
                         kind="gap_research", bundle={"parent": task, "module": value["bundle"].get("module"),
@@ -448,6 +466,17 @@ def task_context(store, task):
             value["dependency_results"].append({"task": dep, "status": child["status"], "result_digest": digest(result),
                 "coverage": result["coverage"], "claims": result.get("claims", []),
                 "expand_with": {"tool": "task_context", "task": dep}})
+    from .curriculum import current as course_current
+    course=course_current(store)
+    if course:
+        from .context_builder import build
+        value['learning_read_plan']=build(store,value,max_chars=12000,limit=8)
+        value['curriculum']={'id':course['id'],'revision':course['revision'],'package':b.get('package_id'),
+            'feature_ids':b.get('feature_ids',[]),'mainline_ids':b.get('mainline_ids',[]),
+            'implementation_items':{'tool':'implementation_items','module':b.get('module'),'offset':0,'limit':30},
+            'rules':['File reading is not semantic completion. Explain every C++ region with cited, reviewed substantive knowledge.',
+                     'Submit implementations and feature_mappings through stage_progress; knowledge publication is a separate review.',
+                     'Read source-only or uncompiled regions too; graph SCCs and reading chunks never become independent tasks.']}
     return value
 
 

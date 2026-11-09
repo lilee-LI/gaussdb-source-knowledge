@@ -1,0 +1,29 @@
+{
+  "status": "passed",
+  "offline_install": true,
+  "package_index_used": false,
+  "model_invocations": 0,
+  "optional_sdks_present": {
+    "mcp": false,
+    "claude_agent_sdk": false,
+    "tree_sitter": false
+  },
+  "four_input_summary": {
+    "features": 1,
+    "feature_rows": 1,
+    "duplicates": 0,
+    "ambiguous": 0,
+    "compile_contexts": 1,
+    "mapped_contexts": 1,
+    "unlocated_contexts": 0,
+    "source_files_in_compile_db": 1
+  },
+  "native_handoffs": 2,
+  "mcp_replies": 3,
+  "roles_without_knowledge": {
+    "coding": "partial",
+    "test_generation": "partial",
+    "review": "partial",
+    "operations": "partial"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "source_commit": "ed99bbde5308942d4eb062e7a851bdb85dda902f",
+  "seconds": 107.523,
+  "tables": {
+    "assets": 15228,
+    "symbols": 0,
+    "relations": 0,
+    "tasks": 559,
+    "implementation_items": 13845
+  },
+  "task_kinds": {
+    "integration_research": 12,
+    "module_survey": 537,
+    "shared_research": 10
+  },
+  "modules": 537,
+  "packages": 3667,
+  "cpp_files": 2380,
+  "unassigned_cpp": [],
+  "inputs": {
+    "ambiguous": 0,
+    "compile_contexts": 2412,
+    "duplicates": 0,
+    "feature_rows": 4,
+    "features": 4,
+    "mapped_contexts": 2364,
+    "source_files_in_compile_db": 2027,
+    "unlocated_contexts": 48
+  },
+  "sqlite_bytes": 85266432,
+  "blob_bytes": 801268620,
+  "max_package_files": 24,
+  "manual_limit": "One public 6.0.0 connection-settings page; version correspondence not certified",
+  "cdb_limit": "2412-context historical Windows-path replay copy; build macros recorded, no new TU parsing",
+  "semantic_coverage": "not_studied_by_planning",
+  "runtime": "not_run"
+}

@@ -18,7 +18,7 @@ from .store import canonical, digest, identity, now, require
 
 CPP = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inc"}
 OMIT_DIRS = {".git", ".svn", ".codewiki", ".codegraph", ".serena", ".claude", ".codex", "__pycache__", "node_modules", ".venv"}
-TEXT_DOCS = {".md", ".markdown", ".txt", ".html", ".htm", ".docx", ".pdf"}
+TEXT_DOCS = {".md", ".markdown", ".txt", ".csv", ".json", ".html", ".htm", ".docx", ".pdf"}
 
 
 def linked(path):
@@ -30,7 +30,7 @@ def walk(root):
     """Yield every accepted file or explicit link/directory exclusion."""
     root = Path(root)
     if root.is_file():
-        yield root, None
+        yield root, "tool_metadata_file" if root.name in OMIT_DIRS else None
         return
     errors = []
     for directory, dirs, files in os.walk(root, followlinks=False, onerror=errors.append):
@@ -42,7 +42,7 @@ def walk(root):
                 yield entry, "linked_directory" if linked(entry) else "tool_metadata_directory"
         for name in sorted(files):
             p = Path(directory) / name
-            yield p, "linked_file" if linked(p) else None
+            yield p, "tool_metadata_file" if name in OMIT_DIRS else "linked_file" if linked(p) else None
     for error in errors:
         yield Path(error.filename), "walk_error:" + type(error).__name__
 
@@ -51,17 +51,30 @@ class TextHTML(HTMLParser):
     def __init__(self):
         super().__init__()
         self.parts = []
-        self.hidden = 0
+        self.stack = []
+
+    @property
+    def hidden(self):
+        return any(hidden for _, hidden in self.stack)
 
     def handle_starttag(self, tag, attrs):
-        if tag in {"script", "style"}:
-            self.hidden += 1
+        attrs = dict(attrs)
+        tokens = set(re.split(r"[\s_-]+", attrs.get("class", "").casefold()))
+        hide = tag in {"script", "style", "nav", "aside", "footer"} or attrs.get("role", "").casefold() == "navigation" or bool(tokens & {"sidebar", "navigation", "toc"})
+        if tag not in {"br", "hr", "img", "input", "meta", "link", "source", "wbr", "area", "base", "embed", "param", "track", "col"}:
+            self.stack.append((tag, hide))
         if not self.hidden and tag in {"p", "br", "div", "tr", "li", "h1", "h2", "h3", "h4"}:
             self.parts.append("\n")
 
     def handle_endtag(self, tag):
-        if tag in {"script", "style"}:
-            self.hidden = max(0, self.hidden - 1)
+        for index in range(len(self.stack) - 1, -1, -1):
+            if self.stack[index][0] == tag:
+                del self.stack[index:]
+                break
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        self.handle_endtag(tag)
 
     def handle_data(self, text):
         if not self.hidden:
@@ -69,8 +82,11 @@ class TextHTML(HTMLParser):
 
 
 def extract(raw, suffix):
-    if suffix in {".md", ".markdown", ".txt"}:
+    if suffix in {".md", ".markdown", ".txt", ".csv"}:
         return raw.decode("utf-8-sig"), "native-text", "requires_semantic_review"
+    if suffix == ".json":
+        value = json.loads(raw.decode("utf-8-sig"))
+        return json.dumps(value, ensure_ascii=False, indent=2), "native-json", "requires_semantic_review"
     if suffix in {".html", ".htm"}:
         p = TextHTML()
         p.feed(raw.decode("utf-8-sig"))

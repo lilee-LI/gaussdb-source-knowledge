@@ -1,0 +1,91 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/path/allpaths.cpp:3340-3429</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/path/allpaths.cpp:3340-3429</h1><small>openGauss · ed99bbde5308942d4eb062e7a851bdb85dda902f · declared-build · 完整引用区间</small><pre> */
+static RelOptInfo* make_rel_from_joinlist(PlannerInfo* root, List* joinlist)
+{
+    int levels_needed;
+    List* initial_rels = NIL;
+    ListCell* jl = NULL;
+
+    /*
+     * Count the number of child joinlist nodes.  This is the depth of the
+     * dynamic-programming algorithm we must employ to consider all ways of
+     * joining the child nodes.
+     */
+    levels_needed = list_length(joinlist);
+    if (levels_needed &lt;= 0)
+        return NULL; /* nothing to do? */
+
+    /*
+     * Construct a list of rels corresponding to the child joinlist nodes.
+     * This may contain both base rels and rels constructed according to
+     * sub-joinlists.
+     */
+    initial_rels = NIL;
+    foreach (jl, joinlist) {
+        Node* jlnode = (Node*)lfirst(jl);
+        RelOptInfo* thisrel = NULL;
+
+        if (IsA(jlnode, RangeTblRef)) {
+            int varno = ((RangeTblRef*)jlnode)-&gt;rtindex;
+
+            thisrel = find_base_rel(root, varno);
+        } else if (IsA(jlnode, List)) {
+            /* Recurse to handle subproblem */
+            thisrel = make_rel_from_joinlist(root, (List*)jlnode);
+        } else {
+            ereport(ERROR,
+                (errmodule(MOD_OPT),
+                    errcode(ERRCODE_UNRECOGNIZED_NODE_TYPE),
+                    (errmsg(&quot;unrecognized joinlist node type when build access paths by joinlist: %d&quot;,
+                        (int)nodeTag(jlnode)))));
+            thisrel = NULL; /* keep compiler quiet */
+        }
+
+        initial_rels = lappend(initial_rels, thisrel);
+    }
+
+    if (levels_needed == 1) {
+        /*
+         * Single joinlist node, so we&#x27;re done.
+         */
+        return (RelOptInfo*)linitial(initial_rels);
+    } else {
+        /*
+         * Consider the different orders in which we could join the rels,
+         * using a plugin, GEQO, or the regular join search code.
+         *
+         * We put the initial_rels list into a PlannerInfo field because
+         * has_legal_joinclause() needs to look at it (ugly :-().
+         */
+        root-&gt;initial_rels = initial_rels;
+
+        if (u_sess-&gt;attr.attr_sql.enable_geqo &amp;&amp; levels_needed &gt;= u_sess-&gt;attr.attr_sql.geqo_threshold)
+            return geqo(root, levels_needed, initial_rels);
+        else
+            return standard_join_search(root, levels_needed, initial_rels);
+    }
+}
+
+/*
+ * standard_join_search
+ *	  Find possible joinpaths for a query by successively finding ways
+ *	  to join component relations into join relations.
+ *
+ * &#x27;levels_needed&#x27; is the number of iterations needed, ie, the number of
+ *		independent jointree items in the query.  This is &gt; 1.
+ *
+ * &#x27;initial_rels&#x27; is a list of RelOptInfo nodes for each independent
+ *		jointree item.	These are the components to be joined together.
+ *		Note that levels_needed == list_length(initial_rels).
+ *
+ * Returns the final level of join relations, i.e., the relation that is
+ * the result of joining all the original relations together.
+ * At least one implementation path must be provided for this relation and
+ * all required sub-relations.
+ *
+ * To support loadable plugins that modify planner behavior by changing the
+ * join searching algorithm, we provide a hook variable that lets a plugin
+ * replace or supplement this function.  Any such hook must return the same
+ * final join relation as the standard code would, but it might have a
+ * different set of implementation paths attached, and only the sub-joinrels
+ * needed for these paths need have been instantiated.
+</pre><p>evidence:ea5ee1c8a586b5bd7dc7f489fa7047f7</p><p>SHA-256 f425eb8bd340932a53943dea4d824e985f9507a641b738f91214af50e6d25e63</p></main></html>

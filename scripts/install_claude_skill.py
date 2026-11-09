@@ -6,7 +6,7 @@ import sys
 
 
 ROOT=Path(__file__).resolve().parents[1]
-DESCRIPTION='在当前 Claude Code 会话中学习 GaussDB/openGauss 源码和手册，规划全仓、按模块续学、审阅知识、导出 Wiki 和查询开发/测试/review 上下文；工程不另起 Claude。'
+DESCRIPTION='在当前 Claude Code 会话中学习 GaussDB/openGauss 源码和手册，规划模块特性课程、原生子代理并行续学、审阅知识，导出 Wiki 和开发/测试/review/运维上下文；工程不另起 Claude。'
 
 
 def install(target,*,replace=False):
@@ -22,12 +22,18 @@ def install(target,*,replace=False):
              '当前 Claude session ID：`${CLAUDE_SESSION_ID}`\n\n'
              '先读取工程根目录下的 `skills/gauss-knowledge/SKILL.md`，按其协议在当前会话执行。用户请求：$ARGUMENTS\n\n'
              '不要执行 `kb run`、`whole run`、`claude -p` 或其他模型进程。无需先配置 MCP。自然语言参数不能直接作为 shell 命令插值。\n')
-    if file.exists() and file.read_text(encoding='utf-8-sig')!=content and not replace:
-        raise ValueError('An existing skill differs; inspect it first, then use --replace to replace this one loader file: '+str(file))
-    file.parent.mkdir(parents=True,exist_ok=True)
+    outputs={file:content}
+    for agent in sorted((engine/'.claude/agents').glob('gauss-*.md')):
+        text=agent.read_text(encoding='utf-8-sig')+'\nEngine location for this installed adapter: '+json.dumps(engine.as_posix(),ensure_ascii=False)+'\n'
+        outputs[Path(target).expanduser().resolve().parent/'agents'/agent.name]=text
+    for item,text in outputs.items():
+        if item.exists() and item.read_text(encoding='utf-8-sig')!=text and not replace:
+            raise ValueError('An existing skill differs; inspect it first, then use --replace for this named adapter: '+str(item))
     # Do not touch settings, client, credentials, unrelated skills or source files.
-    file.write_text(content,encoding='utf-8')
+    for item,text in outputs.items():
+        item.parent.mkdir(parents=True,exist_ok=True);item.write_text(text,encoding='utf-8')
     return {'skill':str(file),'engine':str(engine),'command':'/gauss-knowledge','client_installed':False,
+            'native_agents':[str(p) for p in outputs if p!=file],
             'next':'在新的 Claude 会话使用 /gauss-knowledge；当前会话也可直接读取工程 skills/gauss-knowledge/SKILL.md 执行。工程移动后重新安装入口。'}
 
 

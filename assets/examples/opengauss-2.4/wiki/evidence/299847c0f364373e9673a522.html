@@ -1,0 +1,29 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/geqo/Makefile:1-28</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/geqo/Makefile:1-28</h1><small>openGauss · ed99bbde5308942d4eb062e7a851bdb85dda902f · declared-build · 完整引用区间</small><pre>#-------------------------------------------------------------------------
+#
+# Makefile--
+#    Makefile for the genetic query optimizer module
+#
+# Copyright (c) 1994, Regents of the University of California
+#
+# src/gausskernel/optimizer/geqo/Makefile
+#
+#-------------------------------------------------------------------------
+
+subdir = src/gausskernel/optimizer/geqo
+top_builddir = ../../../..
+include $(top_builddir)/src/Makefile.global
+
+ifneq &quot;$(MAKECMDGOALS)&quot; &quot;clean&quot;
+  ifneq &quot;$(MAKECMDGOALS)&quot; &quot;distclean&quot;
+    ifneq &quot;$(shell which g++ |grep hutaf_llt |wc -l)&quot; &quot;1&quot;
+      -include $(DEPEND)
+    endif
+  endif
+endif
+OBJS =	geqo_copy.o geqo_eval.o geqo_main.o geqo_misc.o \
+	geqo_mutation.o geqo_pool.o geqo_random.o geqo_recombination.o \
+	geqo_selection.o \
+	geqo_erx.o geqo_pmx.o geqo_cx.o geqo_px.o geqo_ox1.o geqo_ox2.o
+
+include $(top_srcdir)/src/gausskernel/common.mk
+</pre><p>evidence:a29b817be9353dec5a2bf68daf402423</p><p>SHA-256 b4d83906ebcd78ff10e2b621334c1b971fc9b97d693e6acc03a53dd3f7aac76c</p></main></html>

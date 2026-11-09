@@ -1,12 +1,12 @@
 # 直接在 Claude 中使用
 
-在现有 Claude Code 会话中执行源码和手册学习。Claude 自己读、分析、写；工程 Python 助手负责全仓计划、任务状态、证据、入库、Wiki 和查询。**不用从外面调用 Claude，不需要配置 MCP，也不需要模型 SDK。**
+在现有 Claude Code 会话中执行四输入学习。Claude 及其原生子 Agent 负责读、分析、写；工程 Python 助手负责模块/功能课程、任务、证据、两阶段审阅、Wiki 和四角色查询。**不用从外面调用 Claude，不需要先配置 MCP，也不需要模型 SDK。** 本文对应 2.4.0；[完整命令](MIGRATE-GAUSSDB.md)。
 
-准备好本机 Python 3.12、Git、已可使用的 Claude Code，以及完整工程（包含 wheels）。学习工作区与源码、手册、工程目录分开。没有设计文档、没有编译图也能开始；CHM 先解包为 HTML，扫描 PDF 先做 OCR。
+准备好本机 Python 3.12、Git、已可使用的 Claude Code，以及完整工程（包含 wheels）。学习工作区与源码、手册、工程目录分开。没有设计文档、没有编译图也能开始；CHM 先解包为 UTF-8 HTML，扫描 PDF 先做 OCR。
 
 ## 方式一：直接粘贴，立即开始
 
-无需先运行 PowerShell 命令。在 Claude 中粘贴下面整段，只替换四处路径：
+无需先运行 PowerShell 命令。在 Claude 中粘贴下面整段，替换实际路径；没有的可选输入删掉：
 
 ```text
 请读取 E:/kb/engine/skills/gauss-knowledge/SKILL.md，按这个 skill 在当前会话执行。
@@ -14,11 +14,16 @@
 工程：E:/kb/engine
 源码：E:/GaussDB/source
 用户手册：E:/corpus/manual
+历史特性名称：E:/corpus/features.csv
+编译数据库：E:/corpus/compile_commands.json
 学习工作区：E:/knowledge/gaussdb
 
-先创建全仓学习计划，展示领域、模块、初始任务数和计划文件位置；然后从优化器中选一个小子模块，完成第一轮源码与手册盘点，给出按机制归并的后续学习计划。
-当前只提供源码和手册，不生成编译索引，不解析 TU。
-由当前会话执行，不运行 kb run、claude -p 或另起模型；保留真实证据和待审状态。
+先创建全仓学习计划，展示领域、模块、功能/主干工作包、全部CPP归属、输入问题和计划文件。
+按我指定的模块学习；多个模块使用当前宿主原生 Agent，通过工程 batch 的独立子会话和租约运行。
+先盘点范围，再按机制深入，区间只是覆盖账，不逐函数/TU/边/区间建任务。
+本轮仅登记编译上下文，不运行编译命令、不解析TU；Linux/Windows路径不同使用配置中的path_maps。
+按真实证据进行研究和知识两阶段审阅，导出Wiki、结构化知识以及开发/测试/review/运维查询；缺口真实保留。
+不运行 kb run、claude -p 或另起模型，不伪称人工专家审阅。
 ```
 
 首次助手会从包内 wheels 准备 `.venv`，仅安装 Python 依赖；不会下载源码或安装 Claude。若 Claude 的工具权限阻止 Python/读写，按其权限提示处理；纯聊天且无本地工具的 Claude 网页窗口不能执行本机工程。
@@ -33,7 +38,7 @@
 
 ```text
 请核对刚提交的研究和源码证据，做真实自审；记录 self_reviewed，完成研究与知识两步审阅后导出 Wiki。
-然后分别用开发、测试、代码 review 三个角色查询刚学的机制，给出结果和所有产物的路径。
+然后分别用开发、测试、代码 review、运维四个角色查询刚学的机制，给出实际内容、缺失字段和所有产物路径。
 保留未知条件和未运行测试，不冒充独立人工审阅。
 ```
 
@@ -71,14 +76,14 @@
 
 | 产物 | 位置及含义 |
 | --- | --- |
-| 全仓学习计划 | `HOME/whole/PLAN.md`、`PLAN.json`、`index.html` |
+| 模块/功能/主干课程 | `HOME/curriculum/PLAN.md`、`PLAN.json`、`index.html`；全仓覆盖在 `HOME/whole/` |
 | 研究草稿和覆盖 | 同一个 `HOME/knowledge.sqlite3` 的任务/证据/暂存/覆盖账；辅助草稿文件在 `HOME/drafts/` |
 | 已审结构化知识 | `HOME/knowledge.sqlite3`、`HOME/wiki.git` 的知识修订；不会另造一份孤立数据库 |
 | Wiki | `HOME/wiki/index.html` 和修订目录下的 Markdown；只展示已审入库知识 |
-| 开发/测试/review 上下文 | 通过 skill 查询同一已审知识，返回适用条件、消费者、测试预期依据、证据和缺口 |
+| 四角色上下文 | 通过 skill 查询同一已审知识，返回适用条件、消费者、测试预期依据、证据和缺口 |
 
 源码和手册模式可形成源码位置/文本证据支持的关系。没有编译图时，宏配置、重载和间接调用保持待核；不会伪装成编译器确认的调用图。以后在 paths 中接入已有 ECS 图可继续图辅助研究，输入变更按现有版本绑定规则复核。
 
-多人服务器协作仍用原有工作包和签名结果汇总，见[持续学习协议](docs/WHOLE-REPOSITORY.md)。本次当前会话助手绑定路径配置的协调端工作区；已解开的成员包继续使用原有 MCP/whole 操作，不对它重新初始化。外部批处理 `kb run` 仍可选用，与本入口共用状态，但本 skill 不调用它。
+多人服务器协作使用签名模块包和结果汇总，见[完整操作](MIGRATE-GAUSSDB.md)。协调端用 paths；已解开的成员工作区用 `--home MEMBER_HOME --session SESSION init --worker 工作单成员` 绑定现有产品，后续同一助手串行或原生并行。不会重新冻结一份无关产品。外部批处理 `kb run` 保留兼容，但本 skill 不调用它。
 
 Claude Code 的[官方 skill 说明](https://code.claude.com/docs/en/skills)支持个人/项目 skill 与 `/名称` 调用。使用直接粘贴方式时不依赖 skill 自动发现，适合先试跑。

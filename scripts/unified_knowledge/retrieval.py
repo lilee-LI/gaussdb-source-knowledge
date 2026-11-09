@@ -10,6 +10,7 @@ import re
 from .indexer import query_graph
 from .knowledge import UnitMap, content_hash, freshness, knowledge_graph
 from .planner import resolve_targets
+from . import role_context
 from .store import canonical, digest, identity, require
 
 
@@ -66,11 +67,17 @@ def import_vectors(store, revision, space, vectors):
 
 def _bound_scope(store, request):
     snapshot = request.get("source_snapshot")
+    # An omitted scope means the configured workspace, never an arbitrary latest
+    # source revision. Explicit older snapshots retain their own profile checks.
+    plan_key = store.get_meta("study_head")
+    plan = store.get_meta(plan_key, {}) if plan_key else {}
+    snapshot = snapshot or plan.get("snapshot")
     require(isinstance(snapshot, str), "source_snapshot is required")
     store.record("snapshots", snapshot)
-    profile = request.get("build_profile", "unknown")
+    current_scope = plan.get("snapshot") == snapshot
+    profile = request.get("build_profile") or (plan.get("profile") if current_scope else None) or "unknown"
     store.profile(snapshot, profile)
-    run = request.get("index_run") or store.get_meta("index_head:" + snapshot + ":" + profile)
+    run = request.get("index_run") or (plan.get("run") if current_scope and plan.get("profile") == profile else None) or store.get_meta("index_head:" + snapshot + ":" + profile)
     require(run is not None, "No completed index for this snapshot/profile")
     index = store.record("runs", run)
     require(index["snapshot"] == snapshot and index["profile"] == profile and index["status"] in {"ready", "partial"},
@@ -88,9 +95,62 @@ def _bound_scope(store, request):
     return snapshot, profile, run, revision
 
 
+def _selected_units(store, request, snapshot, run, revision):
+    """Resolve semantic selectors without decoding the whole Wiki/source graph."""
+    selectors, ids, missing, truncated = {}, set(), [], False
+    for name in ("module", "feature", "mainline"):
+        values = request.get(name, request.get(name + "_ids", []))
+        values = [values] if isinstance(values, str) else values
+        require(isinstance(values, list) and len(values) <= 100 and all(isinstance(v, str) and v for v in values),
+                name + " selector must be a string or bounded string list")
+        if values:
+            selectors[name] = sorted(set(values))
+    if not revision or not selectors:
+        return ids, selectors, missing, truncated
+    plan_key = store.get_meta("study_head")
+    plan = store.get_meta(plan_key, {}) if plan_key else {}
+    from .associations import collect
+    projected = collect(store, snapshot=snapshot, run=run, revision=revision,
+                        selectors={name: values for name, values in selectors.items() if name in {"feature", "mainline"}}) if any(name in selectors for name in ("feature", "mainline")) else None
+    if projected:
+        truncated |= projected["truncated"]
+    for name, values in selectors.items():
+        matches = set()
+        for value in values:
+            rows = store.db.execute(
+                "SELECT r.id FROM revision_units r JOIN unit_versions v ON v.hash=r.hash WHERE r.revision=? AND "
+                "(r.id=? OR json_extract(v.data,?)=? OR EXISTS "
+                "(SELECT 1 FROM json_each(v.data,?) j WHERE j.value=?)) ORDER BY r.id LIMIT 1001",
+                (revision, value, "$." + name + "_id", value, "$." + name + "_ids", value)).fetchall()
+            found = {r[0] for r in rows}
+            if projected:
+                found.update(projected["navigation"].get(name, {}).get(value, []))
+            truncated |= len(rows) > 1000
+            if name == "module" and plan.get("snapshot") == snapshot and plan.get("run") == run:
+                files = plan.get("modules", {}).get(value, {}).get("files", [])
+                for offset in range(0, len(files), 400):
+                    page = files[offset:offset + 400]
+                    if not page:
+                        continue
+                    rows = store.db.execute(
+                        "SELECT DISTINCT d.unit FROM unit_dependencies d WHERE d.revision=? AND d.kind='asset' "
+                        "AND d.ref IN (" + ",".join("?" for _ in page) + ") ORDER BY d.unit LIMIT 1001",
+                        [revision, *page]).fetchall()
+                    found.update(r[0] for r in rows)
+                    if len(found) > 1000:
+                        truncated = True
+                        break
+            if not found:
+                missing.append({"selector": name, "value": value})
+            matches.update(sorted(found)[:1000])
+        ids.update(matches)
+    return ids, selectors, missing, truncated
+
+
 def search(store, request, *, limit=12):
     require(type(limit) is int and 1 <= limit <= 100, "Search limit out of range")
     snapshot, profile, run, revision = _bound_scope(store, request)
+    selector_ids, selectors, selector_misses, selector_truncated = _selected_units(store, request, snapshot, run, revision)
     query = request.get("query", "")
     require(isinstance(query, str) and len(query) <= 50000, "Invalid query")
     targets = request.get("targets", [])
@@ -128,7 +188,7 @@ def search(store, request, *, limit=12):
             ranked.append((cosine(request["query_vector"], value["vector"]), r["unit"], value))
         external = {uid: value for score, uid, value in heapq.nlargest(100, ranked, key=lambda x: (x[0], x[1]))}
         require(external, "No matching embedding space for this revision")
-    candidate_ids = set(fts_ranks) | set(external)
+    candidate_ids = set(fts_ranks) | set(external) | selector_ids
     for logical in seed_logicals:
         candidate_ids.update(r[0] for r in store.db.execute(
             "SELECT unit FROM unit_dependencies WHERE revision=? AND kind='symbol' AND ref=?", (revision, logical)))
@@ -141,6 +201,8 @@ def search(store, request, *, limit=12):
                "JOIN lexical_cache c ON c.hash=json_extract(v.data,'$.content_hash') WHERE r.revision=? AND (" +
                predicates + ") ORDER BY r.id LIMIT 1000")
         candidate_ids.update(r[0] for r in store.db.execute(sql, [revision, *selected_terms]))
+    if selectors:
+        candidate_ids &= selector_ids
     candidate_truncated = len(candidate_ids) > 5000
     candidate_ids = set(sorted(candidate_ids, key=lambda uid: (uid not in fts_ranks, fts_ranks.get(uid, 0), uid))[:5000])
     units = UnitMap(store, revision, store.units(revision, ids=sorted(candidate_ids)) if revision else {})
@@ -157,6 +219,7 @@ def search(store, request, *, limit=12):
         cache = store.db.execute("SELECT vector FROM lexical_cache WHERE hash=?", (unit["content_hash"],)).fetchone()
         vector = json.loads(cache[0]) if cache else embedding(text)
         score = lexical * 4 + max(0, cosine(qvec, vector)) + (10 if aligned else 0)
+        score += role_context.rank_bonus(request.get("task"), unit)
         if uid in fts_ranks:
             score += 1 / (1 + fts_ranks[uid])
         modes = ["character_word", "lexical_hash"]
@@ -165,11 +228,11 @@ def search(store, request, *, limit=12):
             require(record["content_hash"] == content_hash(unit), "Stored vector content drift")
             score += 2 * max(0, cosine(request["query_vector"], record["vector"]))
             modes.append("external_embedding")
-        if not (lexical or aligned or uid in fts_ranks or uid in external):
+        if not (lexical or aligned or uid in fts_ranks or uid in external or uid in selector_ids):
             continue
         reasons = freshness(store, unit, snapshot, run, units)
         item = {"id": uid, "score": round(score, 6), "kind": unit["kind"], "title": unit["title"],
-                "retrieval_modes": modes + (["symbol_alignment"] if aligned else [])}
+                "retrieval_modes": modes + (["symbol_alignment"] if aligned else []) + (["semantic_selector"] if uid in selector_ids else [])}
         if reasons:
             stale.append({**item, "reasons": reasons})
         else:
@@ -177,7 +240,9 @@ def search(store, request, *, limit=12):
     hits.sort(key=lambda h: (-h["score"], h["id"]))
     return {"snapshot": snapshot, "profile": profile, "run": run, "knowledge_revision": revision,
             "hits": hits[:limit], "stale_candidates": sorted(stale, key=lambda x: -x["score"])[:limit],
-            "seed_symbols": sorted(seeds), "unresolved_targets": unresolved, "truncated": len(hits) > limit or candidate_truncated,
+            "seed_symbols": sorted(seeds), "unresolved_targets": unresolved,
+            "selectors": selectors, "selector_misses": selector_misses,
+            "truncated": len(hits) > limit or candidate_truncated or selector_truncated,
             "vector_baseline": LEXICAL_SPACE, "semantic_embedding": request.get("embedding_space")}
 
 
@@ -191,19 +256,29 @@ def get_context(store, request):
     selected = {h["id"] for h in found["hits"]}
     # Expand explicit semantic dependencies/consumers, independently of lexical scores.
     frontier = set(selected)
+    semantic_truncated = False
     for _ in range(2):
         following = set()
-        for uid in frontier:
-            for row in store.db.execute("SELECT source,target FROM semantic_edges WHERE revision=? AND (source=? OR target=?)",
+        for uid in sorted(frontier)[:200]:
+            for row in store.db.execute("SELECT source,target FROM semantic_edges WHERE revision=? AND (source=? OR target=?) LIMIT 201",
                                         (revision, uid, uid)):
                 following.update(row)
+                if len(following) > 200:
+                    semantic_truncated = True
+                    break
+            if semantic_truncated:
+                break
         following -= selected
+        if len(selected | following) > 200:
+            semantic_truncated = True
+        following = set(sorted(following)[:max(0, 200 - len(selected))])
         selected.update(following)
         frontier = following
     constraints, paths, tests, evidence, unknowns, impacts = [], [], [], {}, [], {"confirmed_dependencies": [], "candidate_risks": [], "unresolved": []}
     omitted = []
     used = set()
-    for uid in sorted(selected, key=lambda k: (units[k]["kind"] != "contract", k)):
+    evidence_kinds = {}
+    for uid in sorted(selected, key=lambda k: (role_context.priority(request["task"], units[k]["kind"]), k)):
         unit = units[uid]
         reasons = freshness(store, unit, snapshot, run, units)
         if reasons:
@@ -227,6 +302,8 @@ def get_context(store, request):
                 "meaning": "reviewed dependency; actual change effect requires diff analysis"})
         for ref in unit.get("source_refs", []):
             try:
+                anchor = store.record("anchors", ref)
+                evidence_kinds[ref] = store.asset(snapshot, anchor["asset"])["kind"]
                 evidence[ref] = store.read_evidence(ref, max_chars=min(4000, budget))
             except (ValueError, OSError) as error:
                 unknowns.append({"code": "hash_mismatch_or_unavailable", "evidence": ref, "reason": str(error)})
@@ -243,10 +320,11 @@ def get_context(store, request):
         unknowns.append({"code": "index_partial", "coverage": index["coverage"]})
     for target in found["unresolved_targets"]:
         unknowns.append({"code": "relation_unresolved", "target": target})
+    unknowns.extend({"code": "selector_without_reviewed_knowledge", **item} for item in found["selector_misses"])
     unknowns.extend({"code": "stale_knowledge", "id": x["id"], "reasons": x["reasons"]} for x in found["stale_candidates"])
     if not used:
         unknowns.append({"code": "knowledge_insufficient", "meaning": "No applicable reviewed knowledge found"})
-    if found["truncated"] or graph["truncated"]:
+    if found["truncated"] or graph["truncated"] or semantic_truncated:
         unknowns.append({"code": "retrieval_partial", "meaning": "Additional knowledge or graph neighbors were not expanded"})
     pack = {"schema": "context-pack/v1", "scope": {"source_snapshot": snapshot, "build_profile": profile,
             "index_run": run, "knowledge_revision": revision}, "task": request["task"], "constraints": constraints,
@@ -254,6 +332,7 @@ def get_context(store, request):
             "unknowns": unknowns, "refresh_tasks": [], "retrieval": {"seed_symbols": found["seed_symbols"],
             "knowledge_ids": sorted(used), "modes": sorted({m for h in found["hits"] for m in h["retrieval_modes"]}),
             "matched_knowledge_count": len(used),
+            "selectors": found["selectors"],
             "semantic_embedding": found["semantic_embedding"]}, "truncated": False, "runtime_validation": "not_run"}
     if request.get("diff_ref"):
         change = store.record("changes", request["diff_ref"])
@@ -265,6 +344,11 @@ def get_context(store, request):
         pack["refresh_tasks"] = change.get("refresh_tasks", [])
     if any(e["truncated"] for e in pack["evidence"]):
         pack["unknowns"].append({"code": "evidence_partial", "meaning": "Expand cited evidence to read its complete range"})
+    # Role rows are real structured values, not a rewritten task label. Keep a
+    # compact role envelope before applying the common source/contract budget.
+    pack["role_context"] = role_context.compose(pack, units, request["task"], evidence_kinds=evidence_kinds)
+    if pack["role_context"]["missing_required"]:
+        unknowns.append({"code": "role_requirements_missing", "requirements": pack["role_context"]["missing_required"]})
     # Conservative UTF-8 byte bound. No model-specific tokenizer is pretended.
     def size():
         return len(canonical(pack).encode("utf-8"))
@@ -274,6 +358,14 @@ def get_context(store, request):
         if pack["impacts"]["candidate_risks"]:
             item=pack["impacts"]["candidate_risks"].pop()
             omitted.append({"kind":"candidate_risk","id":item["evidence"]})
+        elif any(len(rows) > 1 for rows in pack["role_context"]["sections"].values()):
+            # One real cited example per required slot is preferable to repeated
+            # role rows displacing otherwise usable interface contracts.
+            rows = max(pack["role_context"]["sections"].values(), key=len)
+            row = rows.pop()
+            pack["role_context"]["truncated"] = True
+            pack["role_context"]["status"] = "partial"
+            omitted.append({"kind": "role_row", "id": row["unit"]})
         elif len(pack["evidence"])>1:
             # Raw excerpts can be expanded through their immutable source_refs.
             # Do not let them evict the reviewed producer/consumer contracts.
@@ -312,8 +404,26 @@ def get_context(store, request):
             pack["unknowns"].pop()
         elif pack["retrieval"]:
             pack["retrieval"] = {}
+        elif pack["role_context"]["sections"]:
+            key = next(iter(pack["role_context"]["sections"]))
+            pack["role_context"]["sections"].pop(key)
+            pack["role_context"]["missing_required"].append(key)
+            pack["role_context"]["status"] = "partial"
+            pack["role_context"]["truncated"] = True
+            omitted.append({"kind": "role_row", "id": key})
         else:
             break
+        # Never advertise a dropped constraint as delivered in the role view.
+        delivered = {row["id"] for key in ("constraints", "paths", "test_obligations") for row in pack[key]}
+        view = pack["role_context"]
+        view["knowledge_ids"] = sorted(delivered)
+        for key, rows in list(view["sections"].items()):
+            view["sections"][key] = [row for row in rows if row["unit"] in delivered]
+        view["missing_required"] = [key for key in view["required"] if not view["sections"].get(key)]
+        if view["missing_required"]:
+            view["status"] = "partial"
+        view["missing_explanations"] = [{"requirement": key, "meaning": role_context.LABELS[key], "next": "Research or retrieve cited knowledge."}
+                                        for key in view["missing_required"]]
     pack["budget"] = {"requested_tokens": budget, "counting": "conservative_utf8_bytes",
                       "omitted_items": len(omitted), "evidence_read_truncated": any(e["truncated"] for e in pack["evidence"])}
     if pack["truncated"]:
@@ -321,7 +431,7 @@ def get_context(store, request):
         # The small summary avoids itself exceeding a narrow response budget.
         pack["budget"]["omitted_kinds"] = sorted({x["kind"] for x in omitted})
     else:
-        pack["status"] = "partial" if unknowns else "ok"
+        pack["status"] = "partial" if unknowns or pack["role_context"]["status"] == "partial" else "ok"
     pack["budget"]["returned_utf8_bytes"] = len(canonical(pack).encode("utf-8"))
     if len(canonical(pack).encode("utf-8")) > budget:
         pack = {"schema": "context-pack/v1", "scope": {"source_snapshot": snapshot, "build_profile": profile,

@@ -1,0 +1,41 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/path/allpaths.cpp:3380-3419</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/path/allpaths.cpp:3380-3419</h1><small>openGauss · ed99bbde5308942d4eb062e7a851bdb85dda902f · declared-build · 完整引用区间</small><pre>        }
+
+        initial_rels = lappend(initial_rels, thisrel);
+    }
+
+    if (levels_needed == 1) {
+        /*
+         * Single joinlist node, so we&#x27;re done.
+         */
+        return (RelOptInfo*)linitial(initial_rels);
+    } else {
+        /*
+         * Consider the different orders in which we could join the rels,
+         * using a plugin, GEQO, or the regular join search code.
+         *
+         * We put the initial_rels list into a PlannerInfo field because
+         * has_legal_joinclause() needs to look at it (ugly :-().
+         */
+        root-&gt;initial_rels = initial_rels;
+
+        if (u_sess-&gt;attr.attr_sql.enable_geqo &amp;&amp; levels_needed &gt;= u_sess-&gt;attr.attr_sql.geqo_threshold)
+            return geqo(root, levels_needed, initial_rels);
+        else
+            return standard_join_search(root, levels_needed, initial_rels);
+    }
+}
+
+/*
+ * standard_join_search
+ *	  Find possible joinpaths for a query by successively finding ways
+ *	  to join component relations into join relations.
+ *
+ * &#x27;levels_needed&#x27; is the number of iterations needed, ie, the number of
+ *		independent jointree items in the query.  This is &gt; 1.
+ *
+ * &#x27;initial_rels&#x27; is a list of RelOptInfo nodes for each independent
+ *		jointree item.	These are the components to be joined together.
+ *		Note that levels_needed == list_length(initial_rels).
+ *
+ * Returns the final level of join relations, i.e., the relation that is
+</pre><p>evidence:c0ae6ac260a56cb6adc5fc28a443fe1e</p><p>SHA-256 39c5e8a63548cbeeae9c77600a38931c1c90b8763b36d21532a8218c24fc9bf5</p></main></html>

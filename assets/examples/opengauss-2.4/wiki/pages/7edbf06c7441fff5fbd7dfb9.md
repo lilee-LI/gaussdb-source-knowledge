@@ -1,0 +1,52 @@
+# 源码层 ERX 由 geqo.h 无条件定义，geqo() 的交叉分支恒走 ERX
+
+openGauss · ed99bbde5308942d4eb062e7a851bdb85dda902f · declared-build
+
+审阅状态 independent_review
+
+## 行为和入口
+- geqo.h：第 22-23 行为 GEQO_H include guard；第 30 行 `#define ERX` 位于 guard 内但在任何 #if 之外，是真正的无条件定义。其后是 DEFAULT_GEQO_* 常量、GeqoPrivateData 结构以及 geqo()/geqo_eval()/gimme_tree() 原型。
+- geqo_main.cpp：第 31 行 `#include "optimizer/geqo_pool.h"`；geqo_pool.h 顶部 `#include "optimizer/geqo.h"`，故 geqo.h 的 ERX 在任何宏判断前生效。第 38-41 行才是 `#if !defined(ERX) && !defined(PMX) && !defined(CX) && !defined(PX) && !defined(OX1) && !defined(OX2)` / `#define ERX` / `#endif` 的兜底块；在正常包含链下它不会改变结果。
+- geqo() 内四处宏分派：声明 edge_table/edge_failures 或 city_table/kid；分配 edge_table 或 kid(+city_table)；每代执行 gimme_edge_table+gimme_tour（ERX）或 pmx/cx/px/ox1/ox2；收尾 free_edge_table 或 free_chromo(+free_city_table)。四处都以 ERX 分支开头、#elif 依次为 PMX/CX/PX/OX1/OX2。
+
+## 状态和消费者
+- 该宏只改变 geqo_main.cpp 这个编译单元内的局部变量与调用选择，不改变 geqo() 对外签名，也不导出为 ABI。
+- 交叉函数原型在 geqo_recombination.h 中无条件声明（erx/pmx/cx/px/ox1/ox2 全部可见），对应实现文件均随目标编译；但 geqo_main.cpp 本 TU 只调用 ERX 一组。
+- 消费者/影响：改建宏会改变 GEQO 的交叉算子与内存对象（edge_table 的 Edge 数组 vs city_table 的 City 数组），影响 geqo_eval 前的染色体生成路径，但不影响 geqo_eval/gimme_tree 的 fitness 计算接口。
+
+## 开发与 review
+- 若希望切换到其他交叉算子，仅改 geqo_main.cpp 第 38-41 行的兜底块无效，因为 geqo.h:30 已无条件定义 ERX；必须同时条件化/移除该 define，并保证声明、分配、交叉、释放四处一致，否则会出现 edge_table 未分配却走 ERX、或 kid/city_table 未初始化就走 PMX/CX 等不匹配。
+- geqo.h 是公共头（include/optimizer/geqo.h），任何包含它的 TU 都会看到 ERX 宏，存在宏污染风险；review 修改默认算子时必须核对包含该头的全部源文件。
+- 不要在 geqo.h 引入 `#undef ERX` 之外的隐式覆盖：当前 optimizer 头文件中搜索不到 #undef。
+
+## 测试与未知
+- 源码层预期：编译 geqo_main.cpp 时走 ERX 分支。实际编译宏、编译单元映射与是否另有 -D 注入均未验证（declared-build；compiler_bindings_verified=false，tu_parsing=not_run）。
+- 本工作区为 source_only，K symbols/K graph 均返回不可用，没有 symbol/CALLS 边可引用，不能把调用关系写成已验证。
+- 未运行产品编译、数据库、SQL 或故障注入；本结论是源码层推导，不是构建产物或运行观察。
+
+## 知识来源与版本
+
+```json
+{"binding":{"dependencies":[{"fingerprint":"895604a09f80a118dbdaea4f507727e6b3161aed230c2080ce2260149ea6f5cf","ref":"server/src/include/optimizer/geqo.h","type":"asset"},{"fingerprint":"7b6bed3666c250c99052a3095bbfb12e7830eefe8a9aba770672fed7529a4753","ref":"server/src/gausskernel/optimizer/geqo/geqo_main.cpp","type":"asset"},{"fingerprint":"9eca7c96d3ba1b031523932350383edd01db2eab06977a7b3e79e72df637b236","ref":"server/src/include/optimizer/geqo_pool.h","type":"asset"},{"fingerprint":"c98e7e9edb9a7d019eb8197b7323c2e345b93f725c273e140b161310cd3ab662","ref":"server/src/include/optimizer/geqo_recombination.h","type":"asset"},{"fingerprint":"350b331042fe9bd35bcd8cdefb1c47ff72a336f16fd098dd4109caa6bc9c9a15","ref":"declared-build","type":"profile"}],"knowledge_dependencies":[],"methods_digest":"2105f393fcf2f9cbace8ed2a18c743a6932a2d1a904b3f45685af1889bdb508a","profile":"declared-build","run":"index:19d25bffc02c94f56c3add95c053d515","snapshot":"snapshot:e3c7591bc57779ef711950941aa64146"},"content_hash":"7abbbffd8bfbe69c328b04aa0e6e2c722e5a3b4fe15afdfe1ed4b83b76118c18","knowledge_id":"claim:server/src/gausskernel/optimizer/geqo:crossover-macro-erx-unconditional","knowledge_revision":"knowledge:9e4ee092006998e86d257dfc0032055f","review":{"at":"2026-11-09T03:07:32.595697+00:00","mode":"independent_review","notes":"父会话已读知识提案全文：行为/状态/开发review/测试未知四段与源码行号一致；条件为源码快照+geqo.h 无条件 ERX；未知明确保留构建 TU 宏与调用图。接受入库。","proposal":"proposal:21cc998dc1e2394d652ef7bef53a83ec","proposal_digest":"67b7e3433b1f611e95d8dd8e8095d6384273171f6d782667906630d24c7f67d9","reviewer":"claude-v24-native-parent","runtime_validation":"not_run","verdict":"accept"},"stale_reasons":[]}
+```
+
+## 适用条件
+
+- 源码快照 snapshot:e3c7591bc57779ef711950941aa64146
+- 翻译单元包含 optimizer/geqo.h（geqo_main.cpp 经 geqo_pool.h 间接包含），使第 30 行的 #define ERX 在任何宏判断前生效
+- 未出现 #undef ERX（server/src/include/optimizer/* 搜索无 #undef 命中）
+- 构建是否额外定义 PMX/CX/PX/OX1/OX2 不改变结果：ERX 总已定义，且 #if defined(ERX) 在全部 #elif 之前
+
+## 边界与反例
+
+- 若未来把 geqo.h:30 改为条件定义、或在包含后 #undef ERX、或把另一算子的 #if 排到 ERX 之前，则本结论失效。
+- 若某个 TU 完全不包含 geqo.h（geqo_main.cpp 不属于此情况），则只有 geqo_main.cpp 第 38-41 行兜底生效，构建用 -D 定义的其他宏可能胜出。
+- 实际编译单元的宏状态未经编译器绑定/TU 解析验证；本 claim 只覆盖源码层选择，不覆盖产物中的最终宏。
+
+## 证据
+
+- [server/src/include/optimizer/geqo.h:1-60](../evidence/b94f2bd02325e9e59fad35cc.html)
+- [server/src/gausskernel/optimizer/geqo/geqo_main.cpp:1-311](../evidence/bd638e4c9697bdcb4aa2dca7.html)
+- [server/src/gausskernel/optimizer/geqo/geqo_main.cpp:36-45](../evidence/92e222e5d6584a81a8601944.html)
+- [server/src/include/optimizer/geqo_pool.h:1-38](../evidence/e7b428e84ce2e2e417495dfc.html)
+- [server/src/include/optimizer/geqo_recombination.h:1-73](../evidence/185eb1cedc9f3e16f99bc601.html)

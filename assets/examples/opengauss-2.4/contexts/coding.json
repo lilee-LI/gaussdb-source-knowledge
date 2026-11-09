@@ -1,0 +1,411 @@
+{
+  "schema": "context-pack/v1",
+  "scope": {
+    "source_snapshot": "snapshot:e3c7591bc57779ef711950941aa64146",
+    "build_profile": "declared-build",
+    "index_run": "index:19d25bffc02c94f56c3add95c053d515",
+    "knowledge_revision": "knowledge:9e4ee092006998e86d257dfc0032055f"
+  },
+  "task": "coding",
+  "constraints": [
+    {
+      "id": "mechanism:server/src/gausskernel/optimizer/geqo:entry-guc-planner-plancache-contract",
+      "kind": "mechanism",
+      "title": "GEQO 入口、GUC 约束与 PlannerInfo/计划缓存状态契约",
+      "body": "## 行为和入口\n- 入口选择：server/src/gausskernel/optimizer/path/allpaths.cpp 的 make_rel_from_joinlist 中，levels_needed 即 joinlist 长度。levels_needed == 1 时直接 `return (RelOptInfo*)linitial(initial_rels)`（allpaths.cpp:3385-3389），既不调用 GEQO 也不调用 standard_join_search；否则先把 initial_rels 挂到 root->initial_rels（allpaths.cpp:3398），再按 allpaths.cpp:3400 的条件 `u_sess->attr.attr_sql.enable_geqo && levels_needed >= u_sess->attr.attr_sql.geqo_threshold` 选择：真时 allpaths.cpp:3401 调用 geqo(root, levels_needed, initial_rels)，假时 allpaths.cpp:3403 调用 standard_join_search。阈值比较是 `>=`，等于 geqo_threshold 即启用 GEQO。\n- 七个 GUC 的注册（server/src/common/backend/utils/misc/guc/guc_sql.cpp，全部 PGC_USERSET、NODE_ALL、分类 QUERY_TUNING_GEQO，无 check/assign 回调）：\n  - `geqo`（绑定 u_sess->attr.attr_sql.enable_geqo）：guc_sql.cpp:1033-1046，bool，默认 true，无 min/max。GUC 名与变量名不同，源码里没有名为 enable_geqo 的 GUC。\n  - `geqo_threshold`：guc_sql.cpp:2139-2151，int，默认 12，范围 [2, INT_MAX]。\n  - `geqo_effort`：guc_sql.cpp:2152-2164，int，默认 DEFAULT_GEQO_EFFORT，范围 [MIN_GEQO_EFFORT, MAX_GEQO_EFFORT]。三个宏在 server/src/include/optimizer/geqo.h:40-42 定义为 5、1、10（该头由已审 claim 读取；本 attempt 未重读该头）。\n  - `geqo_pool_size`：guc_sql.cpp:2165-2177，int，默认 0，范围 [0, INT_MAX]，说明文字为 \"Zero selects a suitable default value.\"。\n  - `geqo_generations`：guc_sql.cpp:2178-2190，int，默认 0，范围 [0, INT_MAX]，同样 0 表示自动。\n  - `geqo_selection_bias`：guc_sql.cpp:3056-3068，double，默认 DEFAULT_GEQO_SELECTION_BIAS，范围 [MIN_GEQO_SELECTION_BIAS, MAX_GEQO_SELECTION_BIAS]；宏值 2.0、1.5、2.0（geqo.h:44-46，来自已审 claim，本 attempt 未重读）。\n  - `geqo_seed`：guc_sql.cpp:3069-3081，double，默认 0.0，范围 [0.0, 1.0]。\n- geqo() 的入口状态（geqo_main.cpp:48 起）：把栈上局部变量 GeqoPrivateData priv 的地址写入 root->join_search_private，并把 initial_rels 存入 priv.initial_rels（geqo_main.cpp:77-78）；随后 geqo_set_seed(root, u_sess->attr.attr_sql.Geqo_seed)（:81）。种群/代数参数由 gimme_pool_size(number_of_rels) 与 gimme_number_generations(pool_size) 计算：gimme_pool_size 仅在 Geqo_pool_size >= 2 时直接采用配置值，否则取 2^(nr_rel+1) 并以 10*Geqo_effort..50*Geqo_effort 截断（geqo_main.cpp:279-295）；gimme_number_generations 在 Geqo_generations > 0 时采用配置值，否则返回 pool_size（geqo_main.cpp:305-311）。\n- geqo() 的恢复：家族算法结束后 gimme_tree(root, best_tour, pool->string_length) 得到 best_rel（geqo_main.cpp:230），随后 free_chromo(momma/daddy)、按 ERX 宏 free_edge_table、free_pool，最后在 return 前执行 `root->join_search_private = NULL`（geqo_main.cpp:237-265）。\n- geqo_eval()（geqo_eval.cpp:49 起）对被调方 gimme_tree() 的 PlannerInfo 状态做成对保护：savelength = list_length(root->join_rel_list)、savehash = root->join_rel_hash、AssertEreport(root->join_rel_level == NULL, ...)（geqo_eval.cpp:86-88）；把 root->join_rel_hash 置 NULL（:90）；调用 gimme_tree()（:93）；用 `fitness = ((Path*)linitial(joinrel->cheapest_total_path))->total_cost` 读取代价（:101）；再执行 list_truncate(root->join_rel_list, savelength) 与 root->join_rel_hash = savehash（:107-108）。\n- geqo_eval() 的内存：以 CurrentMemoryContext 为父创建名为 \"GEQO\" 的 AllocSet 上下文并切到其中（geqo_eval.cpp:67-69），正常路径切回 oldcxt 后 MemoryContextDelete(mycontext)（:111-112）。源码注释明确：子上下文使 gimme_tree 内 ereport(ERROR) 中止时也能随 planner 上下文释放。\n- 计划缓存环境：server/src/gausskernel/process/globalplancache/globalplancache_util.cpp 的 GlobalPlanCache::FillEnvSignatures 先把 env_signature2 清零，再把 `u_sess->attr.attr_sql.enable_geqo` 放到第 0 位（globalplancache_util.cpp:105-106）；GlobalPlanCache::EnvFill 先 Assert(env && !env->filled) 并 memset_s 整个 GPCEnv（:135-139），调用 FillEnvSignatures 后，把 geqo_threshold、Geqo_effort、Geqo_pool_size、Geqo_generations、Geqo_selection_bias、Geqo_seed 逐项复制进 env->plainenv（:158-163）。\n\n## 状态消费者\n- root->initial_rels：由 path 模块的 make_rel_from_joinlist 在分流前写入（allpaths.cpp:3398），由 geqo()（转存到 GeqoPrivateData.initial_rels）与 standard_join_search 分别消费。\n- root->join_search_private：PlannerInfo 的通用私有槽位。geqo() 期间指向栈上的 GeqoPrivateData，gimme_tree() 通过它取回 initial_rels 与随机状态；geqo() 正常返回前必须置 NULL，否则留下指向已销毁栈帧的悬挂指针。\n- root->join_rel_list / join_rel_hash / join_rel_level：属于 planner/path 的连接关系状态。geqo_eval 每评估一个 tour 都假定新增 join rel 只追加在 list 末尾，因此用长度截断回滚；hash 表在评估期间置空以便局部重建，评估后恢复原指针；join_rel_level 只做断言、不写入也不恢复。\n- 会话 GUC 值（u_sess->attr.attr_sql.*）：消费者包括 allpaths.cpp:3400 的开关/阈值判断、geqo_main.cpp:81 的随机种子、:78-79 的 pool/generations 计算；已审 claim 另指出 geqo_selection 使用 Geqo_selection_bias（本 attempt 未重读该行）。同一批值还被 globalplancache_util.cpp 复制进 GPCEnv。\n- 计划缓存环境身份：enable_geqo 仅以 1 bit 进入 env_signature2；其余 6 个 GEQO GUC 以字段值进入 plainenv。变更这些 GUC 会改变缓存环境内容，因此跨配置复用同一计划缓存条目前提不同；但本 attempt 未读缓存匹配/失效算法，不能断言具体比较与失效时机。\n- 没有证据表明这些 GUC 跨会话共享：字段都位于 u_sess（会话）属性中。\n\n## 开发与 review\n- 修改 geqo_eval 必须保持：保存/恢复围绕单次 gimme_tree 成对出现；join_rel_list 的新增项只能 append（源码注释显式假设）；不得在 gimme_tree 内给 join_rel_level 赋值；GEQO 上下文必须保持为 planner 上下文的子上下文，以覆盖 ereport(ERROR) 中止路径。若在 gimme_tree 与恢复语句之间插入可能 longjmp 的调用，恢复逻辑不会执行，只能依赖查询中止后的上层上下文回收。\n- 修改 geqo() 必须保证所有正常返回路径都清空 root->join_search_private；priv 是栈变量，任何逃逸该函数的引用在返回后无效。\n- 修改 GUC 注册（默认值、上下界、PGC 级别）会同时改变入口分流（geqo/geqo_threshold）、算法强度（effort/pool/generations/selection_bias/seed）以及计划缓存环境签名；必须同步检查 globalplancache_util.cpp 的 env_signature2 位与 plainenv 字段，以及 GPCEnv 结构定义（本 attempt 未读结构定义文件）。\n- 修改 geqo.h 的 DEFAULT_GEQO_* 宏会改变 GUC 默认值来源；eligibility 语义（0=auto、pool_size<2 被忽略）在 helper 中实现，改动需同时保持 GUC 说明与 helper 行为一致。\n- review 时应把 \"GUC 名为 geqo、变量名为 enable_geqo\" 作为命名陷阱检查点，避免按变量名搜索配置或手册时漏项。\n\n## 测试与未知\n- 可由源码推导的测试预期：levels_needed==1 时两种算法都不调用；levels_needed>=2 且 enable_geqo=false 时走 standard_join_search；levels_needed 在 [2, geqo_threshold-1] 时走 standard_join_search；levels_needed>=geqo_threshold 且 enable_geqo=true 时进入 geqo()。geqo_eval 正常返回后 root->join_rel_list 长度应回到进入前值、join_rel_hash 应等于进入前指针。\n- 边界/反例：geqo_pool_size=1 不会直接生效，helper 把它当作自动计算；geqo_generations=0 不是零代，而是取 pool_size；gimme_tree 内 ereport(ERROR) 时恢复语句不执行；geeqo_seed/selection_bias 的越界值应由 GUC 框架按 min/max 拒绝，但本 attempt 未运行设置或 SHOW。\n- 可观察性：源码中 GEQO_DEBUG 下的 DEBUG1/DEBUG2 日志（\"GEQO selected ...\"、\"using edge recombination crossover [ERX]\"，geqo_main.cpp）可作为 geqo() 执行的日志候选，但本快照构建是否启用 GEQO_DEBUG 未验证；EXPLAIN 是否能稳定区分 GEQO 与动态规划计划，源码未承诺，保持 unknown；计划缓存环境字段没有已知 SQL 展示接口，未读相关视图，保持 unknown。\n- 运行时与构建未知：source_only，未运行 SQL、未设置 GUC、未编译、未做故障注入；编译单元宏状态、ERX 实际选中、GEQO_DEBUG 是否启用均未由编译器绑定或 TU 解析验证。\n- 本 attempt 未读：geqo_eval.cpp 125-296（gimme_tree/merge_clump/desirable_join 主体）、geqo_main.cpp 1-44 与 100-199（算法主循环）、geqo.h 与 knl_session_attr_sql.h 的字段声明、GPCEnv 结构定义、计划缓存匹配/失效算法、手册中的 GEQO 参数承诺。",
+      "conditions": [
+        "源码快照 snapshot:e3c7591bc57779ef711950941aa64146；source_only，未运行 SQL/GUC 设置/编译/故障注入",
+        "进入 make_rel_from_joinlist 且 levels_needed > 1；GUC 取值来自当前会话 u_sess->attr.attr_sql",
+        "状态恢复结论以 geqo_eval 正常返回路径为准；ereport(ERROR) 中止路径不执行恢复语句",
+        "计划缓存结论仅覆盖 globalplancache_util.cpp 第 95-179 行的签名/字段填充，不含缓存匹配与失效算法",
+        "GEQO_DEBUG、ERX 及其他交叉宏的实际编译状态未验证"
+      ],
+      "counterexamples": [
+        "levels_needed == 1：直接返回 linitial(initial_rels)，既不调用 geqo() 也不调用 standard_join_search",
+        "enable_geqo=false 时即使 levels_needed 远大于 geqo_threshold 也走 standard_join_search",
+        "levels_needed 在 [2, geqo_threshold-1] 时走 standard_join_search，调整 GEQO 算法参数不会生效",
+        "geqo_pool_size=1 被 gimme_pool_size 忽略，按自动公式计算；geqo_generations=0 表示自动取 pool_size，而非零代",
+        "gimme_tree 内 ereport(ERROR) 时 list_truncate/join_rel_hash 恢复不执行，依赖查询中止与父上下文回收",
+        "enable_geqo 只占全局计划缓存环境签名的 1 个 bit；其余 6 个 GEQO GUC 以值字段参与，不能用该 bit 判断环境整体等价"
+      ],
+      "source_refs": [
+        "evidence:c0ae6ac260a56cb6adc5fc28a443fe1e",
+        "evidence:094dae4a795787e32fba6827ce8c4b49",
+        "evidence:cf7a96b418097855b370cb55ebcbe6ae",
+        "evidence:5bfb8f409356e673137336be48cb58ca",
+        "evidence:90e7741e039c3a5f1af6dc6385495d18",
+        "evidence:9cf894263271474a263bede8d2bb47cd",
+        "evidence:de7316f3a1a399504f149e6157c6d518",
+        "evidence:121b6810e6c9081bb37a029e599c5e22"
+      ],
+      "review_mode": "independent_review"
+    },
+    {
+      "id": "mechanism:server/src/gausskernel/optimizer/geqo:ga-main-loop-and-parameters",
+      "kind": "mechanism",
+      "title": "GEQO 主循环：池/代数参数计算、每代选择-交叉-评估-替换与释放顺序",
+      "body": "## 行为和入口\n- 入口与私有状态（geqo_main.cpp:48-81）：`RelOptInfo* geqo(PlannerInfo* root, int number_of_rels, List* initial_rels)` 先把栈上 `GeqoPrivateData priv` 的地址写入 `root->join_search_private`，把 `initial_rels` 存入 `priv.initial_rels`，再以 `u_sess->attr.attr_sql.Geqo_seed` 调用 `geqo_set_seed`。GeqoPrivateData 定义在 geqo.h：`{ List* initial_rels; unsigned short random_state[3]; }`，gimme_tree 依赖该槽位取回基表列表，geqo_rand 依赖 random_state。\n- 参数计算（geqo_main.cpp:84-85, 274-311）：`pool_size = gimme_pool_size(number_of_rels)`；当 `Geqo_pool_size >= 2` 时直接采用配置值，否则按 `size = pow(2.0, nr_rel + 1.0)` 计算，先与 `maxsize = 50 * Geqo_effort` 比较（超过则取上限），再与 `minsize = 10 * Geqo_effort` 比较（不足则取下限），最后 `(int)ceil(size)`；`number_generations = gimme_number_generations(pool_size)`，`Geqo_generations > 0` 时采用配置值，否则等于 pool_size。两处意味着 `Geqo_pool_size` 为 0 或 1 都被当作\"自动\"，默认 effort=5 时池大小落在 [50, 250]。\n- 初始化与排序（:87-99）：`alloc_pool(root, pool_size, number_of_rels)`、`random_init_pool(root, pool)`、`sort_pool(root, pool)`；排序注释说明只排一次，因为此后 kid 只替换池中最差个体（替换语义由 geqo_pool.cpp:spread_chromo 提供，本 attempt 未重读该文件，来自已审 claim 与源码注释）。GEQO_DEBUG 下打印 `pool_size`、`pool->data[0].worth`、`pool->data[pool_size-1].worth`，可见排序把最优放在下标 0、最差放在末尾。\n- 双亲与交叉缓冲分配（:101-152）：`momma`、`daddy` 均由 `alloc_chromo(root, pool->string_length)` 分配；随后按宏组分配：ERX 分配 `edge_table = alloc_edge_table(...)`；PMX 只分配 `kid = alloc_chromo(...)`；CX/PX/OX1/OX2 分配 `kid` 与 `city_table = alloc_city_table(...)`；CX 另有 `cycle_diffs`、`mutations` 计数。\n- 主循环（:154-199）：`for (generation = 0; generation < number_generations; generation++)`：先 `geqo_selection(root, momma, daddy, pool, u_sess->attr.attr_sql.Geqo_selection_bias)`（每代把池中按 bias 选出的两个个体复制进 momma/daddy）；再按宏执行交叉：ERX 用 `gimme_edge_table` 建边表、把 `kid = momma` 后 `gimme_tour` 直接把子串写回 `kid->string` 并累计 `edge_failures`；PMX 调 `pmx`；CX 调 `cx` 并在 `cycle_diffs == 0` 时 `mutations++` 且 `geqo_mutation`；PX/OX1/OX2 分别调 `px`/`ox1`/`ox2`。交叉后 `kid->worth = geqo_eval(root, kid->string, pool->string_length)`，再 `spread_chromo(root, kid, pool)`；GEQO_DEBUG 下每 `status_interval = 10` 代调用 `print_gen`。\n- 收尾（:201-265）：GEQO_DEBUG 汇总 edge_failures/mutations 并打印池与最优值；`best_tour = (Gene*)pool->data[0].string`；`best_rel = gimme_tree(root, best_tour, pool->string_length)`；随后 `free_chromo(momma)`、`free_chromo(daddy)`，按宏 `free_edge_table`（ERX）或 `free_chromo(kid)`（+`free_city_table`），再 `free_pool`，最后 `root->join_search_private = NULL` 并返回 best_rel。\n\n## 状态和消费者\n- Pool：`size = pool_size`、每条染色体 `string_length = number_of_rels` 个基因；worth 由 geqo_eval 填入，按 worth 升序（最优在 data[0]）。\n- momma/daddy：每代被 geqo_selection 覆盖；ERX 分支把 kid 指向 momma 并就地改写其 string，因此 momma 的内容在交叉后不再代表池中选择出的亲本，但下一代 selection 会重新复制，属于有意复用。非 ERX 分支 kid 是独立染色体，整个循环复用同一对象。\n- 局部状态：ERX 的 edge_table/edge_failures、CX 的 cycle_diffs/mutations、GEQO_DEBUG 的 status_interval 都只在本次 geqo() 调用内有效。\n- best_tour 指向池内数据，必须在 free_pool 之前被 gimme_tree 消费；best_rel 的 RelOptInfo 在 planner 上下文创建（最后一次 gimme_tree 不经过 geqo_eval 的 GEQO 子上下文），因此可以在 geqo() 返回后继续被 planner 使用。\n- 消费者：make_rel_from_joinlist 消费返回的 best_rel（入口条件见已审 claim join-search-entry-selection）；随机状态 random_state 被 geqo_rand/erand48 消费（已审 claim 覆盖 geqo_random.cpp）；Geqo_selection_bias 被每代 geqo_selection 消费；Geqo_seed 由 geqo_set_seed 消费；Geqo_pool_size/Geqo_effort/Geqo_generations 由本文件两个 helper 消费；同一批 GUC 另由 globalplancache_util.cpp 写入计划缓存环境（已审 claim，本 attempt 未重读）。\n\n## 开发与 review\n- 四处宏组（声明、分配、每代交叉、释放）必须同步改动：只改一处会出现 edge_table 未分配却走 ERX、或 kid/city_table 未初始化就走 PMX/CX/PX/OX1/OX2、或释放与分配不匹配。\n- ERX 下 kid 是 momma 的别名：清理段不能 `free_chromo(kid)`，否则重复释放；任何在 `spread_chroma` 之后继续使用 momma 的改动都要先确认 selection 已重新填充。\n- 必须保持：最后一次 gimme_tree 在 free_pool 之前；所有正常返回路径都在返回前清空 root->join_search_private（priv 是栈对象）；不得在循环内新增可能 longjmp 的路径而不考虑释放（当前异常路径依赖语句上下文统一回收）。\n- 修改 pool_size 公式要保持 \"配置值 < 2 视为自动\" 与上下限 `10*effort..50*effort` 语义；修改 generations 要保持 0 表示取 pool_size；两者与 GUC 注册说明（已审 claim）必须一致。\n- 修改排序或替换逻辑会破坏\"只排一次\"的前提；若更换交叉算子，要同时处理 CX 特有 mutation 行为，避免其他算子悄悄失去变异步骤。\n- review 检查点：宏组四处一致性、别名释放、清理顺序、join_search_private 置空、GEQO_DEBUG 分支只做诊断不改状态。\n\n## 测试与未知\n- 可由源码推导的预期：Geqo_pool_size=0/1 时 pool_size = clamp(2^(n+1), [10*effort, 50*effort]) 并向上取整；Geqo_generations=0 时代数等于 pool_size；循环恰好执行 number_generations 次，每次一次 geqo_eval；best 个体取池下标 0；geqo() 正常返回后 root->join_search_private == NULL。\n- 边界/反例：pool_size=1 被忽略；generations=0 不是零代；ERX 下 kid 与 momma 同对象；非 ERX 下 kid 每代复用；GEQO_DEBUG 未定义时 debug 日志/print 不编译，缺日志不能证明未走 GEQO；若调用方传入的 initial_rels 长度与 number_of_rels 不一致，本文件不做校验（genes 由 1..number_of_rels 生成，见 gimme_tree 侧）。\n- 未运行：source_only，未执行 SQL、GUC 设置、编译或故障注入；random_init_pool 是否逐染色体调用 geqo_eval、sort_pool 比较方向、spread_chroma 替换规则来自已审 claim/源码注释，本 attempt 未重读 geqo_pool.cpp；实际 TU 是否定义 GEQO_DEBUG/交叉宏未由编译器绑定验证。",
+      "conditions": [
+        "源码快照 snapshot:e3c7591bc57779ef711950941aa64146；source_only，未运行 SQL/GUC/编译/故障注入",
+        "由 make_rel_from_joinlist 在 levels_needed > 1 且 enable_geqo 为真、levels_needed >= geqo_threshold 时调用 geqo()（入口条件来自已审 claim，本 attempt 未重读 allpaths.cpp）",
+        "Geqo_seed/Geqo_pool_size/Geqo_effort/Geqo_generations/Geqo_selection_bias 取当前会话 u_sess->attr.attr_sql 值",
+        "翻译单元包含 optimizer/geqo.h（经 geqo_pool.h 间接包含），使源码层宏分支为 ERX",
+        "GEQO_DEBUG 是否定义、实际交叉宏由构建决定，未验证"
+      ],
+      "counterexamples": [
+        "Geqo_pool_size=1 不会直接生效，helper 走自动公式；Geqo_pool_size=0 同样自动",
+        "Geqo_generations=0 表示取 pool_size，而不是零代；Geqo_generations>0 可远大于池大小",
+        "ERX 分支 kid 与 momma 同一对象；若按 PMX 的假设在清理段 free_chromo(kid)，会重复释放",
+        "非 ERX 分支 kid 在循环外只分配一次并在每代复用，没有每代分配/释放",
+        "若构建未定义 GEQO_DEBUG，所有 elog/print_gen/print_pool 都不编译，日志缺失不能作为未执行 GEQO 的证据",
+        "最后一次 gimme_tree 不经 geqo_eval，因此其 RelOptInfo 不随 GEQO 子上下文回收，必须保留"
+      ],
+      "source_refs": [
+        "evidence:4f7db3e4c1edbef23d45e23a3c03e6d6",
+        "evidence:567e0488b204eb37f9b42f075feafe22",
+        "evidence:b6a65f7f71ff3505f6a8b6464215d628",
+        "evidence:dbf9d486c8447da102abab41ec69f4f5"
+      ],
+      "review_mode": "independent_review"
+    },
+    {
+      "id": "claim:server/src/gausskernel/optimizer/geqo:build-targets-and-erx-source-default",
+      "kind": "claim",
+      "title": "GEQO 构建组合：CMake 自动收集全部源文件到静态对象目标，Makefile 显式列 15 个 .o；交叉宏在源码层由 geqo.h 无条件定义 ERX",
+      "body": "## 行为和入口\n- CMakeLists.txt（全文 18 行）：第 2 行 `AUX_SOURCE_DIRECTORY(${CMAKE_CURRENT_SOURCE_DIR} TGT_geqo_SRC)` 自动收集本目录源文件；`TGT_geqo_INC` 列出 gausskernel/cbb/communication、include/libcomm、include、lib/gstrace、LIBCGROUP_INCLUDE_PATH、ZLIB_INCLUDE_PATH（include/libcomm 重复出现）；`geqo_DEF_OPTIONS = ${MACRO_OPTIONS}`；`geqo_COMPILE_OPTIONS = OPTIMIZE_OPTIONS OS_OPTIONS PROTECT_OPTIONS WARNING_OPTIONS BIN_SECURE_OPTIONS CHECK_OPTIONS`；`geqo_LINK_OPTIONS = ${BIN_LINK_OPTIONS}`；`add_static_objtarget(gausskernel_optimizer_geqo TGT_geqo_SRC TGT_geqo_INC \"${geqo_DEF_OPTIONS}\" \"${geqo_COMPILE_OPTIONS}\" \"${geqo_LINK_OPTIONS}\")`。本文件不出现任何 `-D` 交叉算子宏，也不枚举 .cpp。\n- Makefile（全文 28 行）：`subdir = src/gausskernel/optimizer/geqo`、`top_builddir = ../../../..`、`include $(top_builddir)/src/Makefile.global`；在 MAKECMDGOALS 不是 clean/distclean 且 `which g++ | grep hutaf_llt | wc -l` 不为 1 时 `-include $(DEPEND)`；`OBJS` 显式列出 15 项：geqo_copy.o geqo_eval.o geqo_main.o geqo_misc.o geqo_mutation.o geqo_pool.o geqo_random.o geqo_recombination.o geqo_selection.o geqo_erx.o geqo_pmx.o geqo_cx.o geqo_px.o geqo_ox1.o geqo_ox2.o；最后 `include $(top_srcdir)/src/gausskernel/common.mk`。Makefile 同样没有 -D 交叉宏。\n- 交叉宏来源：server/src/include/optimizer/geqo.h 在 `#ifndef GEQO_H / #define GEQO_H` 之后、任何 #if 之外直接 `#define ERX`（读取文本中为第 30 行）；同头还定义 DEFAULT/MIN/MAX_GEQO_EFFORT 与 DEFAULT/MIN/MAX_GEQO_SELECTION_BIAS 常量、GeqoPrivateData 结构以及 geqo()/geqo_eval()/gimme_tree() 原型。geqo_main.cpp 第 31 行左右 `#include \"optimizer/geqo_pool.h\"`，而 geqo_pool.h 顶部 `#include \"optimizer/geqo.h\"`，因此 geqo_main.cpp 第 38-41 行的 `#if !defined(ERX) && ...` 兜底块在正常包含链下不改变结果。\n- 声明层编译上下文：冻结的 compile_database/compile_commands.json 中 geqo_eval.cpp 与 geqo_main.cpp 两条命令均为 clang++，宏定义只有 ENABLE_GSTRACE、ENABLE_OPENSSL3、HAVE_READLINE_READLINE_H、OPENEULER_MAJOR、PGXC、STREAMPLAN、USE_SPQ、ZSTD_STATIC_LINKING_ONLY、_GLIBCXX_USE_CXX11_ABI=0、_GNU_SOURCE、_POSIX_PTHREAD_SEMANTICS、_REENTRANT、_THREAD_SAFE、__FILE__、_FORTIFY_SOURCE=2，选项含 -std=c++14 -O2 -g3，输出 `CMakeFiles/gausskernel_optimizer_geqo.dir/geqo_main.cpp.o`（及 geqo_eval.cpp.o）。没有 ERX/PMX/CX/PX/OX1/OX2/GEQO_DEBUG 的 -D。\n\n## 状态和消费者\n- 构建输入状态：CMake 的源集合由目录扫描决定（新增/删除 .cpp 自动进入目标），Makefile 的源集合由 OBJS 手工枚举决定；两者当前对应同一 15 个文件。\n- 目标状态：CMake 生成静态对象目标 `gausskernel_optimizer_geqo`，对象输出在 `CMakeFiles/gausskernel_optimizer_geqo.dir/`；Makefile 依赖 `src/Makefile.global` 与 `src/gausskernel/common.mk` 的通用规则（本 attempt 未读这两个文件）。\n- 宏状态：源码层 ERX 恒定义（geqo.h）；声明层编译命令无交叉宏注入。geqo_main.cpp 内四处宏分派因此按 ERX 展开（派生结论见已审 claim crossover-macro-erx-unconditional）；GEQO_DEBUG 是否启用未在声明命令中出现，源码层默认不定义。\n- 消费者：链接步骤消费 `gausskernel_optimizer_geqo` 对象集合（静态对象目标如何并入 gausskernel 由未读的 add_static_objtarget 定义决定）；开发者新增源文件时，CMake 路径自动包含而 Makefile 路径需同步 OBJS，否则两条路径产物不一致。\n\n## 开发与 review\n- 新增/删除 GEQO 源文件时必须同步 Makefile 的 OBJS；只依赖 CMake 的 AUX_SOURCE_DIRECTORY 会让 make 路径缺少对象（或反之留下陈旧对象）。\n- 希望切换交叉算子时，仅修改 geqo_main.cpp 的兜底块无效：geqo.h 已无条件定义 ERX；必须同时条件化/移除该定义，并在构建层显式注入目标算子宏（CMake 的 MACRO_OPTIONS 或 Makefile 的编译变量），且同步四处宏组。\n- 不要把 compile_commands.json 的宏列表当作\"编译已成功且 TU 解析通过\"的证明：它只是声明的编译上下文（declared-build），本工作区未做编译器绑定/TU 解析，也没有编译产物或运行观察。\n- review 检查点：CMake 与 Makefile 的源集合是否一致、add_static_objtarget 的目标名与对象目录、宏注入位置、GEQO_DEBUG 是否被意外全局开启（会引入大量 elog/print 且依赖 printf 输出）。\n\n## 测试与未知\n- 可由源码/构建文件推导的预期：CMake 路径会把目录内全部受支持源文件编入 `gausskernel_optimizer_geqo`；Makefile 路径产物恰好是 OBJS 的 15 个 .o；两条路径都不注入交叉宏；geqo.h 的 ERX 使 geqo_main.cpp 走 ERX 分支。\n- 边界/反例：若移除 geqo.h 的 `#define ERX` 而未注入其他算子宏，geqo_main.cpp 自己的兜底块仍会定义 ERX；若只给 Makefile 加 -DPMX 而 geqo.h 仍定义 ERX，ERX 因判断顺序仍胜出；若新增 .cpp 只更新 CMake，Make 路径会漏编；若构建脚本在 `__FILE__`/统一编译选项之外再追加宏，本声明行无法反映（未验证）。\n- 未运行/未知：未编译、未做对象符号检查、未做 TU 解析，因此\"实际产物使用 ERX\"只是源码层+声明层推导，不是构建产物证据；`add_static_objtarget` 宏定义、`src/Makefile.global`、`src/gausskernel/common.mk` 与本模块上层 CMakeLists 未读；两条构建路径在产品构建中的实际采用关系未核对；compile_commands.json 仅读取含 geqo_eval.cpp/geqo_main.cpp 的 6053-6062 行，未逐条核对其余 13 个 TU。",
+      "conditions": [
+        "源码快照 snapshot:e3c7591bc57779ef711950941aa64146；declared-build / source_only，未编译、未做 TU 解析",
+        "两者构建文件共存于 server/src/gausskernel/optimizer/geqo，且 Makefile 的 OBJS 与目录内 .cpp 当前一致（15 个）",
+        "geqo_main.cpp 经 optimizer/geqo_pool.h 间接包含 optimizer/geqo.h，使 geqo.h 的无条件 #define ERX 在宏判断前生效",
+        "compile_commands.json 的 geqo_eval.cpp/geqo_main.cpp 声明行是本 attempt 实际冻结读取的 6053-6062 行",
+        "构建变量 MACRO_OPTIONS/MACRO、OPTIMIZE_OPTIONS 等的实际取值由上层构建系统决定，未读"
+      ],
+      "counterexamples": [
+        "CMake AUX_SOURCE_DIRECTORY 自动收集源文件，而 Makefile 手工 OBJS：新增 .cpp 只改一边会造成两条构建路径源集合不一致",
+        "构建文件都没有显式交叉宏，但 ERX 仍生效，原因在 geqo.h 的无条件定义而非构建脚本；把\"CMake/Makefile 未定义\"误读为\"没有交叉算子\"是错误结论",
+        "若某 TU 不包含 geqo.h，则只有 geqo_main.cpp 的兜底块生效，构建注入的 PMX/CX 等才可能胜出（geqo_main.cpp 不属此情况）",
+        "compile_commands.json 声明没有 -DERX，也不能据此断言宏未定义或编译成功：头文件内的 define 不在命令行中，且未做预处理/TU 解析",
+        "Makefile 的 -include $(DEPEND) 在 clean/distclean 或检测到 hutaf_llt g++ 时被跳过，依赖文件不会生成/使用（本 attempt 未解析该条件的实际影响）"
+      ],
+      "source_refs": [
+        "evidence:995107881e875903bfd1d7a621d08e35",
+        "evidence:a29b817be9353dec5a2bf68daf402423",
+        "evidence:b6a65f7f71ff3505f6a8b6464215d628",
+        "evidence:dbf9d486c8447da102abab41ec69f4f5",
+        "evidence:8b89ed19dfd12d427a2abdd0c2e9007a"
+      ],
+      "review_mode": "independent_review"
+    },
+    {
+      "id": "claim:server/src/gausskernel/optimizer/geqo:crossover-macro-erx-unconditional",
+      "kind": "claim",
+      "title": "源码层 ERX 由 geqo.h 无条件定义，geqo() 的交叉分支恒走 ERX",
+      "body": "## 行为和入口\n- geqo.h：第 22-23 行为 GEQO_H include guard；第 30 行 `#define ERX` 位于 guard 内但在任何 #if 之外，是真正的无条件定义。其后是 DEFAULT_GEQO_* 常量、GeqoPrivateData 结构以及 geqo()/geqo_eval()/gimme_tree() 原型。\n- geqo_main.cpp：第 31 行 `#include \"optimizer/geqo_pool.h\"`；geqo_pool.h 顶部 `#include \"optimizer/geqo.h\"`，故 geqo.h 的 ERX 在任何宏判断前生效。第 38-41 行才是 `#if !defined(ERX) && !defined(PMX) && !defined(CX) && !defined(PX) && !defined(OX1) && !defined(OX2)` / `#define ERX` / `#endif` 的兜底块；在正常包含链下它不会改变结果。\n- geqo() 内四处宏分派：声明 edge_table/edge_failures 或 city_table/kid；分配 edge_table 或 kid(+city_table)；每代执行 gimme_edge_table+gimme_tour（ERX）或 pmx/cx/px/ox1/ox2；收尾 free_edge_table 或 free_chromo(+free_city_table)。四处都以 ERX 分支开头、#elif 依次为 PMX/CX/PX/OX1/OX2。\n\n## 状态和消费者\n- 该宏只改变 geqo_main.cpp 这个编译单元内的局部变量与调用选择，不改变 geqo() 对外签名，也不导出为 ABI。\n- 交叉函数原型在 geqo_recombination.h 中无条件声明（erx/pmx/cx/px/ox1/ox2 全部可见），对应实现文件均随目标编译；但 geqo_main.cpp 本 TU 只调用 ERX 一组。\n- 消费者/影响：改建宏会改变 GEQO 的交叉算子与内存对象（edge_table 的 Edge 数组 vs city_table 的 City 数组），影响 geqo_eval 前的染色体生成路径，但不影响 geqo_eval/gimme_tree 的 fitness 计算接口。\n\n## 开发与 review\n- 若希望切换到其他交叉算子，仅改 geqo_main.cpp 第 38-41 行的兜底块无效，因为 geqo.h:30 已无条件定义 ERX；必须同时条件化/移除该 define，并保证声明、分配、交叉、释放四处一致，否则会出现 edge_table 未分配却走 ERX、或 kid/city_table 未初始化就走 PMX/CX 等不匹配。\n- geqo.h 是公共头（include/optimizer/geqo.h），任何包含它的 TU 都会看到 ERX 宏，存在宏污染风险；review 修改默认算子时必须核对包含该头的全部源文件。\n- 不要在 geqo.h 引入 `#undef ERX` 之外的隐式覆盖：当前 optimizer 头文件中搜索不到 #undef。\n\n## 测试与未知\n- 源码层预期：编译 geqo_main.cpp 时走 ERX 分支。实际编译宏、编译单元映射与是否另有 -D 注入均未验证（declared-build；compiler_bindings_verified=false，tu_parsing=not_run）。\n- 本工作区为 source_only，K symbols/K graph 均返回不可用，没有 symbol/CALLS 边可引用，不能把调用关系写成已验证。\n- 未运行产品编译、数据库、SQL 或故障注入；本结论是源码层推导，不是构建产物或运行观察。",
+      "conditions": [
+        "源码快照 snapshot:e3c7591bc57779ef711950941aa64146",
+        "翻译单元包含 optimizer/geqo.h（geqo_main.cpp 经 geqo_pool.h 间接包含），使第 30 行的 #define ERX 在任何宏判断前生效",
+        "未出现 #undef ERX（server/src/include/optimizer/* 搜索无 #undef 命中）",
+        "构建是否额外定义 PMX/CX/PX/OX1/OX2 不改变结果：ERX 总已定义，且 #if defined(ERX) 在全部 #elif 之前"
+      ],
+      "counterexamples": [
+        "若未来把 geqo.h:30 改为条件定义、或在包含后 #undef ERX、或把另一算子的 #if 排到 ERX 之前，则本结论失效。",
+        "若某个 TU 完全不包含 geqo.h（geqo_main.cpp 不属于此情况），则只有 geqo_main.cpp 第 38-41 行兜底生效，构建用 -D 定义的其他宏可能胜出。",
+        "实际编译单元的宏状态未经编译器绑定/TU 解析验证；本 claim 只覆盖源码层选择，不覆盖产物中的最终宏。"
+      ],
+      "source_refs": [
+        "evidence:b6a65f7f71ff3505f6a8b6464215d628",
+        "evidence:fca84562596d3a2aa417614bac484806",
+        "evidence:3d21632bb8ef14d848918c29be591b8b",
+        "evidence:dbf9d486c8447da102abab41ec69f4f5",
+        "evidence:ff70b75d6aa0b17756430436a83931e2"
+      ],
+      "review_mode": "independent_review"
+    },
+    {
+      "id": "claim:server/src/gausskernel/optimizer/geqo:geqo-eval-child-context-and-fitness",
+      "kind": "claim",
+      "title": "geqo_eval 以 GEQO 子内存上下文隔离单次 gimme_tree，成对恢复 join_rel 状态后以 cheapest_total_path 代价作为 fitness",
+      "body": "## 行为和入口\n- 函数定义与声明：`Cost geqo_eval(PlannerInfo* root, Gene* tour, int num_gene)` 定义于 geqo_eval.cpp:49，原型在 server/src/include/optimizer/geqo.h；调用方为 geqo() 主循环（每代一次，geqo_main.cpp:190）以及 random_init_pool（后者来自已审 claim，本 attempt 未重读 geqo_pool.cpp）。\n- 内存隔离（geqo_eval.cpp:56-70）：`mycontext = AllocSetContextCreate(CurrentMemoryContext, \"GEQO\", ALLOCSET_DEFAULT_MINSIZE, ALLOCSET_DEFAULT_INITSIZE, ALLOCSET_DEFAULT_MAXSIZE); oldcxt = MemoryContextSwitchTo(mycontext);`。CurrentMemoryContext 此时是 planner 的上下文（geqo() 不切换上下文），所以 GEQO 是 planner 上下文的子上下文；源码注释明确这是为了 geqo_eval 被调用很多次时不必把临时内存留到语句结束，并保证 ereport(ERROR) 中止时也能随 planner 上下文释放。\n- PlannerInfo 状态保护（:72-90）：`savelength = list_length(root->join_rel_list)`；`savehash = root->join_rel_hash`；`AssertEreport(root->join_rel_level == NULL, MOD_OPT, \"\")`；`root->join_rel_hash = NULL`。注释说明：gimme_tree 会把新连接关系追加到 join_rel_list（假设只能追加在末尾），并在需要时局部重建 hash 表，所以评估后必须按长度截断、恢复原 hash 指针；join_rel_level 本不该在使用中，只做断言。\n- 评估与 fitness（:92-101）：`joinrel = gimme_tree(root, tour, num_gene)`；`fitness = ((Path*)linitial(joinrel->cheapest_total_path))->total_cost`。fitness 是总代价（total_cost），只取 cheapest_total_path 列表的第一个元素；代码后有 XXX 注释说明 GEQO 目前不支持部分结果检索（cursor 类）优化。\n- 恢复与回收（:103-113）：`root->join_rel_list = list_truncate(root->join_rel_list, savelength)`；`root->join_rel_hash = savehash`；`(void)MemoryContextSwitchTo(oldcxt)`；`MemoryContextDelete(mycontext)`；返回 fitness。\n- 与最终路径的区别：geqo() 收尾时直接调用 `gimme_tree(root, best_tour, pool->string_length)`（geqo_main.cpp:230），不经过 geqo_eval，因此该次构造的 RelOptInfo 不受 GEQO 子上下文回收，best_rel 会留在 planner 的 join_rel_list 中。\n\n## 状态和消费者\n- root->join_rel_list：本函数在评估前记录长度 N；gimme_tree 每次 make_join_rel 会追加新连接关系；返回前截断回 N。实现依赖\"新增项只在末尾\"的假设（源码注释显式说明），如果任何被调方在列表中间插入/删除，长度回滚会破坏真实状态。\n- root->join_rel_hash：评估期被置 NULL，使 gimme_tree 内部按需在 GEQO 子上下文重建局部 hash；评估后恢复原指针。若子上下文内建的 hash 表未显式删除，随 MemoryContextDelete 一起回收。\n- root->join_rel_level：只断言为 NULL，不写入也不恢复；非断言构建中该检查可能不生效。\n- 内存上下文栈：CurrentMemoryContext 从 planner 上下文切到 GEQO，再切回 oldcxt；MemoryContextDelete 释放 GEQO 内全部临时对象。\n- fitness 的消费者：geqo() 把返回值写入 kid->worth（geqo_main.cpp:190），spread_chroma 依此决定是否替换池中最差个体；池初始化阶段每条染色体的 worth 也取自 geqo_eval（已审 claim）。\n- 跨模块影响：调用链进入 optimizer/path 的 make_join_rel/set_cheapest（gimme_tree 内），这些函数会写 root->join_rel_list 并填充 RelOptInfo->cheapest_total_path；本函数是唯一为单次评估成对回滚该状态的封装。计划缓存环境不消费这里的状态（GUC 侧由已审 claim 覆盖）。\n\n## 开发与 review\n- 必须保持成对结构：savelength/savehash 的保存与 list_truncate/hash 恢复围绕单次 gimme_tree；不得在两者之间新增可能 longjmp 且不恢复的路径还声称恢复成立。\n- 必须保持 join_rel_level 为 NULL：gimme_tree 及其被调方不得给 join_rel_level 赋值，否则断言构建失败、非断言构建行为未定义。\n- GEQO 上下文必须是 planner 上下文的子上下文，且正常路径显式 MemoryContextDelete；若改成 TopMemoryContext 或会话上下文，评估循环会持续累积内存直到语句/会话结束。\n- fitness 必须在 MemoryContextDelete 之前读取（cheapest_total_path 指向子上下文内对象）；如果要把 RelOptInfo 或 Path 指针带出 geqo_eval，会变成悬空指针。若需要保留计划对象，必须像 geqo() 收尾路径那样在 planner 上下文重建。\n- 修改 gimme_tree 使其触碰 join_rel_hash 以外的新 planner 字段时，要同步增加保存/恢复；hash 置 NULL 依赖 gimme_tree 能局部重建。\n- review 检查点：断言错误码 ERRCODE/模块 MOD_OPT 是否保持一致、list_truncate 的分配上下文（见未知）、异常路径恢复缺失是否被文档化。\n\n## 测试与未知\n- 可由源码推导的预期：geqo_eval 正常返回后 root->join_rel_list 长度等于进入前值、root->join_rel_hash 等于进入前指针；评估期间 join_rel_level 保持 NULL；返回的 fitness 等于 joinrel->cheapest_total_path 首元素的 total_cost；每次调用都创建一个 GEQO 子上下文并在返回前删除。\n- 边界/反例：gimme_tree 内 ereport(ERROR) 时上述恢复与删除语句不执行，join_rel_hash 保持 NULL 直到查询中止；最终一次 gimme_tree 不经过本函数，不受子上下文回收；join_rel_level 非 NULL 时 AssertEreport 触发（断言构建）；cheapest_total_path 为 NIL 时 linitial 非法（本 attempt 未发现可达路径，保留未知）；GEQO 不支持部分结果检索（源码 XXX 注释）。\n- 未运行：source_only，未执行 SQL、编译或内存诊断；未读 server/src/common/backend/nodes/list.cpp，因此 list_truncate 返回值的分配上下文与随后 MemoryContextDelete 的先后是否安全未验证（若新 List 头分配在当前即 GEQO 子上下文，root->join_rel_list 可能悬挂），列为 gap；未读 make_join_rel/set_cheapest 内部确认 append-only 与 cheapest_total_path 填充细节。",
+      "conditions": [
+        "源码快照 snapshot:e3c7591bc57779ef711950941aa64146；source_only，未运行 SQL/编译/故障注入",
+        "调用发生在 geqo() 运行期：root->join_search_private 已设置、root->join_rel_level 为 NULL（AssertEreport）",
+        "CurrentMemoryContext 在调用点是 planner 上下文（geqo() 未切换上下文），使 GEQO 成为 planner 子上下文",
+        "gimme_tree 只向 root->join_rel_list 尾部追加连接关系（源码注释假设）",
+        "fitness 语义为 total_cost，且 joinrel->cheapest_total_path 非空"
+      ],
+      "counterexamples": [
+        "geqo() 收尾的最后一次 gimme_tree 不经过 geqo_eval，其结果不会被 GEQO 子上下文删除，反而必须保留为 best_rel",
+        "gimme_tree 内 ereport(ERROR)：恢复/删除语句不执行，join_rel_hash 保持 NULL，内存依赖 planner 父上下文回收",
+        "非断言构建中 join_rel_level 检查可能被编译掉，此时若调用方违反前置条件不会被本函数阻止",
+        "若 join_rel_list 的新增项不是追加在末尾，list_truncate 按长度回滚会删错条目（当前仅由注释约束）",
+        "GEQO 不支持部分结果检索优化（源码 XXX），对 cursor/部分取值的计划不能期望 GEQO 给出最优",
+        "list_truncate 的分配上下文未验证：若它把 List 头分配在 GEQO 子上下文，随后 MemoryContextDelete 会使 root->join_rel_list 悬挂"
+      ],
+      "source_refs": [
+        "evidence:cdcc3f45f682e634103fb735b81d8de5",
+        "evidence:b6a65f7f71ff3505f6a8b6464215d628"
+      ],
+      "review_mode": "independent_review"
+    },
+    {
+      "id": "claim:server/src/gausskernel/optimizer/geqo:geqo-planner-state-and-plancache-env",
+      "kind": "claim",
+      "title": "geqo()/geqo_eval() 对 PlannerInfo 的临时改写与恢复，以及 GEQO GUC 进入计划缓存环境签名",
+      "body": "## 行为和入口\ngeqo()（server/src/gausskernel/optimizer/geqo/geqo_main.cpp:48）在开头把局部变量 priv 的地址赋给 root->join_search_private，并把入参 initial_rels 存入 priv.initial_rels，随后 geqo_set_seed(root, u_sess->attr.attr_sql.Geqo_seed)；函数末尾在释放 momma/daddy/edge_table/pool 之后执行 root->join_search_private = NULL 再返回 best_rel。gimme_tree() 从 root->join_search_private 取回 GeqoPrivateData 并据此索引 initial_rels（geqo_eval.cpp 读取区间内可见）。\n\ngeqo_eval()（geqo_eval.cpp）对被调用方 gimme_tree() 的 planner 状态做了成对保护：savelength = list_length(root->join_rel_list)，savehash = root->join_rel_hash，AssertEreport(root->join_rel_level == NULL)；随后 root->join_rel_hash = NULL，调用 gimme_tree()，再执行 root->join_rel_list = list_truncate(root->join_rel_list, savelength) 和 root->join_rel_hash = savehash。它创建名为 \"GEQO\" 的 AllocSet 内存上下文作为 CurrentMemoryContext 的子上下文，所有 gimme_tree 内部临时分配都在其中；正常路径切换回 oldcxt 后 MemoryContextDelete(mycontext)。\n\n## 状态和消费者\n跨模块状态影响有两类。第一，geqo 模块临时改写 path 模块拥有的 PlannerInfo 字段：join_rel_list 只允许在尾部追加（源码注释假设新增项 append 在末尾），join_rel_hash 被临时置空以便局部重建，join_rel_level 被断言为 NULL 且没有恢复语句；geqo() 还把 join_search_private 当作 GEQO 私有槽位，正常退出后清空。第二，全局计划缓存（server/src/gausskernel/process/globalplancache/globalplancache_util.cpp）的 GlobalPlanCache::FillEnvSignatures 把 enable_geqo 写入 env_signature2 第 0 位（文件第 106 行），EnvFill 把 geqo_threshold、Geqo_effort、Geqo_pool_size、Geqo_generations、Geqo_selection_bias、Geqo_seed 复制进 GPCEnv（第 158-163 行）。因此这些 GUC 的取值属于计划缓存环境身份的一部分，不同取值对应的缓存计划不应视为同一环境。\n\n## 开发与 review\n修改 geqo_eval 的状态保护时必须维持：保存/恢复围绕单次 gimme_tree 成对出现；join_rel_list 的新增项只能 append；不得在 gimme_tree 内给 join_rel_level 赋值（否则断言失败且无恢复逻辑）；GEQO 上下文必须保持为 planner 上下文的子上下文，使 ereport(ERROR) 中止时仍能随上层上下文释放。修改 geqo() 时必须保证所有正常返回路径都清空 root->join_search_private，避免悬挂指向栈变量的指针。修改 GUC 集合时必须同步 globalplancache_util.cpp 的签名/字段，否则计划缓存会错误复用跨配置的计划。\n\n## 测试与未知\n可推导的测试预期：同一条多表查询在 enable_geqo=false/true 或不同 geqo_threshold 下应产生不同的计划缓存环境标识；geqo_eval 返回后 root->join_rel_list 长度应等于进入前长度、join_rel_hash 指针应等于进入前值。反例/边界：源码只在 AssertEreport 中断言 join_rel_level == NULL，非断言构建是否检查未验证；gimme_tree 通过 ereport(ERROR) 失败时恢复语句不执行，源码注释称子内存上下文会随中止释放，但 join_rel_hash/join_rel_list 的恢复在该路径未发生（查询已中止，root 生命周期结束），本轮未运行任何故障注入或 SQL。geqo_eval.cpp 第 201-296 行（merge_clump/desirable_join 等）本租约未读，未纳入本 claim。",
+      "conditions": [
+        "源码快照 snapshot:e3c7591bc57779ef711950941aa64146；source_only，未运行 SQL/编译/故障注入",
+        "geqo() 经 allpaths.cpp make_rel_from_joinlist 的 geqo 分支进入，正常返回路径",
+        "计划缓存侧结论基于 globalplancache_util.cpp 第 60-179 行的字段填充，不含缓存匹配/失效算法"
+      ],
+      "counterexamples": [
+        "若 gimme_tree 内 ereport(ERROR)，geqo_eval 的 list_truncate/join_rel_hash 恢复行不会执行；依赖上层查询中止释放上下文，而不是该函数的恢复代码",
+        "join_rel_hash 被置空期间新建的 hash 表属于 GEQO 子上下文，删除上下文后不能继续引用",
+        "enable_geqo 只以 1 bit 进入 env_signature2；其余 GEQO GUC 以值字段参与环境，不能仅凭 bit 判断环境等价"
+      ],
+      "source_refs": [
+        "evidence:cdcc3f45f682e634103fb735b81d8de5",
+        "evidence:4f7db3e4c1edbef23d45e23a3c03e6d6",
+        "evidence:567e0488b204eb37f9b42f075feafe22",
+        "evidence:cf50356d7ed234ca6967839e87af8985"
+      ],
+      "review_mode": "independent_review"
+    }
+  ],
+  "paths": [],
+  "impacts": {
+    "confirmed_dependencies": [],
+    "candidate_risks": [],
+    "unresolved": []
+  },
+  "test_obligations": [
+    {
+      "id": "test_obligation:server/src/gausskernel/optimizer/geqo:entry-threshold-and-state-restore",
+      "body": "## 测试目标\n验证 make_rel_from_joinlist 的 GEQO/动态规划分流条件，以及 geqo_eval 正常返回后 PlannerInfo 连接状态的恢复契约。本测试义务只给出源码推导的预期，未执行任何 SQL、回归测试、GUC 设置或故障注入。\n\n## 预期分支\n- joinlist 分项数 levels_needed == 1：直接返回唯一 initial_rels 元素，不调用 geqo()，也不调用 standard_join_search（allpaths.cpp:3385-3389）。\n- levels_needed >= 2：若 geqo=false，无论阈值多大都走 standard_join_search（allpaths.cpp:3400-3403）。\n- levels_needed 在 [2, geqo_threshold-1]：走 standard_join_search。\n- levels_needed >= geqo_threshold 且 geqo=true：进入 geqo()；阈值比较为 >=，等于阈值即进入（allpaths.cpp:3400）。\n\n## 状态恢复预期\n- geqo_eval 正常返回后，root->join_rel_list 的长度等于进入前长度；root->join_rel_hash 指针等于进入前值；root->join_rel_level 在评估期间保持 NULL（geqo_eval.cpp:86-108）。\n- geqo() 正常返回后 root->join_search_private == NULL（geqo_main.cpp:262）。\n- GEQO 临时内存上下文在正常路径被删除，异常路径依赖 planner 父上下文回收（geqo_eval.cpp:67-69,111-112）。\n\n## 边界与未知\n- gimme_tree 内 ereport(ERROR) 时恢复语句不执行，本义务不把该路径视为已恢复。\n- GEQO_DEBUG 是否编译、ERX 是否实际选中、EXPLAIN 能否稳定区分算法均为 unknown；本义务不把日志或计划形态当作硬 oracle。\n- 未运行验证：execution_status=not_run。",
+      "expected_from": {
+        "kind": "claim",
+        "ref": "claim:server/src/gausskernel/optimizer/geqo:join-search-entry-selection"
+      },
+      "execution_status": "not_run",
+      "conditions": [
+        "源码快照 snapshot:e3c7591bc57779ef711950941aa64146；source_only",
+        "测试入口为 make_rel_from_joinlist 与 geqo_eval 的正常返回路径",
+        "geeqo 开关与阈值来自当前会话 u_sess->attr.attr_sql",
+        "未运行任何 SQL、GUC 设置、编译或故障注入"
+      ],
+      "source_refs": [
+        "evidence:c0ae6ac260a56cb6adc5fc28a443fe1e",
+        "evidence:de7316f3a1a399504f149e6157c6d518",
+        "evidence:90e7741e039c3a5f1af6dc6385495d18",
+        "evidence:9cf894263271474a263bede8d2bb47cd"
+      ]
+    },
+    {
+      "id": "test_obligation:server/src/gausskernel/optimizer/geqo:geqo-eval-restore-and-error-path-cases",
+      "body": "## 测试目标\n为 geqo_eval 建立可核对的结构性预期：每次评估创建/删除 \"GEQO\" 子内存上下文，join_rel_list 长度与 join_rel_hash 指针成对恢复，fitness 取自 cheapest_total_path 的 total_cost；同时明确异常路径和最终 gimme_tree 的不同处理。本义务不运行 SQL、编译、内存诊断或故障注入，execution_status=not_run。\n\n## 正常路径预期\n- 进入前记录 N = list_length(root->join_rel_list) 与 H = root->join_rel_hash；调用返回后两者必须分别等于 N 与 H。\n- 评估期间 root->join_rel_level 保持 NULL（源码为 AssertEreport，断言构建才强制）。\n- 每次调用创建一个名为 \"GEQO\" 的 AllocSet 子上下文并在返回前 MemoryContextDelete；连续多次评估不应使 planner 上下文内存线性增长（除池/染色体等 geqo() 自有对象外）。\n- 返回值为 joinrel->cheapest_total_path 首元素的 total_cost；该 joinrel 由 gimme_tree 的 set_cheapest 填充。\n- 需要观察 fitness 的用例应通过 kid->worth/spread_chroma 的副作用或调试构建断言验证，而不是把 joinrel/Path 指针带出函数（会悬空）。\n\n## 异常与边界\n- 在 gimme_tree 内构造 ereport(ERROR)（例如无法连接全部关系）时，list_truncate/hash 恢复和 MemoryContextDelete 都不会执行；join_rel_hash 保持 NULL，内存依赖 planner 父上下文在查询中止时回收。测试应确认失败查询可正常中止且不污染后续语句，而不是期望 geqo_eval 自己恢复。\n- geqo() 收尾的最后一次 gimme_tree 不经过 geqo_eval：该 joinrel 必须保留在 planner 上下文；若测试观察到 best_rel 指针在返回后被释放，说明有人把最终构造错误地放入 GEQO 子上下文。\n- join_rel_level 非 NULL 时断言构建应失败；非断言构建的行为未定义，不作为测试断言。\n- cheapest_total_path 为 NIL 时 linitial 非法，但本 attempt 未发现可达路径，保留未知，不作为用例。\n\n## 未运行与未知\n- 未执行任何 SQL/EXPLAIN/内存上下文统计；\"GEQO\" 上下文是否可在现有诊断接口中观察未验证。\n- list_truncate 返回值的分配上下文未读 list.cpp 验证：若 List 头分配在 GEQO 子上下文，恢复后的 root->join_rel_list 可能悬挂；这是需要优先核对的未决点。\n- make_join_rel/set_cheapest 是否严格 append-only 未读其实现；测试只能以源码注释的假设为前提。",
+      "expected_from": {
+        "kind": "claim",
+        "ref": "claim:server/src/gausskernel/optimizer/geqo:geqo-eval-child-context-and-fitness"
+      },
+      "execution_status": "not_run",
+      "conditions": [
+        "源码快照 snapshot:e3c7591bc57779ef711950941aa64146；source_only，未运行 SQL/编译/故障注入",
+        "调用发生在 geqo() 运行期且 root->join_search_private 有效、root->join_rel_level 为 NULL",
+        "CurrentMemoryContext 为 planner 上下文，GEQO 子上下文为其子级",
+        "测试只断言源码可推导的状态，不把 GEQO_DEBUG 日志或内存统计输出当作硬 oracle"
+      ],
+      "source_refs": [
+        "evidence:cdcc3f45f682e634103fb735b81d8de5"
+      ]
+    },
+    {
+      "id": "test_obligation:server/src/gausskernel/optimizer/geqo:gimme-tree-clump-and-forced-join-cases",
+      "body": "## 测试目标\n为 gimme_tree/merge_clump/desirable_join 建立源码推导的结构性预期，覆盖：增量合并、按 size 排序、tour 结束后的强制合并、以及最终 clump 数不为 1 时的 ereport 出口。本义务不运行 SQL、EXPLAIN、编译或故障注入，execution_status=not_run。\n\n## 预期分支（依据 geqo_eval.cpp 的 gimme_tree/merge_clump/desirable_join 源码与本任务 claim）\n- 两表且存在相关连接条件：非 force 阶段 desirable_join 为真，merge_clump 经 make_join_rel 合并为单 clump，tour 结束不进入强制阶段，返回已 set_cheapest 的 joinrel。\n- 两表无连接条件（笛卡尔积）：desirable_join 为假（have_relevant_joinclause 与 have_join_order_restriction 均不成立），非 force 阶段产生两个 clump；tour 结束后进入强制阶段，由 make_join_rel 是否接受该连接决定能否合并。若 make_join_rel 返回非 NULL 则形成单 clump 正常返回。\n- 三表且首对不可连接：第一、二个基因各成 clump（列表按 size 均为 1，追加顺序）；第三个基因按 tour 顺序尝试合并，最终或经强制阶段收敛为单 clump。\n- 强制阶段仍无法合并：clump 数保持 >1，gimme_tree 以 ereport(ERROR)（errmodule MOD_OPT，errcode ERRCODE_OPTIMIZER_INCONSISTENT_STATE，errmsg \"failed to join all relations together\"）失败退出，不返回部分连接。\n- num_gene==1：直接返回该基表的 RelOptInfo，不调用 make_join_rel/set_cheapest；该分支只能由绕过 geqo() 入口的调用触发（geqo() 要求 levels_needed>1）。\n\n## 结构预期与反例\n- 列表 ordering：size=1 的新 clump 总被 lappend 到末尾；size>1 的 clump 必须按 size 降序插入（大于首元素用 lcons）。若观察到更大 clump 排在更小 clump 之后，即违反 merge_clump 的插入规则。\n- 被吸收的 Clump 结构由 pfree_ext 释放、joinrel 保留；size 累加到旧 clump。\n- make_join_rel 返回 NULL 不是立即插入 clump，而是继续尝试下一个旧 clump。\n- tour 中出现重复或越界基因时本函数不做防御（list_nth 越界属未定义行为），不应把此类输入当作支持的测试用例。\n\n## 未运行与未知\n- 未执行任何 SQL/EXPLAIN；无法确认具体查询会走到哪条 clump 分支，也无法确认 make_join_rel 对笛卡尔积/连接顺序限制的实际返回值。\n- have_relevant_joinclause/have_join_order_restriction/make_join_rel 属 optimizer/path，本 attempt 未读其实现；上述分支以 gimme_tree 内部调用与返回值为准。\n- GEQO 是否被执行取决于入口条件（enable_geqo/geqo_threshold/levels_needed），测试需先用已审 claim join-search-entry-selection 的前置条件确认。",
+      "expected_from": {
+        "kind": "claim",
+        "ref": "claim:server/src/gausskernel/optimizer/geqo:gimme-tree-clump-merge-and-forced-join"
+      },
+      "execution_status": "not_run",
+      "conditions": [
+        "源码快照 snapshot:e3c7591bc57779ef711950941aa64146；source_only，未运行 SQL/EXPLAIN/编译/故障注入",
+        "测试调用需在 geqo() 运行期（root->join_search_private 有效、join_rel_level 为 NULL）",
+        "tour 为 1-based 排列，initial_rels 长度 >= num_gene",
+        "make_join_rel/have_relevant_joinclause/have_join_order_restriction 的行为按 optimizer/path 现有实现（未读）"
+      ],
+      "source_refs": [
+        "evidence:cdcc3f45f682e634103fb735b81d8de5",
+        "evidence:1740e2ef344ce91c654e1738ef7c70d4"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "asset": "server/src/gausskernel/optimizer/path/allpaths.cpp",
+      "asset_sha": "149dd536d2ddd2491b1b2d570429683743151a98cb1da1f2e6e6b1e83c80325d",
+      "end": 3419,
+      "id": "evidence:c0ae6ac260a56cb6adc5fc28a443fe1e",
+      "quote_sha256": "39c5e8a63548cbeeae9c77600a38931c1c90b8763b36d21532a8218c24fc9bf5",
+      "sha": "149dd536d2ddd2491b1b2d570429683743151a98cb1da1f2e6e6b1e83c80325d",
+      "snapshot": "snapshot:e3c7591bc57779ef711950941aa64146",
+      "start": 3380,
+      "view": "source",
+      "text": "        }\r\n\r\n        initial_rels = lappend(initial_rels, thisrel);\r\n    }\r\n\r\n    if (levels_needed == 1) {\r\n        /*\r\n         * Single joinlist node, so we're done.\r\n         */\r\n        return (RelOptInfo*)linitial(initial_rels);\r\n    } else {\r\n        /*\r\n         * Consider the different orders in which we could join the rels,\r\n         * using a plugin, GEQO, or the regular join search code.\r\n         *\r\n         * We put the initial_rels list into a PlannerInfo field because\r\n         * has_legal_joinclause() needs to look at it (ugly :-().\r\n         */\r\n        root->initial_rels = initial_rels;\r\n\r\n        if (u_sess->attr.attr_sql.enable_geqo && levels_needed >= u_sess->attr.attr_sql.geqo_threshold)\r\n            return geqo(root, levels_needed, initial_rels);\r\n        else\r\n            return standard_join_search(root, levels_needed, initial_rels);\r\n    }\r\n}\r\n\r\n/*\r\n * standard_join_search\r\n *\t  Find possible joinpaths for a query by successively finding ways\r\n *\t  to join component relations into join relations.\r\n *\r\n * 'levels_needed' is the number of iterations needed, ie, the number of\r\n *\t\tindependent jointree items in the query.  This is > 1.\r\n *\r\n * 'initial_rels' is a list of RelOptInfo nodes for each independent\r\n *\t\tjointree item.\tThese are the components to be joined together.\r\n *\t\tNote that levels_needed == list_length(initial_rels).\r\n *\r\n * Returns the final level of join relations, i.e., the relation that is\r\n",
+      "truncated": false,
+      "returned_chars": 1457,
+      "total_chars": 1457
+    }
+  ],
+  "unknowns": [
+    {
+      "code": "index_partial",
+      "coverage": {
+        "assets": 15214,
+        "available_tus": 2364,
+        "deferred_tus": 2364,
+        "failed_tus": 0,
+        "invalid_commands": 0,
+        "mode": "source_only",
+        "parsed_tus": 0,
+        "partial_tus": 0,
+        "semantic_completeness": "not_certified",
+        "translation_units": 0
+      }
+    },
+    {
+      "code": "evidence_partial",
+      "meaning": "Expand cited evidence to read its complete range"
+    }
+  ],
+  "refresh_tasks": [],
+  "retrieval": {
+    "seed_symbols": [],
+    "knowledge_ids": [
+      "claim:server/src/gausskernel/optimizer/geqo:build-targets-and-erx-source-default",
+      "claim:server/src/gausskernel/optimizer/geqo:crossover-macro-erx-unconditional",
+      "claim:server/src/gausskernel/optimizer/geqo:geqo-eval-child-context-and-fitness",
+      "claim:server/src/gausskernel/optimizer/geqo:geqo-planner-state-and-plancache-env",
+      "mechanism:server/src/gausskernel/optimizer/geqo:entry-guc-planner-plancache-contract",
+      "mechanism:server/src/gausskernel/optimizer/geqo:ga-main-loop-and-parameters",
+      "test_obligation:server/src/gausskernel/optimizer/geqo:entry-threshold-and-state-restore",
+      "test_obligation:server/src/gausskernel/optimizer/geqo:geqo-eval-restore-and-error-path-cases",
+      "test_obligation:server/src/gausskernel/optimizer/geqo:gimme-tree-clump-and-forced-join-cases"
+    ],
+    "modes": [
+      "character_word",
+      "lexical_hash",
+      "semantic_selector"
+    ],
+    "matched_knowledge_count": 12,
+    "selectors": {
+      "module": [
+        "server/src/gausskernel/optimizer/geqo"
+      ]
+    },
+    "semantic_embedding": null
+  },
+  "truncated": true,
+  "runtime_validation": "not_run",
+  "role_context": {
+    "schema": "role-context/v1",
+    "role": "coding",
+    "required": [
+      "behavior",
+      "conditions",
+      "implementation_evidence",
+      "interface_or_state",
+      "consumers"
+    ],
+    "sections": {
+      "behavior": [
+        {
+          "unit": "mechanism:server/src/gausskernel/optimizer/geqo:entry-guc-planner-plancache-contract",
+          "field": "statement",
+          "value": "在 make_rel_from_joinlist 中，只有 levels_needed > 1 且 enable_geqo 为真、levels_needed >= geqo_threshold 时才调用 geqo()，否则走 standard_join_search；七个 GEQO GUC 均为 PGC_USERSET/NODE_ALL、分类 QUERY_TUNING_GEQO，并注册了默认值与上下界；geqo() 借用 root->join_search_private 存放栈上 GeqoPrivateData 并在正常返回前清空；geqo_eval() 为每次评估创建并删除 GEQO 子内存上下文，并按原长度/原指针恢复 join_rel_list 与 join_rel_hash；同一批 GUC 以 enable_geqo 的 1 个签名位和其余 6 个值字段进入全局计划缓存环境。"
+        }
+      ],
+      "conditions": [
+        {
+          "unit": "mechanism:server/src/gausskernel/optimizer/geqo:entry-guc-planner-plancache-contract",
+          "field": "conditions",
+          "value": [
+            "源码快照 snapshot:e3c7591bc57779ef711950941aa64146；source_only，未运行 SQL/GUC 设置/编译/故障注入",
+            "进入 make_rel_from_joinlist 且 levels_needed > 1；GUC 取值来自当前会话 u_sess->attr.attr_sql",
+            "状态恢复结论以 geqo_eval 正常返回路径为准；ereport(ERROR) 中止路径不执行恢复语句",
+            "计划缓存结论仅覆盖 globalplancache_util.cpp 第 95-179 行的签名/字段填充，不含缓存匹配与失效算法",
+            "GEQO_DEBUG、ERX 及其他交叉宏的实际编译状态未验证"
+          ]
+        }
+      ],
+      "implementation_evidence": [
+        {
+          "unit": "mechanism:server/src/gausskernel/optimizer/geqo:entry-guc-planner-plancache-contract",
+          "field": "source_refs",
+          "value": [
+            "evidence:c0ae6ac260a56cb6adc5fc28a443fe1e",
+            "evidence:094dae4a795787e32fba6827ce8c4b49",
+            "evidence:cf7a96b418097855b370cb55ebcbe6ae",
+            "evidence:5bfb8f409356e673137336be48cb58ca",
+            "evidence:90e7741e039c3a5f1af6dc6385495d18",
+            "evidence:9cf894263271474a263bede8d2bb47cd",
+            "evidence:de7316f3a1a399504f149e6157c6d518",
+            "evidence:121b6810e6c9081bb37a029e599c5e22"
+          ]
+        }
+      ],
+      "interface_or_state": [
+        {
+          "unit": "mechanism:server/src/gausskernel/optimizer/geqo:entry-guc-planner-plancache-contract",
+          "field": "state",
+          "value": {
+            "initial_rels": "make_rel_from_joinlist 在分流前写入 root->initial_rels，geqo() 与 standard_join_search 分别消费",
+            "plan_cache_env": "env_signature2 第 0 位 = enable_geqo；plainenv 保存 geqo_threshold 与其余 5 个 GEQO 算法 GUC 的值",
+            "planner_join_state": "root->join_rel_list 长度在每次 geqo_eval 前后相同；root->join_rel_hash 在评估期临时为 NULL、之后恢复原指针；root->join_rel_level 必须为 NULL（仅断言）",
+            "planner_private_slot": "root->join_search_private 在 geqo() 运行期指向栈上 GeqoPrivateData（含 initial_rels 与 random_state），正常返回前置 NULL",
+            "session_gucs": "enable_geqo=true、geqo_threshold=12、Geqo_effort=5、Geqo_pool_size=0、Geqo_generations=0、Geqo_selection_bias=2.0、Geqo_seed=0.0 为注册默认值"
+          }
+        }
+      ],
+      "consumers": [
+        {
+          "unit": "mechanism:server/src/gausskernel/optimizer/geqo:entry-guc-planner-plancache-contract",
+          "field": "consumers",
+          "value": [
+            "server/src/gausskernel/optimizer/path/allpaths.cpp:3400-3403 使用 enable_geqo 与 geqo_threshold 选择 geqo()/standard_join_search",
+            "server/src/gausskernel/optimizer/geqo/geqo_main.cpp:77-81 设置 join_search_private 并消费 Geqo_seed",
+            "server/src/gausskernel/optimizer/geqo/geqo_main.cpp:279-311 消费 Geqo_pool_size/Geqo_effort/Geqo_generations 计算 pool_size 与代数",
+            "server/src/gausskernel/optimizer/geqo/geqo_eval.cpp:86-108 保存并恢复 root->join_rel_list/join_rel_hash/join_rel_level",
+            "server/src/gausskernel/process/globalplancache/globalplancache_util.cpp:106,158-163 把同一批 GEQO GUC 写入全局计划缓存环境"
+          ]
+        }
+      ]
+    },
+    "missing_required": [],
+    "missing_explanations": [],
+    "status": "partial",
+    "truncated": true,
+    "knowledge_ids": [
+      "claim:server/src/gausskernel/optimizer/geqo:build-targets-and-erx-source-default",
+      "claim:server/src/gausskernel/optimizer/geqo:crossover-macro-erx-unconditional",
+      "claim:server/src/gausskernel/optimizer/geqo:geqo-eval-child-context-and-fitness",
+      "claim:server/src/gausskernel/optimizer/geqo:geqo-planner-state-and-plancache-env",
+      "mechanism:server/src/gausskernel/optimizer/geqo:entry-guc-planner-plancache-contract",
+      "mechanism:server/src/gausskernel/optimizer/geqo:ga-main-loop-and-parameters",
+      "test_obligation:server/src/gausskernel/optimizer/geqo:entry-threshold-and-state-restore",
+      "test_obligation:server/src/gausskernel/optimizer/geqo:geqo-eval-restore-and-error-path-cases",
+      "test_obligation:server/src/gausskernel/optimizer/geqo:gimme-tree-clump-and-forced-join-cases"
+    ],
+    "runtime_validation": "not_run"
+  },
+  "budget": {
+    "requested_tokens": 64000,
+    "counting": "conservative_utf8_bytes",
+    "omitted_items": 43,
+    "evidence_read_truncated": false,
+    "omitted_kinds": [
+      "constraint",
+      "evidence",
+      "role_row"
+    ],
+    "returned_utf8_bytes": 62263
+  },
+  "status": "budget_partial"
+}

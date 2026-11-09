@@ -10,7 +10,7 @@ from . import study
 from .store import Store, atomic_write, canonical, digest, read_json, require
 
 ROOT = Path(__file__).resolve().parents[2]
-COMMANDS = {"start","check","modules","features","route","learn","review","wiki","ask","plan-tasks","planning-feedback",
+COMMANDS = {"start","check","modules","features","route","learn","review","wiki","ask","plan-tasks","planning-feedback","curriculum","inputs","graph-job",
             "plan","progress","next","advance","run","coverage","verify-uses","accept-coverage"}
 
 
@@ -61,7 +61,7 @@ def settings(file):
     file = file.expanduser().resolve()
     require(file.is_file(),"将包内 paths.example.json 复制到 local/paths.json 并填写路径，或用 --paths 指定配置文件。")
     spec = read_json(file)
-    known = {"source","design","manual","home","index_db","run_id","graph_storage","output","module_prefixes","repository_roots","product","revision","product_adapter","learning_policy"}
+    known = {"source","design","manual","features","compile_db","path_maps","curriculum","build_profile","home","index_db","run_id","graph_storage","output","module_prefixes","repository_roots","product","revision","product_adapter","learning_policy"}
     require(isinstance(spec,dict) and not set(spec)-known,"paths.json 含未知字段："+str(sorted(set(spec)-known) if isinstance(spec,dict) else spec))
     def resolve(value):
         return (file.parent/Path(value).expanduser()).resolve()
@@ -69,6 +69,15 @@ def settings(file):
     for key in ("source","design","manual","home","index_db","output"):
         if spec.get(key):
             spec[key]=str(resolve(spec[key]))
+    for key in ('features','compile_db'):
+        if spec.get(key):
+            if isinstance(spec[key],str):spec[key]=str(resolve(spec[key]))
+            else:
+                require(isinstance(spec[key],dict) and spec[key].get('path'),key+' needs a file path')
+                spec[key]={**spec[key],'path':str(resolve(spec[key]['path']))}
+    for mapping in spec.get('path_maps',[]):
+        require(isinstance(mapping,dict) and mapping.get('from') and mapping.get('to'),'path_maps entries need from/to')
+        mapping['to']=str(resolve(mapping['to']))
     spec.setdefault("home",str(resolve("workspace")))
     spec["repository_roots"]={k:str(resolve(v)) for k,v in spec.get("repository_roots",{}).items()}
     if spec.get("product_adapter"):
@@ -87,7 +96,8 @@ def check(spec):
     from .graph_mount import inspect_input
     require(Path(spec["source"]).is_dir(),"源码目录不存在："+spec["source"])
     home=Path(spec["home"])
-    for path in [spec["source"],*spec["repository_roots"].values(),*[spec[k] for k in ("manual","design") if spec.get(k)]]:
+    extra=[spec[k]['path'] if isinstance(spec[k],dict) else spec[k] for k in ('features','compile_db') if spec.get(k)]
+    for path in [spec["source"],*spec.get("repository_roots",{}).values(),*[spec[k] for k in ("manual","design") if spec.get(k)],*extra]:
         root=Path(path)
         require(root.exists(),"材料路径不存在："+path)
         require(not root.is_relative_to(home) and not home.is_relative_to(root),"学习工作区与输入材料目录必须分开："+path)
@@ -102,6 +112,8 @@ def check(spec):
     else:
         require(not spec.get("run_id"),"填写 run_id 时请同时配置 index_db")
     return {"mode":"ecs" if graph else "source_only","home":str(home),"graph":graph,
+            "compile_database":"provided_unparsed" if spec.get('compile_db') else 'not_provided',
+            "historical_features":"provided" if spec.get('features') else 'not_provided',
             "python":sys.executable,"sqlite":sqlite3.sqlite_version,"git":shutil.which("git"),
             "database":str(home/"knowledge.sqlite3"),"wiki":str(home/"wiki/index.html")}
 
@@ -112,8 +124,11 @@ def start(spec, refresh):
     graph = info["graph"] or {}
     home = Path(spec["home"])
     from . import whole
+    from .inputs import prepare
+    manifest=prepare(spec,home/'setup/inputs')
     learning=whole.policy(spec.get('learning_policy'),spec.get('product_adapter') if isinstance(spec.get('product_adapter'),dict) else None)
-    signature=digest(["whole-curriculum/v1",spec,learning['digest'],graph.get("run_id"),str(ROOT),sys.executable])
+    learning=whole.policy({**learning,'curriculum_protocol':'module-feature/v2.4'})
+    signature=digest(["module-curriculum/v2.4",spec,manifest['digest'],learning['digest'],graph.get("run_id"),str(ROOT),sys.executable])
     if not refresh and (home/"knowledge.sqlite3").is_file():
         with Store(home,readonly=True,graph_override=spec.get("index_db")) as store:
             bound=store.get_meta("project_entry",{})
@@ -123,23 +138,37 @@ def start(spec, refresh):
          index_db=spec.get("index_db"),run_id=graph.get("run_id"),graph_storage=graph.get("storage"),
          product=spec.get("product","GaussDB"),revision=spec.get("revision","content-addressed"),
          design=Path(spec["design"]) if spec.get("design") else None,manual=Path(spec["manual"]) if spec.get("manual") else None,
-         compile_db=None,repository_roots=spec["repository_roots"],module_prefix=spec.get("module_prefixes",[]),
+         compile_db=Path(manifest['normalized_compile_db']) if manifest.get('normalized_compile_db') and not graph else None,
+         profile=spec.get('build_profile','declared-build'),input_materials=manifest['materials'],
+         repository_roots=spec.get("repository_roots",{}),module_prefix=spec.get("module_prefixes",[]),
          product_adapter=spec.get("product_adapter"),
          learning_policy=learning,
          role="researcher",workspace_setup=True,source_only=not graph)
     result=create(args)
     with Store(home) as store:
         plan=study.current(store)
+        for kind in ('features','compile_db'):
+            info_item=manifest['inputs'].get(kind)
+            if info_item:
+                repo='historical_features' if kind=='features' else 'compile_database'
+                asset=store.asset(plan['snapshot'],repo+'/'+Path(info_item['path']).name)
+                require(asset['sha']==info_item['sha256'],'Input changed during snapshot; run start --refresh with stable files')
         mcp=home/"researcher.mcp.json"
         atomic_write(mcp,Path(result["mcp"]).read_bytes())
         whole.ensure(store,learning)
+        with store.transaction():store.set_meta('learning_inputs',manifest)
+        from . import curriculum
+        course=curriculum.ensure(store,manifest,spec.get('curriculum'))
+        course_export=curriculum.export(store)
         exported=whole.export(store)
         bound={"signature":signature,"plan_id":plan["id"],"plan":result["study_plan"],"run":plan["run"],
                "modules":len(plan["modules"]),"candidates":len(plan.get("candidates",[])),"mcp":str(mcp),
-               "query_mcp":query_config(home,mcp),"source_snapshot":plan["snapshot"],"whole_plan":exported}
+               "query_mcp":query_config(home,mcp),"source_snapshot":plan["snapshot"],"whole_plan":exported,
+               "curriculum":course_export,"input_manifest":manifest['manifest_path'],"input_summary":manifest['summary'],
+               "learning_packages":len(course['packages']),"tu_parsing":"not_run_on_start"}
         with store.transaction():
             store.set_meta("project_entry",bound)
-    return {**info,**bound,"graph":result.get("graph"),"action":"打开 whole_plan.html 查看全仓范围，next --worker 成员名 获取就绪任务，run --worker 成员名 --steps 1 调用已有Claude研究；review审阅后advance继续。"}
+    return {**info,**bound,"graph":result.get("graph"),"action":"打开 curriculum.html 查看领域、模块、机制工作包和全部文件义务。在当前 Claude 使用 /gauss-knowledge，选模块后串行或原生 subagent 学习；审阅后继续。compile_db 仅登记构建上下文，产图使用 graph-job 提示的 ECS 工具。"}
 
 
 def review_step(store, args):
@@ -197,9 +226,19 @@ def execute(args):
     require((home/"knowledge.sqlite3").is_file(),"请先在本工作区执行 start")
     with Store(home,readonly=args.action in {"ask","modules","features"}) as store:
         plan=study.current(store)
+        if args.action=='curriculum':
+            from . import curriculum
+            return curriculum.export(store)
+        if args.action=='inputs':return store.get_meta('learning_inputs',{})
+        if args.action=='graph-job':
+            from .graph_job import prepare
+            return prepare(store,spec)
         if args.action in {'plan','progress','next','advance','run','coverage','verify-uses','accept-coverage'}:
             from . import whole
-            if args.action=='plan':return whole.export(store)
+            if args.action=='plan':
+                from . import curriculum
+                baseline=whole.export(store);course=curriculum.export(store) if curriculum.current(store) else {}
+                return {**baseline,**course,'curriculum':course,'whole':baseline}
             if args.action=='progress':return whole.status(store,args.module)
             if args.action=='next':return whole.next_task(store,args.worker,args.module)
             if args.action=='advance':return {**whole.advance(store,args.max_tasks),'export':whole.export(store)}

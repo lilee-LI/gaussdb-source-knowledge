@@ -1,5 +1,6 @@
 """Offline module work orders. Each host uses its own checkout, Python and SQLite."""
 import gzip
+from copy import deepcopy
 import hashlib
 import hmac
 import json
@@ -152,6 +153,191 @@ def _read_packet(path):
     return json.loads(b''.join(blocks))
 
 
+def learning_projection(store, plan, module):
+    """Small learning-state projection inside the existing signed kit/feedback.
+
+    It preserves coordinator identities. Only the assigned module's packages and
+    physical implementation obligations travel; no second graph or queue exists.
+    """
+    from . import curriculum, whole
+    course = curriculum.current(store)
+    program = whole.current(store, False)
+    if not course or not program:
+        return None
+    packages = [deepcopy(p) for p in course['packages'] if p['module'] == module]
+    needed = {fid for p in packages for fid in p.get('feature_ids', [])}
+    selected = deepcopy(course)
+    selected.update(packages=packages,
+        features=[deepcopy(f) for f in course['features'] if f['id'] in needed or module in f.get('module_candidates', [])],
+        mainlines=[deepcopy(m) for m in course['mainlines'] if module in m.get('modules', [])],
+        worker_scope=module,
+        projection={'module': module, 'coordinator_revision': course['revision'], 'coordinator_run': plan['run']})
+    items = [dict(r) for r in store.db.execute('SELECT * FROM implementation_items WHERE program=? AND module=? ORDER BY asset,start', (program['id'], module))]
+    dispositions = [dict(r) for r in store.db.execute('SELECT d.* FROM implementation_dispositions d JOIN implementation_items i '
+        'ON i.program=d.program AND i.id=d.item JOIN learning_reports r ON r.id=d.report '
+        "WHERE d.program=? AND i.module=? AND json_extract(r.data,'$.review.verdict')='accept'", (program['id'], module))]
+    report_ids = {d['report'] for d in dispositions}
+    reports = [dict(r) for r in store.db.execute('SELECT * FROM learning_reports WHERE program=?', (program['id'],)) if r['id'] in report_ids]
+    return {'schema': 'module-learning-projection/v1', 'plan': plan['id'], 'snapshot': plan['snapshot'],
+        'program': program['id'], 'module': module, 'inputs': deepcopy(store.get_meta('learning_inputs')),
+        'curriculum': selected, 'implementation_items': items, 'implementation_dispositions': dispositions,
+        'implementation_reports': reports,
+        'implementation_index': deepcopy(store.get_meta('implementation-index:' + program['id']))}
+
+
+def apply_learning_projection(store, value, plan, module, mapping):
+    """Apply only coordinator-signed, module-bounded curriculum state."""
+    if not value:
+        return
+    from . import implementation, whole
+    require(value.get('schema') == 'module-learning-projection/v1' and
+        (value['plan'], value['snapshot'], value['module']) == (plan['id'], plan['snapshot'], module), 'Learning projection outside assignment')
+    program = whole.current(store)
+    require(value['program'] == program['id'], 'Learning projection program changed')
+    course = deepcopy(value['curriculum'])
+    require((course['plan_id'], course['snapshot'], course['program']) == (plan['id'], plan['snapshot'], program['id']) and
+        all(p['module'] == module and set(p['files']) <= set(plan['modules'][module]['files']) for p in course['packages']), 'Curriculum package outside assigned module')
+    for package in course['packages']:
+        package['tasks'] = [mapping.get(t, t) for t in package.get('tasks', [])]
+        package['depends_on'] = [mapping.get(t, t) for t in package.get('depends_on', [])]
+    for mainline in course['mainlines']:
+        mainline['task'] = mapping.get(mainline.get('task'), mainline.get('task'))
+    course['run'] = plan['run']
+    if value.get('inputs') is not None:
+        old = store.get_meta('learning_inputs')
+        require(not old or old.get('digest') == value['inputs'].get('digest'), 'Learning input manifest changed; request a new kit')
+        store.set_meta('learning_inputs', value['inputs'])
+    for statement in implementation.SCHEMA.split(';'):
+        if statement.strip():store.db.execute(statement)
+    allowed = set(plan['modules'][module]['files'])
+    known = set()
+    for row in value['implementation_items']:
+        data = json.loads(row['data'])
+        require(row['program'] == program['id'] and row['module'] == module and row['asset'] in allowed and
+            (data['id'], data['asset'], data['module'], data['start'], data['end']) ==
+            (row['id'], row['asset'], module, row['start'], row['end']), 'Implementation item outside assignment')
+        old = store.db.execute('SELECT data FROM implementation_items WHERE program=? AND id=?', (program['id'], row['id'])).fetchone()
+        require(not old or old[0] == row['data'], 'Immutable implementation partition changed; request a new kit')
+        store.db.execute('INSERT OR IGNORE INTO implementation_items VALUES(?,?,?,?,?,?,?)', tuple(row[k] for k in ('program','id','asset','module','start','end','data')))
+        known.add(row['id'])
+    reviewed = set()
+    for row in value.get('implementation_reports', []):
+        data = json.loads(row['data'])
+        require(row['program'] == program['id'] and data['module'] == module and
+            data.get('review', {}).get('verdict') == 'accept' and data['id'] == row['id'], 'Implementation report lacks coordinator review')
+        data['task'] = mapping.get(data['task'], data['task'])
+        store.db.execute('INSERT OR IGNORE INTO learning_reports VALUES(?,?,?,?,?)',
+            (row['id'], program['id'], data['task'], row['result_digest'], canonical(data)))
+        reviewed.add(row['id'])
+    for row in value['implementation_dispositions']:
+        require(row['program'] == program['id'] and row['item'] in known and row['report'] in reviewed, 'Implementation review outside assignment')
+        store.db.execute('INSERT OR REPLACE INTO implementation_dispositions VALUES(?,?,?,?)', tuple(row[k] for k in ('program','item','report','data')))
+    index = value.get('implementation_index')
+    if index:
+        store.set_meta('implementation-index:' + program['id'], {**index, 'items': len(known),
+            'cpp_files': len({r['asset'] for r in value['implementation_items']}), 'projection': module})
+    store.set_meta(course['id'], course)
+    store.set_meta('curriculum_head', course['id'])
+
+
+def _task_scope(task):
+    # Receipt metadata and rebound anchors may change on round-trip. Every
+    # remaining native planning field (including budgets/closure issues) is scope.
+    transport = {'base_knowledge_revision','coordinator_task','order','receipt','reference_epoch','source_anchor_refs'}
+    return {'kind': task['kind'], 'profile': task['profile'],
+            'bundle': {key:value for key,value in task['bundle'].items() if key not in transport}}
+
+
+def _delegation(store, ticket, task, result, coordinator):
+    if result['worker'] == ticket['worker']:
+        return None
+    worker = result['worker']
+    auth = store.get_meta('dispatch-actor:' + worker, {})
+    batch = store.get_meta('dispatch:' + auth.get('batch',''), {})
+    child = next((c for c in batch.get('children', []) if c['worker'] == worker), None)
+    plan = current(store)
+    binding = (plan['snapshot'],plan['run'],plan['id'])
+    require(child and (auth.get('active') or batch.get('closed')) and auth.get('worker') == worker and auth.get('principal_worker') == batch.get('principal_worker') == ticket['worker'] and
+        auth.get('batch') == batch.get('id') and auth.get('parent_session') == batch.get('parent_session') and
+        (auth.get('snapshot'),auth.get('run'),auth.get('plan')) == binding ==
+        (batch.get('snapshot'),batch.get('run'),batch.get('plan')) ==
+        (task['snapshot'],task['run'],task['bundle'].get('plan_id')) and
+        (ticket['snapshot'],ticket['plan']) == (plan['snapshot'],plan['id']) and
+        ticket['module'] in batch.get('modules', []) and task['bundle'].get('module') == ticket['module'] and
+        task['id'] in auth.get('allowed_tasks', []), 'Invalid or stale persisted assignment delegate/task grant')
+    # Closing a batch revokes future claims. A lease acquired before closure may
+    # still finish when close did not release it; bind the claim and exact lease.
+    from .assistant_session import handle_file
+    path = handle_file(store.home,child['session'])
+    handle = read_json(path) if path.is_file() else {}
+    require(handle.get('session') == child['session'] and handle.get('worker') == worker and
+        handle.get('snapshot') == task['snapshot'] and handle.get('batch') == batch['id'] and
+        handle.get('parent_session') == batch['parent_session'], 'Historical delegate session binding mismatch')
+    native = store.record('tasks',task['id'])
+    attempt = result.get('capture_attempt')
+    require(task['owner'] == worker and task['status'] in {'submitted','accepted'} and result.get('task') == task['id'] and
+        result.get('capture') == 'mcp_staged_units' and type(attempt) is int and attempt == task['attempt'] and attempt > 0 and
+        result.get('input_binding') == digest(native) and result.get('drafts_digest') == digest(store.get_meta('research_drafts:'+task['id']+':'+str(attempt),{})),
+        'Historical delegate result lacks exact native submission/capture proof')
+    submitted = result.get('submitted','')
+    claim = store.db.execute("SELECT id,created,data FROM events WHERE kind='task_claim' AND json_extract(data,'$.task')=? "
+        "ORDER BY id DESC LIMIT 1",(task['id'],)).fetchone()
+    require(claim and json.loads(claim['data']).get('worker')==worker and
+        isinstance(submitted,str) and batch['created'] <= claim['created'] <= submitted and
+        (not batch.get('closed') or claim['created'] <= batch.get('closed_at','')),
+        'Delegate task claim occurred outside the authorized batch lifetime')
+    receipt = store.db.execute("SELECT id FROM events WHERE kind='research_submit' AND json_extract(data,'$.task')=? "
+        "AND json_extract(data,'$.worker')=? AND created>=? ORDER BY id DESC LIMIT 1",(task['id'],worker,submitted)).fetchone()
+    lease_digest = result.get('capture_lease_digest')
+    active = handle.get('active') or {}
+    token_proof = active.get('task') == task['id'] and active.get('attempt') == attempt and digest(active.get('token')) == lease_digest
+    if not token_proof:
+        token_proof = any(digest(json.loads(row[0]).get('token')) == lease_digest for row in store.db.execute(
+            "SELECT data FROM events WHERE kind='evidence_read' AND json_extract(data,'$.task')=? AND json_extract(data,'$.worker')=?",(task['id'],worker)))
+    require(receipt and isinstance(lease_digest,str) and len(lease_digest)==64 and token_proof,
+        'Historical delegate native lease/submission receipt mismatch')
+    return {'schema': 'module-delegation/v1', 'assignment': ticket['id'], 'principal_worker': ticket['worker'],
+        'worker': worker, 'batch': batch['id'], 'parent_session': auth['parent_session'], 'child_session': child['session'],
+        'active': bool(auth.get('active') and not batch.get('closed')), 'authorization':'submitted_native_result',
+        'batch_created':batch['created'],'batch_closed_at':batch.get('closed_at'),
+        'native_submission':{'digest':digest(result),'submitted':submitted,'capture':result['capture'],'attempt':attempt,
+            'input_binding':result['input_binding'],'lease_digest':lease_digest,'drafts_digest':result['drafts_digest'],'receipt':receipt['id'],
+            'claim_receipt':claim['id'],'claimed':claim['created']},
+        'snapshot': ticket['snapshot'], 'plan': ticket['plan'], 'profile': ticket['profile'],
+        'module': ticket['module'], 'origin_task': task['id'], 'origin_run': task['run'], 'coordinator_task': coordinator,
+        'task_scope': _task_scope(task)}
+
+
+def _validate_remote_actor(ticket, data):
+    require(data.get('principal_worker', data['worker']) == ticket['worker'], 'Assignment principal mismatch')
+    scope=data.get('task_scope')
+    if scope:
+        require(scope.get('kind')==data.get('task_kind') and scope.get('profile')==ticket['profile'] and
+            scope.get('bundle',{}).get('plan_id')==ticket['plan'] and
+            scope.get('bundle',{}).get('module')==ticket['module'], 'Native task scope outside assignment')
+    if data['worker'] == ticket['worker']:
+        require(not data.get('delegation'), 'Principal submission must not impersonate a delegated child')
+        return
+    grant = data.get('delegation') or {}
+    capture=grant.get('native_submission') or {}
+    submitted=capture.get('submitted','')
+    require(isinstance(scope,dict) and grant.get('schema') == 'module-delegation/v1' and
+        grant.get('authorization')=='submitted_native_result' and capture.get('digest')==data.get('submission_digest') and
+        capture.get('capture')=='mcp_staged_units' and type(capture.get('attempt')) is int and capture['attempt']>0 and
+        all(isinstance(capture.get(k),str) and len(capture[k])==64 for k in ('input_binding','lease_digest','drafts_digest')) and
+        type(capture.get('receipt')) is int and capture['receipt']>0 and type(capture.get('claim_receipt')) is int and capture['claim_receipt']>0 and
+        isinstance(submitted,str) and isinstance(capture.get('claimed'),str) and isinstance(grant.get('batch_created'),str) and
+        grant['batch_created']<=capture['claimed']<=submitted and
+        (not grant.get('batch_closed_at') or capture['claimed']<=grant['batch_closed_at']) and
+        data.get('origin_snapshot') == ticket['snapshot'] and
+        all(grant.get(key) == expected for key, expected in {
+            'assignment':ticket['id'], 'principal_worker':ticket['worker'], 'worker':data['worker'],
+            'snapshot':ticket['snapshot'], 'plan':ticket['plan'], 'profile':ticket['profile'], 'module':ticket['module'],
+            'origin_task':data['origin_task'], 'origin_run':data['origin_run'], 'coordinator_task':data.get('coordinator_task'),
+            'task_scope':data.get('task_scope')}.items()) and grant.get('batch') and grant.get('parent_session') and grant.get('child_session'),
+        'Invalid or stale assignment delegation')
+
+
 def export_result(store, order, task, output):
     local = open_order(store, order)
     ticket = store.get_meta("local-order:" + local["assignment"])["ticket"]
@@ -161,7 +347,13 @@ def export_result(store, order, task, output):
     require(t["snapshot"] == local["local_snapshot"] and t["bundle"].get("module") == ticket["module"] and
             t["status"] in {"submitted", "accepted"}, "Export a submitted research task for the assigned module")
     result = t["result"]
-    require(result["worker"] == ticket["worker"] and t["profile"] == ticket["profile"], "Worker or profile mismatch")
+    require(t["profile"] == ticket["profile"], "Worker profile mismatch")
+    from .curriculum import current as curriculum_current
+    course = curriculum_current(store)
+    require(not course or not course.get('projection') or course['revision'] == course['projection']['coordinator_revision'],
+            'Local curriculum refinements require coordinator reconciliation; sync the coordinator plan before exporting')
+    coordinator = t['bundle'].get('coordinator_task') or next((k for k,v in store.get_meta('coordinator-task-map',{}).items() if v==task),None)
+    delegation = _delegation(store, ticket, t, result, coordinator)
     run = store.record("runs", t["run"])
     require(run.get("mode") in {"inventory", "selected", "ecs", "ecs_module",'source_only'}, "Work orders return bounded module results")
     evidence = {r: store.record("anchors", r) for r in _refs(result)}
@@ -201,10 +393,11 @@ def export_result(store, order, task, output):
             "evidence": evidence, "coverage": result["coverage"], "claims": result.get("claims", []),
             **({"candidate_id":t["bundle"]["candidate_id"]} if t["bundle"].get("candidate_id") else {}),
             "submission_digest": digest(result)}
-    coordinator=t['bundle'].get('coordinator_task') or next((k for k,v in store.get_meta('coordinator-task-map',{}).items() if v==task),None)
     data.update(task_kind=t['kind'],coordinator_task=coordinator,program_item=t['bundle'].get('program_item'),
                 question=t['bundle'].get('question'),progress=result.get('progress'),
-                reference_epoch=store.get_meta('synced-references:'+ticket['id'],{}).get('epoch'))
+                reference_epoch=store.get_meta('synced-references:'+ticket['id'],{}).get('epoch'),
+                principal_worker=ticket['worker'],delegation=delegation,task_scope=_task_scope(t),
+                curriculum_revision=course and course.get('projection',{}).get('coordinator_revision',course['revision']))
     packet = {"data": data, "hmac": _signed(ticket["secret"], data)}
     atomic_write(output, gzip.compress(canonical(packet).encode("utf-8"), mtime=0))
     return {"file": str(output), "module": ticket["module"], "claims": len(data["claims"]),
@@ -253,7 +446,11 @@ def receive(store, path, jobs=2):
             "Module result is damaged or belongs to a different work order")
     plan = current(store)
     require(ticket["plan"] == plan["id"] and ticket["snapshot"] == store.get_meta("snapshot_head") and
-            ticket["worker"] == data["worker"] and ticket["profile"] == data["profile"], "Stale plan, worker or profile")
+            ticket["profile"] == data["profile"], "Stale plan, worker or profile")
+    _validate_remote_actor(ticket, data)
+    from . import curriculum
+    course = curriculum.current(store)
+    require(not course or data.get('curriculum_revision') == course['revision'], 'Curriculum changed; synchronize coordinator feedback before importing research')
     receipt_id = identity("module-receipt", data)
     existing = store.get_meta(receipt_id)
     if existing:
@@ -333,10 +530,18 @@ def receive(store, path, jobs=2):
         if not target and data.get('program_item'):
             target=next((t['id'] for t in (dict(r) for r in store.db.execute("SELECT id,data FROM tasks WHERE snapshot=?",(snapshot,)))
                          if json.loads(t['data'])['bundle'].get('plan_id')==plan['id'] and json.loads(t['data'])['bundle'].get('program_item')==data['program_item']),None)
+        if not target and data.get('task_scope',{}).get('bundle',{}).get('program_id'):
+            for row in store.db.execute("SELECT id FROM tasks WHERE snapshot=? AND json_extract(data,'$.bundle.plan_id')=? "
+                "AND json_extract(data,'$.bundle.module')=?",(snapshot,plan['id'],ticket['module'])):
+                if _task_scope(task_status(store,row['id']))==data['task_scope']:
+                    target=row['id'];break
+            require(target or cid,'Coordinator has not scheduled this native learning task; advance the coordinator plan and synchronize feedback before exporting local continuations')
         if target:
             other=store.db.execute('SELECT id,status,attempt,data FROM tasks WHERE id=?',(target,)).fetchone()
             require(other and other['status'] in {'queued','needs_research'} and json.loads(other['data'])['bundle'].get('module')==ticket['module'],
                     'Coordinator task is active, submitted, accepted, or outside this module')
+            if data.get('task_scope'):
+                require(_task_scope(task_status(store,target)) == data['task_scope'], 'Worker native task identity/scope differs from coordinator')
         elif cid:
             from .catalog import candidate
             lead = candidate(plan,cid,store)
@@ -363,6 +568,7 @@ def receive(store, path, jobs=2):
         if other:
             tid = other["id"]
             prior = json.loads(other["data"])
+            bundle['question'] = prior['bundle'].get('question', bundle['question'])
             prior["bundle"].update(bundle)
             store.db.execute("UPDATE tasks SET data=? WHERE id=?",(canonical(prior),tid))
         else:
@@ -370,12 +576,16 @@ def receive(store, path, jobs=2):
         result = {"worker": data["worker"], "task": tid, "submitted": now(), "coverage": coverage, "claims": claims,
                   "remote_submission": data["submission_digest"], "origin_task": data["origin_task"],
                   "read_provenance": "worker_receipts_rebound_to_coordinator_evidence", "database_execution": "not_run"}
+        if data.get('delegation'):
+            result.update(principal_worker=ticket['worker'], delegation=data['delegation'])
         if data.get('progress'):
             from .whole import validate_progress
             result['progress']=validate_progress(store,task_status(store,tid),_translate(data['progress'],mapping),
                        {u['id']:u for u in claims},set(mapping[r] for r in data['evidence']),imported=True)
         require(not store.db.execute("SELECT 1 FROM task_edges e JOIN tasks d ON e.dependency=d.id WHERE e.task=? AND d.status<>'accepted'",(tid,)).fetchone(),
                 'Coordinator prerequisites are not accepted; import and review upstream work first')
+        require(not curriculum.prerequisites(store,task_status(store,tid)),
+                'Coordinator knowledge prerequisites are not published/applicable; publish upstream work first')
         store.db.execute("UPDATE tasks SET status='submitted',owner=?,result=? WHERE id=?", (data["worker"], canonical(result), tid))
         active["received_task"] = tid
         active.setdefault('received_tasks',[])
@@ -410,7 +620,11 @@ def feedback(store,order,output,additions=()):
     import base64
     ticket=read_json(order);active=store.get_meta(assignment_key(ticket['plan'],ticket['module']))
     require(active and active['id']==ticket['id'] and ticket['snapshot']==store.get_meta('snapshot_head'),'Superseded feedback order')
+    plan=current(store)
+    learning=learning_projection(store,plan,ticket['module'])
     outcomes=[];ids=set(ticket.get('references',{}))
+    if learning:
+        ids.update(uid for row in learning['implementation_dispositions'] for uid in json.loads(row['data']).get('unit_ids',[]))
     for origin,item in active.get('origins',{}).items():
         t=task_status(store,item['task'])
         reviews=[json.loads(r[0]) for r in store.db.execute("SELECT data FROM events WHERE kind='research_review' AND json_extract(data,'$.task')=? ORDER BY id DESC LIMIT 1",(t['id'],))]
@@ -419,7 +633,8 @@ def feedback(store,order,output,additions=()):
         if t['status']=='accepted':ids.update(u['id'] for u in t.get('result',{}).get('claims',[]))
     dependencies=[]
     for row in store.db.execute("SELECT DISTINCT d.id,d.status,d.result FROM tasks t JOIN task_edges e ON e.task=t.id JOIN tasks d ON d.id=e.dependency WHERE t.snapshot=? AND json_extract(t.data,'$.bundle.plan_id')=? AND json_extract(t.data,'$.bundle.module')=?",(ticket['snapshot'],ticket['plan'],ticket['module'])):
-        dependencies.append({'task':row['id'],'status':row['status']})
+        dependencies.append({'task':row['id'],'status':row['status'],
+            'result':json.loads(row['result']) if row['status']=='accepted' and row['result'] else None})
         if row['status']=='accepted' and row['result']:ids.update(u['id'] for u in json.loads(row['result']).get('claims',[]))
     task_delta=[]
     for row in store.db.execute("SELECT id,kind,status,data FROM tasks WHERE snapshot=? AND json_extract(data,'$.bundle.plan_id')=? AND json_extract(data,'$.bundle.module')=? AND status IN ('queued','needs_research') ORDER BY id",(ticket['snapshot'],ticket['plan'],ticket['module'])):
@@ -430,6 +645,11 @@ def feedback(store,order,output,additions=()):
     for did in {d for t in task_delta for d in t['dependencies']}:
         dep=task_status(store,did)
         stubs.append({k:dep[k] for k in ('id','kind','status','bundle')})
+    from .whole import current as whole_current
+    program=whole_current(store,False)
+    required={d['task'] for d in dependencies if d['status']=='accepted'}
+    prerequisite_reports=[dict(r) for r in store.db.execute('SELECT * FROM learning_reports WHERE program=?',(program['id'],))
+        if r['task'] in required] if program else []
     # Pin the transitive knowledge context, including hierarchy and test oracles.
     units={};pending=set(ids)
     while pending:
@@ -452,14 +672,15 @@ def feedback(store,order,output,additions=()):
     require(sum(len(v) for v in blobs.values())<=240*1024**2,'Reference material too large; narrow the order')
     hashes={u:content_hash(v) for u,v in units.items()}
     from .knowledge import freshness,UnitMap
-    plan=current(store);bound=UnitMap(store,store.get_meta('knowledge_head'),units)
+    bound=UnitMap(store,store.get_meta('knowledge_head'),units)
     applicable={uid:hashes[uid] for uid,u in units.items() if not freshness(store,u,ticket['snapshot'],plan['run'],bound)}
-    epoch=identity('reference-epoch',[ticket['id'],store.get_meta('knowledge_head'),hashes,outcomes,dependencies,task_delta,[(k,a['sha'],a.get('text_sha')) for k,a in sorted(assets.items())]])
+    epoch=identity('reference-epoch',[ticket['id'],store.get_meta('knowledge_head'),hashes,outcomes,dependencies,task_delta,learning,[(k,a['sha'],a.get('text_sha')) for k,a in sorted(assets.items())]])
     data={'schema':'module-feedback/v1','order':ticket['id'],'snapshot':ticket['snapshot'],'profile':ticket['profile'],
           'worker':ticket['worker'],'epoch':epoch,'revision':store.get_meta('knowledge_head'),'units':units,'anchors':anchors,
           'source_index':plan.get('source_index'),'applicable_hashes':applicable,
           'assets':assets,'extra_materials':sorted(set(additions)),'blobs':blobs,'outcomes':outcomes,'dependencies':dependencies,
-          'task_delta':task_delta,'dependency_stubs':stubs,'created':now()}
+          'task_delta':task_delta,'dependency_stubs':stubs,'prerequisite_reports':prerequisite_reports,
+          'learning_projection':learning,'created':now()}
     with store.transaction():
         store.set_meta('issued-reference:'+ticket['id']+':'+epoch,{'hashes':hashes,'revision':data['revision']})
     atomic_write(output,gzip.compress(canonical({'data':data,'hmac':_signed(ticket['secret'],data)}).encode('utf-8'),mtime=0))
@@ -472,11 +693,17 @@ def sync_feedback(store,path):
     require(local and data.get('schema')=='module-feedback/v1','Unknown feedback order')
     ticket=local['ticket'];plan=current(store)
     require(hmac.compare_digest(packet['hmac'],_signed(ticket['secret'],data)) and data['worker']==ticket['worker'] and
-            data['snapshot']==ticket['snapshot'] and data['profile']==ticket['profile'],'Invalid feedback binding/signature')
+            data['snapshot']==ticket['snapshot']==plan['snapshot'] and data['profile']==ticket['profile'] and ticket['plan']==plan['id'],
+            'Invalid feedback binding/signature')
     receipt='feedback-receipt:'+data['epoch']
     if store.get_meta(receipt):return {**store.get_meta(receipt),'replayed':True}
     old=store.get_meta('synced-references:'+ticket['id'],{})
     require(not old or data['created']>=old.get('created',''),'Older feedback cannot roll back references')
+    from .curriculum import current as curriculum_current
+    local_course=curriculum_current(store)
+    require(not local_course or not local_course.get('projection') or
+        local_course['revision']==local_course['projection']['coordinator_revision'],
+        'Local curriculum refinements require coordinator reconciliation before synchronization; request a reconciled kit')
     with store.transaction():
         for sha,encoded in data['blobs'].items():require(store.put_blob(base64.b64decode(encoded,validate=True))==sha,'Feedback blob hash mismatch')
         for key,a in data['assets'].items():
@@ -497,7 +724,8 @@ def sync_feedback(store,path):
             # External prerequisite stubs may advance only by the signed coordinator outcome.
             row=store.db.execute('SELECT data FROM tasks WHERE id=?',(dependency['task'],)).fetchone()
             if row and json.loads(row[0])['bundle'].get('module')!=ticket['module'] and dependency['status']=='accepted':
-                store.db.execute("UPDATE tasks SET status='accepted' WHERE id=?",(dependency['task'],))
+                store.db.execute("UPDATE tasks SET status='accepted',result=? WHERE id=?",
+                    (canonical(dependency['result']) if dependency.get('result') else None,dependency['task']))
         mapping=store.get_meta('coordinator-task-map',{})
         for item in data.get('task_delta',[]):
             b=item['bundle'];require(b.get('module')==ticket['module'] and b.get('plan_id')==plan['id'],'Task delta outside assigned scope')
@@ -505,6 +733,13 @@ def sync_feedback(store,path):
             if not local_id and cid:
                 row=store.db.execute("SELECT id FROM tasks WHERE snapshot=? AND json_extract(data,'$.bundle.plan_id')=? AND json_extract(data,'$.bundle.candidate_id')=?",(plan['snapshot'],plan['id'],cid)).fetchone()
                 local_id=row[0] if row else None
+            if not local_id:
+                scope={'kind':item['kind'],'profile':plan['profile'],'bundle':b}
+                expected=_task_scope(scope)
+                for row in store.db.execute("SELECT id FROM tasks WHERE snapshot=? AND run=? AND json_extract(data,'$.bundle.plan_id')=? "
+                    "AND json_extract(data,'$.bundle.module')=?",(plan['snapshot'],plan['run'],plan['id'],ticket['module'])):
+                    if _task_scope(task_status(store,row['id']))==expected:
+                        local_id=row['id'];break
             if not local_id:local_id=create_task(store,snapshot=plan['snapshot'],run=plan['run'],profile=plan['profile'],kind=item['kind'],bundle={**b,'coordinator_task':item['id']})
             mapping[item['id']]=local_id
         for stub in data.get('dependency_stubs',[]):
@@ -514,9 +749,22 @@ def sync_feedback(store,path):
                 store.db.execute('INSERT OR IGNORE INTO tasks(id,snapshot,run,profile,kind,status,data) VALUES(?,?,?,?,?,?,?)',
                     (stub['id'],plan['snapshot'],plan['run'],plan['profile'],stub['kind'],'accepted' if stub['status']=='accepted' else 'blocked_external',canonical(value)))
                 mapping[stub['id']]=stub['id']
+            dependency=next((d for d in data.get('dependencies',[]) if d['task']==stub['id']),None)
+            if dependency and stub['bundle'].get('module')!=ticket['module'] and dependency['status']=='accepted' and dependency.get('result'):
+                store.db.execute("UPDATE tasks SET result=? WHERE id=?",(canonical(dependency['result']),mapping[stub['id']]))
         for item in data.get('task_delta',[]):
             for dep in item['dependencies']:store.db.execute('INSERT OR IGNORE INTO task_edges VALUES(?,?)',(mapping[item['id']],mapping[dep]))
         store.set_meta('coordinator-task-map',mapping)
+        from .whole import current as whole_current
+        program=whole_current(store,False)
+        required={d['task'] for d in data.get('dependencies',[]) if d['status']=='accepted'}
+        for row in data.get('prerequisite_reports',[]):
+            report=json.loads(row['data'])
+            require(program and row['program']==program['id'] and row['task'] in required and
+                report.get('review',{}).get('verdict')=='accept','Invalid prerequisite review proof')
+            report['task']=mapping.get(row['task'],row['task'])
+            store.db.execute('INSERT OR IGNORE INTO learning_reports VALUES(?,?,?,?,?)',
+                (row['id'],row['program'],report['task'],row['result_digest'],canonical(report)))
         updated=[]
         for item in data['outcomes']:
             t=task_status(store,item['origin_task'])
@@ -530,6 +778,7 @@ def sync_feedback(store,path):
                 apply_reviewed_locked(store,t,t['result'],item['review'])
             store.event('coordinator_review_synced',{'task':t['id'],'hub_task':item['hub_task'],'review':item['review'],'epoch':data['epoch']})
             updated.append({'task':t['id'],'status':item['status']})
+        apply_learning_projection(store,data.get('learning_projection'),plan,ticket['module'],mapping)
         result={'epoch':data['epoch'],'updated':updated,'reference_units':len(data['units']),'extra_materials':data.get('extra_materials',[]),'review_source':'coordinator_signed_feedback'}
         store.set_meta(receipt,result)
     return result

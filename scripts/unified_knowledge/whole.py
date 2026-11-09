@@ -19,7 +19,7 @@ ROOT=Path(__file__).resolve().parents[2]
 SEMANTIC={'.c','.cc','.cpp','.cxx','.h','.hh','.hpp','.hxx','.inc','.inl','.y','.yy','.l','.ll',
           '.sql','.py','.sh','.pl','.ps1','.cmake','.proto','.rs','.go','.java','.md','.sgml','.sgmlin','.html','.htm','.docx','.pdf',
           '.txt','.json','.yaml','.yml','.xml','.ini','.map','.conf','.control','.out','.expected','.bat','.mk','.am','.in'}
-REPORT_LISTS=('assets','leads','proposals','contracts','gaps','templates')
+REPORT_LISTS=('assets','leads','proposals','contracts','gaps','templates','implementations','feature_mappings')
 
 
 def policy(spec=None, adapter=None):
@@ -79,6 +79,7 @@ def _category(asset):
     path=Path(asset['path']);suffix=path.suffix.lower();name=path.name.lower()
     semantic=asset['kind']=='document' or suffix in SEMANTIC or name in {'makefile','cmakelists.txt','configure','configure.in'}
     if asset['status']=='excluded':return 'input_exclusion',False
+    if asset.get('material_kind')=='build_context':return 'build_context_inventory',False
     if asset.get('bytes')==0:return 'empty_material',False
     if asset['kind']=='document':return 'material',True
     if '/test/' in asset['key'] and '/data/' in asset['key'] and suffix not in SEMANTIC- {'.txt','.json','.xml','.ini'}:
@@ -209,7 +210,7 @@ def validate_progress(store, task, report, drafts, complete_reads, *, imported=F
     if module is None and task['kind']=='scope_research':allowed=set()
     normalized={'program':p['id'],'inventory_complete':report.get('inventory_complete',False)}
     require(type(normalized['inventory_complete']) is bool,'inventory_complete must be boolean')
-    requested={u for key in ('assets','leads','templates') for row in report.get(key,[]) for u in row.get('unit_ids',[])}
+    requested={u for key in ('assets','leads','templates','implementations','feature_mappings') for row in report.get(key,[]) for u in row.get('unit_ids',[])}
     requested.update(r.get('unit') for r in report.get('contracts',[]) if r.get('unit'))
     available={**reference_units(store,requested),**drafts}
     for key in REPORT_LISTS:
@@ -241,6 +242,15 @@ def validate_progress(store, task, report, drafts, complete_reads, *, imported=F
             require(set(refs)<=cited,'Coverage evidence must be cited by its knowledge units')
             if row['disposition']=='studied':require(_complete_span(store,p['snapshot'],row['asset'],cited),'Knowledge citations do not cover the studied file')
         row['unit_hashes']={u:content_hash(available[u]) for u in ids}
+    from . import curriculum,implementation
+    course=curriculum.current(store)
+    if course and normalized['inventory_complete']:
+        require(task['kind']=='module_survey' and seen==allowed,'Complete inventory must account for EVERY asset in the assigned module')
+    if course:
+        normalized['implementations']=implementation.validate(store,p,task,normalized['implementations'],available,complete_reads)
+        normalized['feature_mappings']=curriculum.validate_feature_mappings(store,p,task,normalized['feature_mappings'],available,complete_reads)
+    else:
+        require(not normalized['implementations'] and not normalized['feature_mappings'],'Initialize the module curriculum before submitting implementation/feature mappings')
     from .task_planning import candidates
     leads={x['id']:x for x in candidates(store,study.current(store))}
     proposal_ids={r.get('id') for r in normalized['proposals']}
@@ -314,7 +324,7 @@ def stage_progress(store,task,worker,token,report,previous_digest=None):
         for section in REPORT_LISTS:
             rows={canonical(r):r for r in old.get(section,[])}
             # A repeated semantic key updates a row instead of inflating the ledger.
-            keys={'assets':'asset','leads':'candidate_id','proposals':'id','contracts':'unit','templates':'id','gaps':'question'}
+            keys={'assets':'asset','leads':'candidate_id','proposals':'id','contracts':'unit','templates':'id','gaps':'question','implementations':'item','feature_mappings':'feature_id'}
             updates=report.get(section,[])
             def semantic_key(r):
                 return tuple(r.get(k) for k in ('unit','side','module','producer_module','consumer_module')) if section=='contracts' else r.get(keys[section])
@@ -348,6 +358,9 @@ def apply_reviewed_locked(store,task,result,review):
         store.db.execute('INSERT OR REPLACE INTO learning_dispositions VALUES(?,?,?,?)',(p['id'],row['asset'],rid,canonical(row)))
     for row in report.get('leads',[]):store.db.execute('INSERT OR REPLACE INTO learning_leads VALUES(?,?,?,?)',(p['id'],row['candidate_id'],rid,canonical({**row,'report':rid})))
     for row in report.get('contracts',[]):store.db.execute('INSERT OR REPLACE INTO learning_contract_checks VALUES(?,?,?,?,?,?,?,?)',(p['id'],row['unit'],row['side'],row['module'],row['producer_module'],row['consumer_module'],task['id'],canonical(row)))
+    if report.get('implementations'):
+        from .implementation import apply_locked
+        apply_locked(store,p,rid,report['implementations'])
     store.event('progress_review_applied',{'task':task['id'],'report':rid,'program':p['id']})
 
 
@@ -398,6 +411,12 @@ def status(store,module=None):
             tasks=[r[0] for r in store.db.execute("SELECT id FROM tasks WHERE snapshot=? AND json_extract(data,'$.bundle.plan_id')=? AND json_extract(data,'$.bundle.candidate_id')=?",(p['snapshot'],p['plan_id'],c['id']))]
             if tasks and all(_task_published(store,t) for t in tasks):state='mapped'
         candidate_state[c['id']]={'state':state,'module':c.get('owner_module')}
+    from . import curriculum,implementation
+    course=curriculum.current(store);region_open=Counter()
+    if course:
+        owners={r['asset']:r['module'] for r in rows}
+        for r in implementation.evaluated(store,p).values():
+            if r['state'] not in {'explained','no_implementation'}:region_open[owners.get(r['asset'])]+=1
     modules=[]
     for name,info in p['modules'].items():
         if p.get('worker_scope') and name!=p['worker_scope']:continue
@@ -405,9 +424,9 @@ def status(store,module=None):
         owned=[r for r in rows if r['module']==name];counts=Counter(r['state'] for r in owned)
         ccounts=Counter(v['state'] for v in candidate_state.values() if v['module']==name)
         tasks=[dict(r) for r in store.db.execute("SELECT id,kind,status,owner FROM tasks WHERE snapshot=? AND json_extract(data,'$.bundle.plan_id')=? AND json_extract(data,'$.bundle.module')=?",(p['snapshot'],p['plan_id'],name))]
-        closed=(name in inventories and all(r['state'] in {'studied','supporting','input_exclusion'} for r in owned) and all(v['state'] in {'mapped','excluded'} for v in candidate_state.values() if v['module']==name) and not any(t['status'] in {'leased','submitted','needs_research','queued'} and t['kind']!='module_survey' for t in tasks))
+        closed=(name in inventories and not region_open[name] and all(r['state'] in {'studied','supporting','input_exclusion'} for r in owned) and all(v['state'] in {'mapped','excluded'} for v in candidate_state.values() if v['module']==name) and not any(t['status'] in {'leased','submitted','needs_research','queued'} and t['kind']!='module_survey' for t in tasks))
         domains=dict(Counter(r['domain'] for r in owned))
-        modules.append({'module':name,'domains':domains,'assets':len(owned),'states':dict(counts),'lead_states':dict(ccounts),'inventory_reviewed':name in inventories,'source_knowledge_closed':closed,'tasks':tasks})
+        modules.append({'module':name,'domains':domains,'assets':len(owned),'states':dict(counts),'lead_states':dict(ccounts),'inventory_reviewed':name in inventories,'unexplained_cpp_regions':region_open[name] if course else None,'source_knowledge_closed':closed,'tasks':tasks})
     return {'schema':'whole-learning-status/v1','program':p['id'],'snapshot':p['snapshot'],'profile':p['profile'],'knowledge_revision':store.get_meta('knowledge_head'),
             'assets':len(rows),'asset_states':dict(Counter(r['state'] for r in rows)),'semantic_assets':sum(r['semantic'] for r in rows),
             'modules':modules,'candidate_states':dict(Counter(v['state'] for v in candidate_state.values())),'candidates':candidate_state,
@@ -430,6 +449,8 @@ def _task_published(store,task):
 
 def advance(store,max_tasks=8):
     p=current(store);require(type(max_tasks) is int and 1<=max_tasks<=100,'Invalid batch size')
+    from . import curriculum
+    course=curriculum.current(store)
     from .task_planning import propose, construct
     reports,inv,_=_report_state(store,p)
     mapping=store.get_meta('report-proposals:'+p['id'],{})
@@ -483,13 +504,16 @@ def advance(store,max_tasks=8):
                 if store.db.execute('SELECT status FROM tasks WHERE id=?',(tid,)).fetchone()[0]=='queued':made['task_results'].append({'task':tid,'kind':'closure_research'})
                 else:stalled.append({'module':m['module'],'task':tid,'reason':'Reviewed closure task did not resolve these issues; owner must reconcile the remaining evidence.'})
                 continue
-            if not missing:continue
+            if not missing or course:continue
             cursor=[(r['asset'],(r['disposition'] or {}).get('unit_hashes',{})) for r in assets if r['asset'] in missing]
             tid=create_task(store,snapshot=p['snapshot'],run=study.current(store)['run'],profile=p['profile'],kind='coverage_research',
                 bundle={'plan_id':p['plan_id'],'program_id':p['id'],'module':m['module'],'question':'按module_assets中的已审引用继续未覆盖区间；大文件可partial分段积累已审知识，不逐函数拆任务。','selected_files':missing[:12], 'remaining_scope_digest':digest(cursor),'source_anchor_refs':[]},dependencies=[study.current(store)['modules'][m['module']]['task']])
             t=store.db.execute('SELECT status FROM tasks WHERE id=?',(tid,)).fetchone()
             if t['status']=='queued':made['task_results'].append({'task':tid,'kind':'coverage_research'})
             elif t['status']=='accepted':stalled.append({'module':m['module'],'task':tid,'reason':'Accepted task produced no new asset coverage; review scope/gaps before scheduling the same work again.'})
+    if course and len(made['task_results'])<max_tasks:
+        more=curriculum.advance(store,max_tasks-len(made['task_results']))
+        made['task_results'].extend(more['created_or_reused']);stalled.extend(more.get('stalled',[]))
     return {'program':p['id'],'approved_mechanism_candidates':len(approved),'created_or_reused':made['task_results'],'stalled':stalled,'automatic_knowledge_acceptance':False}
 
 
@@ -504,16 +528,25 @@ def next_task(store,worker,module=None):
     active=[r for r in busy if r['status']=='leased']
     if active:return {'state':'in_progress','tasks':active,'next':'Continue the active lease or release it; no token is stolen.'}
     if len(busy)>=p['policy'].get('max_pending_per_worker',4):return {'state':'waiting_review','tasks':busy}
-    sql="SELECT t.id,t.data,t.kind FROM tasks t WHERE snapshot=? AND run=? AND status IN ('queued','needs_research','leased') AND (status<>'leased' OR deadline<?) AND json_extract(data,'$.bundle.plan_id')=? AND NOT EXISTS(SELECT 1 FROM task_edges e JOIN tasks d ON e.dependency=d.id WHERE e.task=t.id AND d.status<>'accepted')"
+    sql="SELECT t.id,t.data,t.kind,t.rowid sequence FROM tasks t WHERE snapshot=? AND run=? AND status IN ('queued','needs_research','leased') AND (status<>'leased' OR deadline<?) AND json_extract(data,'$.bundle.plan_id')=? AND NOT EXISTS(SELECT 1 FROM task_edges e JOIN tasks d ON e.dependency=d.id WHERE e.task=t.id AND d.status<>'accepted')"
     rows=store.db.execute(sql,(p['snapshot'],plan['run'],time.time(),p['plan_id'])).fetchall()
-    priority={'module_survey':0,'scope_research':1,'shared_research':2,'feature_research':3,'gap_research':4,'coverage_research':5,'closure_research':5,'integration_research':6}
-    for row in sorted(rows,key=lambda r:(priority.get(r['kind'],9),r['id'])):
+    # Continue ready mechanisms before opening hundreds of unrelated surveys.
+    # FIFO within each stage keeps modules from being ordered by opaque hashes.
+    priority={'shared_research':0,'feature_research':1,'gap_research':1,'coverage_research':1,'closure_research':1,'integration_research':2,'scope_research':3,'module_survey':4}
+    from .dispatch import candidate_allowed,authorized_delegate
+    from .curriculum import prerequisites
+    grant=store.get_meta('dispatch-actor:'+worker)
+    granted=set(grant.get('allowed_tasks',[])) if grant else None
+    for row in sorted(rows,key=lambda r:(priority.get(r['kind'],9),r['sequence'])):
         bundle=json.loads(row['data'])['bundle'];owner=bundle.get('module')
         if module and owner!=module:continue
-        order=store.get_meta('assignment:'+p['plan_id']+':'+str(owner),{})
-        if order and order['worker']!=worker:continue
+        if granted is not None and row['id'] not in granted:continue
         from .planner import task_status
-        return {'state':'ready','task':task_status(store,row['id'])}
+        task=task_status(store,row['id'])
+        if not candidate_allowed(store,worker,task) or prerequisites(store,task):continue
+        order=store.get_meta('assignment:'+p['plan_id']+':'+str(owner),{})
+        if order and order['worker']!=worker and not authorized_delegate(store,worker,order['worker'],task):continue
+        return {'state':'ready','task':task}
     return {'state':'waiting_review' if busy else 'blocked_or_complete','pending_review':busy,'next':'Run coverage to see blockers; submitted work is never auto-approved.'}
 
 
@@ -529,7 +562,7 @@ def guidance(store,task):
         'workflow':['module_assets: page every owned asset','read_source: frozen ranges with receipts',
                     'stage_research_unit: evidence-backed knowledge','stage_progress: versioned coverage and mechanism proposals',
                     'finish_research: use both latest drafts_digest and progress_digest','stop for independent research and knowledge review'],
-        'progress_example':{'program':p['id'],'inventory_complete':True,
+        'progress_example':{'program':p['id'],'inventory_complete':task['kind']=='module_survey',
             'assets':[{'asset':'repo/path.cpp','disposition':'studied','reason':'Explain mechanism and boundaries',
                        'evidence_refs':['evidence:actual_full_spans'],'unit_ids':['mechanism:actual']}],
             'leads':[{'candidate_id':'actual candidate ID','state':'mapped','reason':'Covered by mechanism',
@@ -544,7 +577,7 @@ def guidance(store,task):
                  'Reuse requires reuse=true and applicable accepted units. New facts require fresh reads in this lease.',
                  'Public mechanism/integration tasks must report templates:[{id:program_item,state:verified|not_applicable,reason,evidence_refs,unit_ids}].',
                  'Cross-module contracts report producer and consumer sides from each owning module with real endpoint symbols.',
-                 'Only actually finished inventory sets inventory_complete=true; open questions remain gaps, never pretend completion.']}
+                 'Only a module_survey with EVERY assigned asset may set inventory_complete=true; deeper tasks leave it false. Open questions remain gaps, never pretend completion.']}
 
 
 def read_source(store,task,worker,token,asset,start=1,lines=200):
@@ -653,7 +686,17 @@ def audit(store,module=None):
         closed=bool(gap.get('resolved_by')) and all(u in resolved and _applicable(store,resolved[u],p) and content_hash(resolved[u])==gap.get('unit_hashes',{}).get(u) for u in gap['resolved_by'])
         if not closed:blockers.append({'kind':'open_gap','task':record['task'],'question':gap['question']})
     checks=[json.loads(r[0]) for r in store.db.execute('SELECT data FROM learning_checks WHERE program=? AND revision=?',(p['id'],revision))]
-    needed={(m['module'],role) for m in s['modules'] for role in ('coding','test_generation','review') if any(r['semantic'] and r['module']==m['module'] for r in rows)}
+    from . import curriculum,implementation
+    course=curriculum.current(store)
+    roles=('coding','test_generation','review','operations') if course else ('coding','test_generation','review')
+    if course:
+        sem=implementation.audit(store,module)
+        if sem['unclosed_items']:blockers.append({'kind':'implementation_explanation','count':sem['unclosed_items'],'examples':sem['examples']})
+        f=curriculum.status(store,module)
+        if f['unassigned_assets']:blockers.append({'kind':'unassigned_curriculum_assets','count':len(f['unassigned_assets']),'examples':f['unassigned_assets'][:20]})
+        unresolved=[r for r in curriculum.feature_status(store,module) if r['state'] not in {'mapped','duplicate','out_of_scope'}]
+        if unresolved:blockers.append({'kind':'historical_feature_mapping','count':len(unresolved),'examples':[{'feature_id':r['id'],'name':r['name'],'state':r['state']} for r in unresolved[:20]]})
+    needed={(m['module'],role) for m in s['modules'] for role in roles if any(r['semantic'] and r['module']==m['module'] for r in rows)}
     actual={(x['module'],x['role']) for c in checks if c.get('status')=='passed' for x in c['cases'] if x['passed']}
     if needed-actual:blockers.append({'kind':'consumer_use_cases','count':len(needed-actual),'examples':sorted(needed-actual)[:20]})
     basis={'program':p['id'],'scope_module':module,'revision':revision,'status':s,'report_ids':[r['id'] for r in reports if module is None or r['module']==module],
@@ -682,14 +725,23 @@ def verify_uses(store,cases):
     p=current(store);revision=store.get_meta('knowledge_head');require(revision,'Accepted knowledge required for use checks')
     require(isinstance(cases,list) and 1<=len(cases)<=1000,'Provide 1..1000 use cases')
     require(len({c.get('id') for c in cases})==len(cases),'Use case IDs must be unique')
-    rows=[]
+    from .curriculum import current as course_current
+    course=course_current(store);rows=[]
     for c in cases:
-        require(c.get('id') and c.get('module') in p['modules'] and c.get('role') in {'coding','test_generation','review'},'Invalid use case')
+        require(c.get('id') and c.get('module') in p['modules'] and c.get('role') in {'coding','test_generation','review','operations'},'Invalid use case')
         require(c.get('query') and c.get('required_units'),'Use case needs question and necessary knowledge IDs')
         pack=get_context(store,{'task':c['role'],'query':c['query'],'targets':c.get('targets',[]),'source_snapshot':p['snapshot'],
-             'build_profile':p['profile'],'index_run':study.current(store)['run'],'knowledge_revision':revision,'token_budget':c.get('token_budget',64000)})
+             'module':c['module'],'build_profile':p['profile'],'index_run':study.current(store)['run'],'knowledge_revision':revision,'token_budget':c.get('token_budget',64000)})
         delivered=set(pack.get('retrieval',{}).get('knowledge_ids',[]))
-        rows.append({**c,'passed':set(c['required_units'])<=delivered,'delivered_ids':sorted(delivered),'unknowns':pack.get('unknowns',[])})
+        view=pack.get('role_context',{})
+        from .role_context import REQUIRED
+        satisfied=not view.get('missing_required') and all(view.get('sections',{}).get(name) for name in REQUIRED[c['role']])
+        # A bounded view can omit redundant rows while all required source-backed
+        # fields and exact necessary units are delivered. Clipping is not a
+        # missing knowledge requirement, and must not block every large module.
+        rows.append({**c,'passed':set(c['required_units'])<=delivered and (not course or satisfied),
+                     'required_content_satisfied':satisfied,
+                     'delivered_ids':sorted(delivered),'missing_required':view.get('missing_required',[]),'role_status':view.get('status'),'unknowns':pack.get('unknowns',[])})
     value={'program':p['id'],'revision':revision,'cases':rows,'status':'passed' if all(r['passed'] for r in rows) else 'failed',
            'meaning':'Actual context retrieval contract check, not answer semantic accuracy or blind QA','created':now()}
     value['id']=identity('use-check',value)

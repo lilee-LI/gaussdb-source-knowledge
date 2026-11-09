@@ -1,6 +1,6 @@
 # GaussDB 源码知识工程设计 2.2
 
-本文保留2.2阶段的设计与历史部署说明。2.3.1实际入口及验证见[使用说明](../CLAUDE-START.md)与[验证报告](VALIDATION-2.3.1.md)；四输入、功能课程、子Agent并行与Agent前置知识的最新[改造提案](plans/module-feature-learning-redesign-20261108.md)尚待实现。早期[架构候选](ARCHITECTURE.md)及本文的边界均需结合各自日期阅读，不能当成最新实现；CodeWiki候选能力不自动算作本仓已有能力。
+本文保留2.2阶段的设计与历史部署说明。当前2.4实际实现见[2.4技术设计](DESIGN-2.4.md)、[验证报告](VALIDATION-2.4.md)和[使用说明](../CLAUDE-START.md)。[调研设计](plans/module-feature-learning-redesign-20261108.md)保留2.3.1审计基线；四输入、功能课程、原生子Agent及四角色内容合同已接入2.4。早期[架构候选](ARCHITECTURE.md)及本文需结合日期阅读，CodeWiki候选能力不自动算作本仓已有能力。
 
 ## 使用目标与部署边界
 

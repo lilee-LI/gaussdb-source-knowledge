@@ -1,0 +1,113 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/geqo/geqo_main.cpp:200-311</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/geqo/geqo_main.cpp:200-311</h1><small>openGauss · ed99bbde5308942d4eb062e7a851bdb85dda902f · declared-build · 完整引用区间</small><pre>    }
+
+#if defined(ERX) &amp;&amp; defined(GEQO_DEBUG)
+    if (edge_failures != 0)
+        elog(LOG, &quot;[GEQO] failures: %d, average: %d&quot;, edge_failures, number_generations / edge_failures);
+    else
+        elog(LOG, &quot;[GEQO] no edge failures detected&quot;);
+#endif
+
+#if defined(CX) &amp;&amp; defined(GEQO_DEBUG)
+    if (mutations != 0)
+        elog(LOG, &quot;[GEQO] mutations: %d, generations: %d&quot;, mutations, number_generations);
+    else
+        elog(LOG, &quot;[GEQO] no mutations processed&quot;);
+#endif
+
+#ifdef GEQO_DEBUG
+    print_pool(stdout, pool, 0, pool_size - 1);
+#endif
+
+#ifdef GEQO_DEBUG
+    elog(DEBUG1, &quot;GEQO best is %.2f after %d generations&quot;, pool-&gt;data[0].worth, number_generations);
+#endif
+
+    /*
+     * got the cheapest query tree processed by geqo; first element of the
+     * population indicates the best query tree
+     */
+    best_tour = (Gene*)pool-&gt;data[0].string;
+
+    best_rel = gimme_tree(root, best_tour, pool-&gt;string_length);
+
+    /* DBG: show the query plan */
+#ifdef NOT_USED
+    print_plan(best_plan, root);
+#endif
+
+    /* ... free memory stuff */
+    free_chromo(root, momma);
+    free_chromo(root, daddy);
+
+#if defined(ERX)
+    free_edge_table(root, edge_table);
+#elif defined(PMX)
+    free_chromo(root, kid);
+#elif defined(CX)
+    free_chromo(root, kid);
+    free_city_table(root, city_table);
+#elif defined(PX)
+    free_chromo(root, kid);
+    free_city_table(root, city_table);
+#elif defined(OX1)
+    free_chromo(root, kid);
+    free_city_table(root, city_table);
+#elif defined(OX2)
+    free_chromo(root, kid);
+    free_city_table(root, city_table);
+#endif
+
+    free_pool(root, pool);
+
+    /* ... clear root pointer to our private storage */
+    root-&gt;join_search_private = NULL;
+
+    return best_rel;
+}
+
+/*
+ * Return either configured pool size or a good default
+ *
+ * The default is based on query size (no. of relations) = 2^(QS+1),
+ * but constrained to a range based on the effort value.
+ */
+static int gimme_pool_size(int nr_rel)
+{
+    double size;
+    int minsize;
+    int maxsize;
+
+    /* Legal pool size *must* be at least 2, so ignore attempt to select 1 */
+    if (u_sess-&gt;attr.attr_sql.Geqo_pool_size &gt;= 2)
+        return u_sess-&gt;attr.attr_sql.Geqo_pool_size;
+
+    size = pow(2.0, nr_rel + 1.0);
+
+    maxsize = 50 * u_sess-&gt;attr.attr_sql.Geqo_effort; /* 50 to 500 individuals */
+    if (size &gt; maxsize) {
+        return maxsize;
+    }
+
+    minsize = 10 * u_sess-&gt;attr.attr_sql.Geqo_effort; /* 10 to 100 individuals */
+    if (size &lt; minsize) {
+        return minsize;
+    }
+
+    return (int)ceil(size);
+}
+
+/*
+ * Return either configured number of generations or a good default
+ *
+ * The default is the same as the pool size, which allows us to be
+ * sure that less-fit individuals get pushed out of the breeding
+ * population before the run finishes.
+ */
+static int gimme_number_generations(int pool_size)
+{
+    if (u_sess-&gt;attr.attr_sql.Geqo_generations &gt; 0)
+        return u_sess-&gt;attr.attr_sql.Geqo_generations;
+
+    return pool_size;
+}
+</pre><p>evidence:9cf894263271474a263bede8d2bb47cd</p><p>SHA-256 9bc1e4a63a555eee047fd172942c078520ee7253659bba53faebc22814c140e1</p></main></html>

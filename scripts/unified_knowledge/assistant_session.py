@@ -42,16 +42,32 @@ def payload(args):
 
 def initialize(args):
     sid=session_id(args.session or uuid.uuid4().hex)
+    if args.workspace_home and not args.paths and not args.source:
+        home=Path(args.workspace_home).expanduser().resolve()
+        require((home/'knowledge.sqlite3').is_file(),'Open a worker kit before binding --home')
+        with Store(home) as store:
+            plan=study.current(store);ticket=store.get_meta('work_kit')
+            order=store.get_meta('local-order:'+str(ticket),{})
+            worker=args.worker or order.get('ticket',{}).get('worker') or 'claude-'+sid[:20]
+            file=handle_file(home,sid);old=read_json(file) if file.is_file() else None
+            require(not old or old['worker']==worker and old['snapshot']==plan['snapshot'],'Session worker/snapshot changed')
+            _save(file,old or {'schema':'current-assistant-session/v1','session':sid,'worker':worker,'snapshot':plan['snapshot'],'paths':None,'active':None})
+            from . import curriculum
+            return {'session':sid,'worker':worker,'home':str(home),'worker_scope':plan.get('worker_scope'),
+                    'curriculum':curriculum.listing(store) if curriculum.current(store) else None,
+                    'execution':'current_assistant_session','nested_model_process':False}
     if args.paths:
-        require(not any((args.source,args.manual,args.home,args.index_db)),'Use --paths or individual material paths')
+        require(not any((args.source,args.manual,args.home,args.workspace_home,args.index_db,args.features,args.compile_db,args.design)),'Use --paths or individual material paths')
         path=Path(args.paths).expanduser().resolve();spec=project.settings(path)
     else:
         require(args.source,'Provide --source and optional --manual, or --paths')
         source=Path(args.source).expanduser().resolve()
         manual=Path(args.manual).expanduser().resolve() if args.manual else None
-        home=Path(args.home).expanduser().resolve() if args.home else Path.home()/'gaussdb-knowledge'/digest([str(source),str(manual)])[:12]
+        home=Path(args.home or args.workspace_home).expanduser().resolve() if (args.home or args.workspace_home) else Path.home()/'gaussdb-knowledge'/digest([str(source),str(manual)])[:12]
         spec={'product':args.product,'product_adapter':args.adapter,'source':str(source),'home':str(home)}
         if manual:spec['manual']=str(manual)
+        for key in ('features','compile_db','design'):
+            if getattr(args,key,None):spec[key]=str(Path(getattr(args,key)).expanduser().resolve())
         if args.index_db:spec.update(index_db=str(Path(args.index_db).expanduser().resolve()),graph_storage='reference')
         path=home/'assistant-paths.json'
         # Preflight before creating files, including overlap/graph compatibility.
@@ -66,8 +82,9 @@ def initialize(args):
     value=old or {'schema':'current-assistant-session/v1','session':sid,'worker':worker,'snapshot':result['source_snapshot'],'paths':str(path),'active':None}
     _save(file,value)
     return {'session':sid,'worker':worker,'paths':str(path),'home':spec['home'],'mode':result['mode'],
-            'plan':result['whole_plan'],'execution':'current_assistant_session','nested_model_process':False,
-            'next':'Use modules, then next --module <exact module ID>. Keep this session and paths in subsequent calls.'}
+            'plan':result.get('curriculum',result['whole_plan']),'input_summary':result.get('input_summary'),
+            'execution':'current_assistant_session','nested_model_process':False,
+            'next':'Read plan/modules, select modules for batch (native host subagents) or next (serial); no nested model process. Keep session and paths/home.'}
 
 
 def _handle(store,args,required=True):
@@ -130,11 +147,42 @@ def next_task(store,args):
 
 def execute(args):
     if args.action=='init':return initialize(args)
-    require(args.paths,'Use --paths returned by init')
-    spec=project.settings(Path(args.paths));home=Path(spec['home'])
+    require(bool(args.paths)!=bool(args.workspace_home),'Use --paths returned by init, or --home of an opened member workspace')
+    spec=project.settings(Path(args.paths)) if args.paths else {'home':str(Path(args.workspace_home).expanduser().resolve())}
+    home=Path(spec['home'])
     require((home/'knowledge.sqlite3').is_file(),'Initialize the workspace first')
     with Store(home) as store:
         plan=study.current(store)
+        if args.action in {'batch','batch-next','batch-status','batch-close','batch-attach'}:
+            from . import dispatch
+            _,h=_handle(store,args,False)
+            if args.action=='batch':return dispatch.begin(store,h['session'],str(args.paths) if args.paths else None,args.module,args.parallel,not args.no_dependencies)
+            batch=store.get_meta('dispatch:'+args.batch)
+            require(batch and batch['parent_session']==h['session'],'Batch belongs to a different parent session')
+            if args.action=='batch-next':return dispatch.next_batch(store,args.batch)
+            if args.action=='batch-status':return dispatch.status(store,args.batch)
+            if args.action=='batch-close':return dispatch.close(store,args.batch,args.release)
+            return dispatch.attach_agent(store,args.batch,args.child_session,args.agent_id)
+        if args.action in {'curriculum','features','implementations','curriculum-refine','inputs','compile-contexts','graph-job'}:
+            from . import curriculum,implementation
+            if args.action=='curriculum':return curriculum.listing(store,args.module,args.offset,args.limit)
+            if args.action=='features':
+                require(args.offset>=0 and 1<=args.limit<=200,'Read 1..200 feature rows per page')
+                rows=curriculum.feature_status(store,args.module)
+                return {'total':len(rows),'items':rows[args.offset:args.offset+args.limit],'next_offset':args.offset+args.limit if args.offset+args.limit<len(rows) else None}
+            if args.action=='implementations':return implementation.listing(store,args.module,args.asset,args.offset,args.limit)
+            if args.action=='compile-contexts':
+                from .inputs import contexts
+                return contexts(store,args.module,args.asset,args.offset,args.limit)
+            if args.action=='inputs':
+                m=store.get_meta('learning_inputs',{})
+                return {k:m.get(k) for k in ('schema','digest','inputs','summary','issues','capabilities','manifest_path')}
+            if args.action=='graph-job':
+                from .graph_job import prepare
+                return prepare(store,spec)
+            _,h=_handle(store,args,False);value=payload(args)
+            require(isinstance(value,dict),'Curriculum refinement must be an object')
+            return curriculum.refine(store,args.module,value.get('packages'),h['worker'],value.get('expected_revision'))
         if args.action=='materials':
             require(args.offset>=0 and 1<=args.limit<=200,'Read 1..200 material entries per page')
             where="snapshot=? AND kind=? AND instr(lower(key),lower(?))>0"
@@ -153,7 +201,10 @@ def execute(args):
                 row=store.db.execute('SELECT status FROM tasks WHERE id=?',(info['task'],)).fetchone()
                 rows.append({'module':name,'assets':len(info['files']),'survey_task':info['task'],'status':row[0]})
             return {'total':len(rows),'items':rows[args.offset:args.offset+args.limit],'next_offset':args.offset+args.limit if args.offset+args.limit<len(rows) else None}
-        if args.action=='plan':return whole.export(store)
+        if args.action=='plan':
+            from . import curriculum
+            baseline=whole.export(store);course=curriculum.export(store) if curriculum.current(store) else {}
+            return {**baseline,**course,'curriculum':course,'whole':baseline}
         if args.action=='next':return next_task(store,args)
         if args.action=='status':
             _,h=_handle(store,args,False)
@@ -178,9 +229,14 @@ def execute(args):
         if args.action=='advance':return whole.advance(store,args.limit)
         if args.action=='ask':
             from .retrieval import get_context
-            return get_context(store,{'task':args.role,'query':args.question,'source_snapshot':plan['snapshot'],'build_profile':plan['profile'],'index_run':plan['run'],'token_budget':args.budget})
+            return get_context(store,{k:v for k,v in {'task':args.role,'query':args.question,'module':args.module,'feature':args.feature,'mainline':args.mainline,
+                                     'source_snapshot':plan['snapshot'],'build_profile':plan['profile'],'index_run':plan['run'],'token_budget':args.budget}.items() if v is not None})
+        if args.action=='verify-uses':return whole.verify_uses(store,payload(args))
         path,h,credentials=_credentials(store,args)
         if args.action=='context':return _context(store,credentials['task'])
+        if args.action=='read-plan':
+            from .context_builder import build
+            return build(store,planner.task_status(store,credentials['task']),max_chars=args.budget,offset=args.offset,limit=args.limit)
         if args.action=='assets':
             module=planner.task_status(store,credentials['task'])['bundle'].get('module')
             require(module,'This is a repository scope task; use its selected_files in context')
@@ -199,6 +255,7 @@ def execute(args):
             return service.invoke(store,'query_graph',{'run':plan['run'],'targets':args.target,'direction':'both','depth':1,'limit':args.limit,'kinds':['CALLS']})
         if args.action=='unit':
             unit=payload(args)
+            require(isinstance(unit,dict),'Submit one unit object per call, not an array')
             if _context(store,credentials['task'])['capabilities']['source_only']:
                 require(not unit.get('symbol_refs') and unit.get('kind')!='contract' and not any(s.get('kind')=='call' for s in unit.get('steps',[])),
                         'Source-only evidence has no compiler symbol IDs; use source-backed claims/mechanisms or data/state stages, and retain contract/call validation as gaps')
@@ -222,11 +279,23 @@ def execute(args):
 
 def parser():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--paths',type=Path);p.add_argument('--session',default=os.environ.get('CLAUDE_SESSION_ID'))
+    p.add_argument('--paths',type=Path);p.add_argument('--home',dest='workspace_home',type=Path);p.add_argument('--session',default=os.environ.get('CLAUDE_SESSION_ID'))
     sub=p.add_subparsers(dest='action',required=True)
     a=sub.add_parser('init');a.add_argument('--source',type=Path);a.add_argument('--manual',type=Path);a.add_argument('--home',type=Path)
+    a.add_argument('--features',type=Path);a.add_argument('--compile-db',type=Path);a.add_argument('--design',type=Path)
     a.add_argument('--index-db',type=Path);a.add_argument('--product',default='GaussDB');a.add_argument('--adapter',default='gaussdb')
     a.add_argument('--worker');a.add_argument('--refresh',action='store_true')
+    a=sub.add_parser('batch');a.add_argument('--module',action='append',required=True);a.add_argument('--parallel',type=int,default=3);a.add_argument('--no-dependencies',action='store_true')
+    for name in ('batch-next','batch-status','batch-close','batch-attach'):
+        a=sub.add_parser(name);a.add_argument('--batch',required=True)
+        if name=='batch-close':a.add_argument('--release',action='store_true')
+        if name=='batch-attach':a.add_argument('--child-session',required=True);a.add_argument('--agent-id',required=True)
+    for name in ('curriculum','features','implementations','compile-contexts'):
+        a=sub.add_parser(name);a.add_argument('--module');a.add_argument('--offset',type=int,default=0);a.add_argument('--limit',type=int,default=30)
+        if name in {'implementations','compile-contexts'}:a.add_argument('--asset')
+    for name in ('inputs','graph-job'):sub.add_parser(name)
+    a=sub.add_parser('read-plan');a.add_argument('--budget',type=int,default=32768);a.add_argument('--offset',type=int,default=0);a.add_argument('--limit',type=int,default=20)
+    a=sub.add_parser('curriculum-refine');a.add_argument('--module',required=True);a.add_argument('--input',required=True,type=Path)
     a=sub.add_parser('materials');a.add_argument('--kind',choices=['document','source','method'],default='document')
     a.add_argument('--query');a.add_argument('--offset',type=int,default=0);a.add_argument('--limit',type=int,default=30)
     for name in ('modules','assets','candidates','drafts','advance'):
@@ -239,7 +308,7 @@ def parser():
     a=sub.add_parser('read');a.add_argument('--asset',required=True);a.add_argument('--start',type=int,default=1);a.add_argument('--lines',type=int,default=200)
     a=sub.add_parser('search');a.add_argument('--query',required=True);a.add_argument('--asset',action='append');a.add_argument('--limit',type=int,default=30)
     a.add_argument('--offset',type=int,default=0);a.add_argument('--line-offset',type=int,default=0)
-    for name in ('unit','progress','submit','checkpoint'):
+    for name in ('unit','progress','submit','checkpoint','verify-uses'):
         a=sub.add_parser(name);source=a.add_mutually_exclusive_group(required=True);source.add_argument('--input',type=Path);source.add_argument('--stdin',action='store_true')
         if name=='unit':a.add_argument('--previous-hash')
         if name=='progress':a.add_argument('--previous-digest')
@@ -248,6 +317,7 @@ def parser():
         if name=='symbols':a.add_argument('--query',required=True)
         else:a.add_argument('--target',action='append',required=True)
     a=sub.add_parser('ask');a.add_argument('--role',choices=['coding','test_generation','review','operations'],default='coding');a.add_argument('--question',required=True);a.add_argument('--budget',type=int,default=32768)
+    a.add_argument('--module');a.add_argument('--feature');a.add_argument('--mainline')
     a=sub.add_parser('review');a.add_argument('--task');decision=a.add_mutually_exclusive_group();decision.add_argument('--accept');decision.add_argument('--reject')
     a.add_argument('--notes');a.add_argument('--self-review',action='store_true')
     return p

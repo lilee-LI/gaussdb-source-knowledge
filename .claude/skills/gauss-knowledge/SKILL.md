@@ -1,6 +1,6 @@
 ---
 name: gauss-knowledge
-description: 在当前 Claude Code 会话中规划、学习、续学 GaussDB/openGauss 源码与手册，保存证据、知识、Wiki 并查询开发/测试/review 上下文。使用当前会话执行，不由工程再启动 Claude。
+description: 在当前 Claude Code 会话中接入源码、手册、历史特性和编译数据库，规划模块功能课程，使用原生子 Agent 并行续学、审阅，输出 SQLite/Wiki 及开发、测试、review、运维知识，不另起 Claude。
 argument-hint: "源码=<路径> 手册=<路径> 工作区=<路径>；或：计划 / 学习 <模块> / 继续 / 审阅 <任务> / 查询 <问题>"
 user-invocable: true
 ---

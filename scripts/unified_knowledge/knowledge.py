@@ -318,7 +318,7 @@ def review(store, proposal_id, decision):
                 anchor = store.record("anchors", ref)
                 dep = {"type": "asset", "ref": anchor["asset"]}
                 dependencies[("asset", dep["ref"])] = dep
-            symbols = unit.get("symbol_refs", []) + unit.get("producers", []) + unit.get("consumers", [])
+            symbols = [ref for _,_,ref in symbol_links(unit)]
             for ref in symbols:
                 dep = symbol_dependency(store, proposal["run"], ref)
                 dependencies[("symbol", dep["ref"])] = {"type": "symbol", "ref": dep["ref"]}
@@ -372,10 +372,9 @@ def review(store, proposal_id, decision):
             for anchor in unit.get("source_refs", []):
                 store.db.execute("INSERT INTO alignments VALUES(?,?,?,?,?)",
                                  (revision_id, uid, None, anchor, canonical({"kind": "CITES", "content_hash": unit["content_hash"]})))
-            for field, relation in (("symbol_refs", "IMPLEMENTS"), ("producers", "PRODUCES"), ("consumers", "CONSUMES")):
-                for symbol in unit.get(field, []):
-                    store.db.execute("INSERT INTO alignments VALUES(?,?,?,?,?)",
-                                     (revision_id, uid, symbol, None, canonical({"kind": relation, "content_hash": unit["content_hash"]})))
+            for _,relation,symbol in symbol_links(unit):
+                store.db.execute("INSERT INTO alignments VALUES(?,?,?,?,?)",
+                                 (revision_id, uid, symbol, None, canonical({"kind": relation, "content_hash": unit["content_hash"]})))
         store.db.execute("UPDATE proposals SET status='accepted' WHERE id=?", (proposal_id,))
         store.set_meta("knowledge_head", revision_id)
         store.set_meta("git_head", commit)
@@ -390,6 +389,14 @@ def review(store, proposal_id, decision):
     return revision
 
 
+def symbol_links(unit):
+    """Typed compiler bindings; prose consumer labels are source facts only."""
+    for field,relation in (('symbol_refs','IMPLEMENTS'),('producers','PRODUCES'),('consumers','CONSUMES')):
+        for ref in unit.get(field,[]):
+            if field=='symbol_refs' or unit['kind']=='contract' or isinstance(ref,str) and ref.startswith(('symbol-instance:','symbol:','syntax:')):
+                yield field,relation,ref
+
+
 def knowledge_graph(store, revision=None):
     units = store.units(revision)
     edges = [{"source": uid, "target": link["target"], "kind": link["relation"]}
@@ -401,10 +408,9 @@ def knowledge_graph(store, revision=None):
                                        "title": unit["title"], "symbol_refs": unit.get("symbol_refs", [])})
     links = []
     for uid, unit in units.items():
-        for field, kind in (("producers", "PRODUCES"), ("consumers", "CONSUMES"), ("symbol_refs", "IMPLEMENTS")):
-            links.extend({"knowledge": uid, "symbol": symbol, "kind": kind,
-                          "source_binding": {k: unit["_binding"][k] for k in ("snapshot", "run", "profile")}}
-                         for symbol in unit.get(field, []))
+        for _,kind,symbol in symbol_links(unit):
+            links.append({"knowledge": uid, "symbol": symbol, "kind": kind,
+                          "source_binding": {k: unit["_binding"][k] for k in ("snapshot", "run", "profile")}})
     return {"revision": revision or store.get_meta("knowledge_head"), "source_links": links,
             "nodes": [{"id": k, "kind": u["kind"], "title": u["title"]} for k, u in units.items()],
             "relations": edges, "trees": trees}

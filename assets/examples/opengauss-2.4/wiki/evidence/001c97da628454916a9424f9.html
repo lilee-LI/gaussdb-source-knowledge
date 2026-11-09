@@ -1,0 +1,97 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/geqo/geqo_eval.cpp:201-296</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/geqo/geqo_eval.cpp:201-296</h1><small>openGauss · ed99bbde5308942d4eb062e7a851bdb85dda902f · declared-build · 完整引用区间</small><pre>/*
+ * Merge a &quot;clump&quot; into the list of existing clumps for gimme_tree.
+ *
+ * We try to merge the clump into some existing clump, and repeat if
+ * successful.	When no more merging is possible, insert the clump
+ * into the list, preserving the list ordering rule (namely, that
+ * clumps of larger size appear earlier).
+ *
+ * If force is true, merge anywhere a join is legal, even if it causes
+ * a cartesian join to be performed.  When force is false, do only
+ * &quot;desirable&quot; joins.
+ */
+static List* merge_clump(PlannerInfo* root, List* clumps, Clump* new_clump, bool force)
+{
+    ListCell* prev = NULL;
+    ListCell* lc = NULL;
+
+    /* Look for a clump that new_clump can join to */
+    foreach (lc, clumps) {
+        Clump* old_clump = (Clump*)lfirst(lc);
+
+        if (force || desirable_join(root, old_clump-&gt;joinrel, new_clump-&gt;joinrel)) {
+            RelOptInfo* joinrel = NULL;
+
+            /*
+             * Construct a RelOptInfo representing the join of these two input
+             * relations.  Note that we expect the joinrel not to exist in
+             * root-&gt;join_rel_list yet, and so the paths constructed for it
+             * will only include the ones we want.
+             */
+            joinrel = make_join_rel(root, old_clump-&gt;joinrel, new_clump-&gt;joinrel);
+            /* Keep searching if join order is not valid */
+            if (joinrel != NULL) {
+                /* Find and save the cheapest paths for this joinrel */
+                set_cheapest(joinrel);
+
+                /* Absorb new clump into old */
+                old_clump-&gt;joinrel = joinrel;
+                old_clump-&gt;size += new_clump-&gt;size;
+                pfree_ext(new_clump);
+
+                /* Remove old_clump from list */
+                clumps = list_delete_cell(clumps, lc, prev);
+
+                /*
+                 * Recursively try to merge the enlarged old_clump with
+                 * others.	When no further merge is possible, we&#x27;ll reinsert
+                 * it into the list.
+                 */
+                return merge_clump(root, clumps, old_clump, force);
+            }
+        }
+        prev = lc;
+    }
+
+    /*
+     * No merging is possible, so add new_clump as an independent clump, in
+     * proper order according to size.	We can be fast for the common case
+     * where it has size 1 --- it should always go at the end.
+     */
+    if (clumps == NIL || new_clump-&gt;size == 1)
+        return lappend(clumps, new_clump);
+
+    /* Check if it belongs at the front */
+    lc = list_head(clumps);
+    if (new_clump-&gt;size &gt; ((Clump*)lfirst(lc))-&gt;size)
+        return lcons(new_clump, clumps);
+
+    /* Else search for the place to insert it */
+    for (;;) {
+        ListCell* nxt = lnext(lc);
+
+        if (nxt == NULL || new_clump-&gt;size &gt; ((Clump*)lfirst(nxt))-&gt;size)
+            break; /* it belongs after &#x27;lc&#x27;, before &#x27;nxt&#x27; */
+        lc = nxt;
+    }
+    (void)lappend_cell(clumps, lc, new_clump);
+
+    return clumps;
+}
+
+/*
+ * Heuristics for gimme_tree: do we want to join these two relations?
+ */
+static bool desirable_join(PlannerInfo* root, RelOptInfo* outer_rel, RelOptInfo* inner_rel)
+{
+    /*
+     * Join if there is an applicable join clause, or if there is a join order
+     * restriction forcing these rels to be joined.
+     */
+    if (have_relevant_joinclause(root, outer_rel, inner_rel) || have_join_order_restriction(root, outer_rel, inner_rel))
+        return true;
+
+    /* Otherwise postpone the join till later. */
+    return false;
+}
+</pre><p>evidence:1740e2ef344ce91c654e1738ef7c70d4</p><p>SHA-256 97bccb4c3ea9cce17818e600a1ba8d0212798d3b7f386f9740949d0694042350</p></main></html>

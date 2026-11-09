@@ -15,3 +15,5 @@
 .env*
 *.pem
 *.key
+# Retained local prototype export; released examples use plan-current/.
+/assets/examples/opengauss-2.4/plan-initial/

@@ -12,14 +12,42 @@ import zipfile
 
 from .graph_mount import readonly_uri
 from .planner import create_task
-from .store import Store, atomic_write, canonical, digest, identity, require
+from .store import Store, atomic_write, canonical, digest, identity, now, require
 from .study import current, guide
-from .team import _signed, assignment_key, open_order
+from .team import _signed, apply_learning_projection, assignment_key, learning_projection, open_order
 
 
 def file_hash(path):
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def _reviewed_context(hub, plan, module, learning):
+    """Exact published references needed by module obligations/prerequisites."""
+    from . import whole
+    program = whole.current(hub, False)
+    if not program:return {}, set()
+    pending = {uid for row in (learning or {}).get('implementation_dispositions', []) for uid in json.loads(row['data']).get('unit_ids', [])}
+    dependencies = set()
+    for row in hub.db.execute("SELECT DISTINCT d.id,d.status,d.result FROM tasks t JOIN task_edges e ON e.task=t.id "
+        "JOIN tasks d ON d.id=e.dependency WHERE t.snapshot=? AND json_extract(t.data,'$.bundle.plan_id')=? "
+        "AND json_extract(t.data,'$.bundle.module')=?", (plan['snapshot'], plan['id'], module)):
+        dependencies.add(row['id'])
+        if row['status'] == 'accepted' and row['result']:
+            pending.update(u['id'] for u in json.loads(row['result']).get('claims', []))
+    for row in hub.db.execute("SELECT data FROM tasks WHERE snapshot=? AND json_extract(data,'$.bundle.plan_id')=? "
+        "AND json_extract(data,'$.bundle.module')=?", (plan['snapshot'], plan['id'], module)):
+        pending.update(json.loads(row[0])['bundle'].get('requires_knowledge', []))
+    found = {}
+    while pending:
+        units = hub.units(ids=sorted(pending)); found.update(units); pending = set()
+        require(len(found) <= 1000, 'Split the module before carrying more than 1000 prerequisite references')
+        for unit in units.values():
+            ids = {r['target'] for r in unit.get('knowledge_refs', [])}
+            if unit.get('parent'):ids.add(unit['parent'])
+            if unit.get('expected_from', {}).get('kind') not in (None, 'source_prediction'):ids.add(unit['expected_from']['ref'])
+            pending.update(ids - set(found))
+    return found, dependencies
 
 
 def make_shard(hub, shard, plan, ticket, additions):
@@ -36,6 +64,8 @@ def make_shard(hub, shard, plan, ticket, additions):
     require(not plan.get("worker_scope") and (source_run.get("mode") in {'ecs','inventory','source_only'} or native),
             "Export a worker kit from the coordinator's inventory or completed index")
     sid = plan["snapshot"]
+    learning = learning_projection(hub, plan, module)
+    references, prerequisites = _reviewed_context(hub, plan, module, learning)
     kit_run = identity("ecs-module", [source_run["id"], module, sorted(additions), ticket["id"]])
     db = shard.db
     db.execute("ATTACH DATABASE ? AS hub", ((hub.home / "knowledge.sqlite3").as_uri() + "?mode=ro",))
@@ -101,6 +131,9 @@ def make_shard(hub, shard, plan, ticket, additions):
                     db.execute("INSERT OR IGNORE INTO owned VALUES(?)", (row[0],))
             for reference in ticket["references"].values():
                 db.executemany("INSERT OR IGNORE INTO owned VALUES(?)", ((c["asset"],) for c in reference["citations"]))
+            for unit in references.values():
+                db.executemany('INSERT OR IGNORE INTO owned VALUES(?)',
+                    ((hub.record('anchors',ref)['asset'],) for ref in unit.get('source_refs',[])))
             for r in hub.db.execute("SELECT data FROM tasks WHERE snapshot=? AND json_extract(data,'$.bundle.plan_id')=? AND json_extract(data,'$.bundle.module')=?",(sid,plan['id'],module)):
                 b=json.loads(r[0])['bundle']
                 extra=set(b.get('selected_files',[]))
@@ -161,13 +194,14 @@ def make_shard(hub, shard, plan, ticket, additions):
                             db.execute('INSERT OR IGNORE INTO tasks SELECT * FROM hub.tasks WHERE id=?',(dep_id,))
                             mapping[dep_id]=dep_id
                         db.execute('INSERT OR IGNORE INTO task_edges VALUES(?,?)',(mapping[original['id']],mapping[dep_id]))
-                wp={**program,'worker_scope':module,'templates':[{**t,'task':mapping.get(t['task'],t['task'])} for t in program['templates'] if t['module']==module]}
+                wp={**program,'worker_scope':module,'modules':{module:{**program['modules'][module],'task':local_task}},
+                    'assets':len(info['files']),'templates':[{**t,'task':mapping.get(t['task'],t['task'])} for t in program['templates'] if t['module']==module]}
                 db.execute('INSERT INTO learning_programs VALUES(?,?,?,?,?)',(wp['id'],plan['id'],sid,run['profile'],canonical(wp)))
                 db.execute('INSERT INTO learning_assets SELECT * FROM hub.learning_assets WHERE program=? AND module=?',(wp['id'],module))
                 report_ids=[]
                 for record in hub.db.execute('SELECT * FROM learning_reports WHERE program=?',(wp['id'],)):
                     data=json.loads(record['data'])
-                    if data['module']!=module:continue
+                    if data['module']!=module and data['task'] not in prerequisites:continue
                     report_ids.append(record['id']);data['task']=mapping.get(data['task'],data['task'])
                     db.execute('INSERT INTO learning_reports VALUES(?,?,?,?,?)',(record['id'],wp['id'],data['task'],record['result_digest'],canonical(data)))
                 for rid in report_ids:
@@ -192,6 +226,14 @@ def make_shard(hub, shard, plan, ticket, additions):
             shard.set_meta("index_head:" + sid + ":" + run["profile"],kit_run)
             shard.set_meta(assignment_key(plan["id"],module), {"id":ticket["id"],"ticket":ticket,"worker":ticket["worker"]})
             shard.set_meta("work_kit",ticket["id"])
+            if program:
+                apply_learning_projection(shard,learning,view,module,mapping)
+                from .knowledge import content_hash
+                from .whole import _applicable
+                shard.set_meta('synced-references:'+ticket['id'],{
+                    'units':references,'epoch':None,'revision':hub.get_meta('knowledge_head'),'created':now(),
+                    'source_index':plan.get('source_index'),
+                    'applicable_hashes':{uid:content_hash(unit) for uid,unit in references.items() if _applicable(hub,unit,program)}})
     finally:
         if linked:
             db.execute("DETACH DATABASE graph_input")

@@ -1,0 +1,86 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>server/src/gausskernel/optimizer/geqo/geqo_eval.cpp:40-124</title><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#172637}a{color:#135b89}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f7;padding:1rem}small{color:#465a69}</style><main><h1>server/src/gausskernel/optimizer/geqo/geqo_eval.cpp:40-124</h1><small>openGauss · ed99bbde5308942d4eb062e7a851bdb85dda902f · declared-build · 完整引用区间</small><pre>
+static List* merge_clump(PlannerInfo* root, List* clumps, Clump* new_clump, bool force);
+static bool desirable_join(PlannerInfo* root, RelOptInfo* outer_rel, RelOptInfo* inner_rel);
+
+/*
+ * geqo_eval
+ *
+ * Returns cost of a query tree as an individual of the population.
+ */
+Cost geqo_eval(PlannerInfo* root, Gene* tour, int num_gene)
+{
+    MemoryContext mycontext;
+    MemoryContext oldcxt;
+    RelOptInfo* joinrel = NULL;
+    Cost fitness;
+    int savelength;
+    struct HTAB* savehash;
+
+    /*
+     * Create a private memory context that will hold all temp storage
+     * allocated inside gimme_tree().
+     *
+     * Since geqo_eval() will be called many times, we can&#x27;t afford to let all
+     * that memory go unreclaimed until end of statement.  Note we make the
+     * temp context a child of the planner&#x27;s normal context, so that it will
+     * be freed even if we abort via ereport(ERROR).
+     */
+    mycontext = AllocSetContextCreate(
+        CurrentMemoryContext, &quot;GEQO&quot;, ALLOCSET_DEFAULT_MINSIZE, ALLOCSET_DEFAULT_INITSIZE, ALLOCSET_DEFAULT_MAXSIZE);
+    oldcxt = MemoryContextSwitchTo(mycontext);
+
+    /*
+     * gimme_tree will add entries to root-&gt;join_rel_list, which may or may
+     * not already contain some entries.  The newly added entries will be
+     * recycled by the MemoryContextDelete below, so we must ensure that the
+     * list is restored to its former state before exiting.  We can do this by
+     * truncating the list to its original length.	NOTE this assumes that any
+     * added entries are appended at the end!
+     *
+     * We also must take care not to mess up the outer join_rel_hash, if there
+     * is one.	We can do this by just temporarily setting the link to NULL.
+     * (If we are dealing with enough join rels, which we very likely are, a
+     * new hash table will get built and used locally.)
+     *
+     * join_rel_level[] shouldn&#x27;t be in use, so just Assert it isn&#x27;t.
+     */
+    savelength = list_length(root-&gt;join_rel_list);
+    savehash = root-&gt;join_rel_hash;
+    AssertEreport(root-&gt;join_rel_level == NULL, MOD_OPT, &quot;&quot;);
+
+    root-&gt;join_rel_hash = NULL;
+
+    /* construct the best path for the given combination of relations */
+    joinrel = gimme_tree(root, tour, num_gene);
+
+    /*
+     * compute fitness
+     *
+     * XXX geqo does not currently support optimization for partial result
+     * retrieval --- how to fix?
+     */
+    fitness = ((Path*)linitial(joinrel-&gt;cheapest_total_path))-&gt;total_cost;
+
+    /*
+     * Restore join_rel_list to its former state, and put back original
+     * hashtable if any.
+     */
+    root-&gt;join_rel_list = list_truncate(root-&gt;join_rel_list, savelength);
+    root-&gt;join_rel_hash = savehash;
+
+    /* release all the memory acquired within gimme_tree */
+    (void)MemoryContextSwitchTo(oldcxt);
+    MemoryContextDelete(mycontext);
+
+    return fitness;
+}
+
+/*
+ * gimme_tree
+ *	  Form planner estimates for a join tree constructed in the specified
+ *	  order.
+ *
+ *	 &#x27;tour&#x27; is the proposed join order, of length &#x27;num_gene&#x27;
+ *
+ * Returns a new join relation whose cheapest path is the best plan for
+</pre><p>evidence:de7316f3a1a399504f149e6157c6d518</p><p>SHA-256 dbf7f31f49490d66b489d44333e72badb5872ef2e9973a8bb20d35dd47b829d7</p></main></html>

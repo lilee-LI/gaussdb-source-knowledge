@@ -1,0 +1,202 @@
+{
+  "schema": "opengauss-source-learning-validation/v1",
+  "status": "feasible_for_migration_pilot",
+  "stopped_by_user_before_full_module_learning": true,
+  "module": "server/src/gausskernel/optimizer/geqo",
+  "knowledge_revision": "knowledge:9e4ee092006998e86d257dfc0032055f",
+  "published_units": 12,
+  "unit_kinds": {
+    "claim": 7,
+    "mechanism": 2,
+    "test_obligation": 3
+  },
+  "cpp": {
+    "enabled": true,
+    "cpp_files": 15,
+    "cpp_files_explained": 0,
+    "cpp_files_closed": 0,
+    "items": 19,
+    "states": {
+      "open": 15,
+      "explained_with_gaps": 4
+    },
+    "unclosed_items": 19,
+    "examples": [
+      {
+        "item": "implementation:aa29c4ca4e7e6299af05ee00eb20a650",
+        "asset": "server/src/gausskernel/optimizer/geqo/geqo_copy.cpp",
+        "state": "open"
+      },
+      {
+        "item": "implementation:d9dcb5f073e17c4c2179ee16168278c8",
+        "asset": "server/src/gausskernel/optimizer/geqo/geqo_cx.cpp",
+        "state": "open"
+      },
+      {
+        "item": "implementation:77c03a626e51fa6a504bfa48d4bfa5fb",
+        "asset": "server/src/gausskernel/optimizer/geqo/geqo_erx.cpp",
+        "state": "open"
+      },
+      {
+        "item": "implementation:c4b1d4ec410dd89bc3235e1e6ffe6b23",
+        "asset": "server/src/gausskernel/optimizer/geqo/geqo_erx.cpp",
+        "state": "open"
+      },
+      {
+        "item": "implementation:c22e0fe181efac5cf824a6d61893783f",
+        "asset": "server/src/gausskernel/optimizer/geqo/geqo_eval.cpp",
+        "state": "explained_with_gaps"
+      },
+      {
+        "item": "implementation:17675d9c0f4225abff819f2a23be447b",
+        "asset": "server/src/gausskernel/optimizer/geqo/geqo_eval.cpp",
+        "state": "explained_with_gaps"
+      },
+      {
+        "item": "implementation:9d6c299e082e3a9f4ef97bdc20cbcee6",
+        "asset": "server/src/gausskernel/optimizer/geqo/geqo_main.cpp",
+        "state": "explained_with_gaps"
+      },
+      {
+        "item": "implementation:cbc33a3c4c1a2868839bc41bc0640c62",
+        "asset": "server/src/gausskernel/optimizer/geqo/geqo_main.cpp",
+        "state": "explained_with_gaps"
+      },
+      {
+        "item": "implementation:ee8df9b54c565662b4a48b45664abaf9",
+        "asset": "server/src/gausskernel/optimizer/geqo/geqo_misc.cpp",
+        "state": "open"
+      },
+      {
+        "item": "implementation:0f999c8df6990e775b6548cdf044c807",
+        "asset": "server/src/gausskernel/optimizer/geqo/geqo_mutation.cpp",
+        "state": "open"
+      },
+      {
+        "item": "implementation:70e6cd497db042fe60511a908537257d",
+        "asset": "server/src/gausskernel/optimizer/geqo/geqo_ox1.cpp",
+        "state": "open"
+      },
+      {
+        "item": "implementation:be105fbe926ddee4e43c20d5e1b7af58",
+        "asset": "server/src/gausskernel/optimizer/geqo/geqo_ox2.cpp",
+        "state": "open"
+      },
+      {
+        "item": "implementation:38efab5a01c31288df51a6d35f4392d4",
+        "asset": "server/src/gausskernel/optimizer/geqo/geqo_pmx.cpp",
+        "state": "open"
+      },
+      {
+        "item": "implementation:4be636b0cf64bed3f398532824ca00cb",
+        "asset": "server/src/gausskernel/optimizer/geqo/geqo_pool.cpp",
+        "state": "open"
+      },
+      {
+        "item": "implementation:715c686f31ebb37b5780e094eedf0db5",
+        "asset": "server/src/gausskernel/optimizer/geqo/geqo_pool.cpp",
+        "state": "open"
+      },
+      {
+        "item": "implementation:faf37479b90cd5726ac1f23e2aea009d",
+        "asset": "server/src/gausskernel/optimizer/geqo/geqo_px.cpp",
+        "state": "open"
+      },
+      {
+        "item": "implementation:d3f9c9a16c0d054908ceaa090f0ac9bf",
+        "asset": "server/src/gausskernel/optimizer/geqo/geqo_random.cpp",
+        "state": "open"
+      },
+      {
+        "item": "implementation:b5aaded2d010bd8d81abbad644912aea",
+        "asset": "server/src/gausskernel/optimizer/geqo/geqo_recombination.cpp",
+        "state": "open"
+      },
+      {
+        "item": "implementation:7bfedceda32a1fd14e67f11e2516ed58",
+        "asset": "server/src/gausskernel/optimizer/geqo/geqo_selection.cpp",
+        "state": "open"
+      }
+    ],
+    "meaning": "evidence-backed region explanations; actual semantic review still required"
+  },
+  "roles": {
+    "coding": {
+      "status": "partial",
+      "missing_required": [],
+      "knowledge_ids": [
+        "claim:server/src/gausskernel/optimizer/geqo:build-targets-and-erx-source-default",
+        "claim:server/src/gausskernel/optimizer/geqo:crossover-macro-erx-unconditional",
+        "claim:server/src/gausskernel/optimizer/geqo:geqo-eval-child-context-and-fitness",
+        "claim:server/src/gausskernel/optimizer/geqo:geqo-planner-state-and-plancache-env",
+        "mechanism:server/src/gausskernel/optimizer/geqo:entry-guc-planner-plancache-contract",
+        "mechanism:server/src/gausskernel/optimizer/geqo:ga-main-loop-and-parameters",
+        "test_obligation:server/src/gausskernel/optimizer/geqo:entry-threshold-and-state-restore",
+        "test_obligation:server/src/gausskernel/optimizer/geqo:geqo-eval-restore-and-error-path-cases",
+        "test_obligation:server/src/gausskernel/optimizer/geqo:gimme-tree-clump-and-forced-join-cases"
+      ]
+    },
+    "test_generation": {
+      "status": "partial",
+      "missing_required": [],
+      "knowledge_ids": [
+        "claim:server/src/gausskernel/optimizer/geqo:build-targets-and-erx-source-default",
+        "claim:server/src/gausskernel/optimizer/geqo:crossover-macro-erx-unconditional",
+        "claim:server/src/gausskernel/optimizer/geqo:geqo-eval-child-context-and-fitness",
+        "claim:server/src/gausskernel/optimizer/geqo:geqo-planner-state-and-plancache-env",
+        "claim:server/src/gausskernel/optimizer/geqo:gimme-tree-clump-merge-and-forced-join",
+        "claim:server/src/gausskernel/optimizer/geqo:guc-registration-and-bounds",
+        "claim:server/src/gausskernel/optimizer/geqo:join-search-entry-selection",
+        "test_obligation:server/src/gausskernel/optimizer/geqo:entry-threshold-and-state-restore",
+        "test_obligation:server/src/gausskernel/optimizer/geqo:geqo-eval-restore-and-error-path-cases",
+        "test_obligation:server/src/gausskernel/optimizer/geqo:gimme-tree-clump-and-forced-join-cases"
+      ]
+    },
+    "review": {
+      "status": "partial",
+      "missing_required": [],
+      "knowledge_ids": [
+        "claim:server/src/gausskernel/optimizer/geqo:build-targets-and-erx-source-default",
+        "claim:server/src/gausskernel/optimizer/geqo:crossover-macro-erx-unconditional",
+        "claim:server/src/gausskernel/optimizer/geqo:geqo-eval-child-context-and-fitness",
+        "claim:server/src/gausskernel/optimizer/geqo:geqo-planner-state-and-plancache-env",
+        "mechanism:server/src/gausskernel/optimizer/geqo:entry-guc-planner-plancache-contract",
+        "mechanism:server/src/gausskernel/optimizer/geqo:ga-main-loop-and-parameters",
+        "test_obligation:server/src/gausskernel/optimizer/geqo:entry-threshold-and-state-restore",
+        "test_obligation:server/src/gausskernel/optimizer/geqo:geqo-eval-restore-and-error-path-cases",
+        "test_obligation:server/src/gausskernel/optimizer/geqo:gimme-tree-clump-and-forced-join-cases"
+      ]
+    },
+    "operations": {
+      "status": "partial",
+      "missing_required": [
+        "configuration"
+      ],
+      "knowledge_ids": [
+        "claim:server/src/gausskernel/optimizer/geqo:build-targets-and-erx-source-default",
+        "claim:server/src/gausskernel/optimizer/geqo:crossover-macro-erx-unconditional",
+        "claim:server/src/gausskernel/optimizer/geqo:geqo-eval-child-context-and-fitness",
+        "claim:server/src/gausskernel/optimizer/geqo:geqo-planner-state-and-plancache-env",
+        "mechanism:server/src/gausskernel/optimizer/geqo:entry-guc-planner-plancache-contract",
+        "mechanism:server/src/gausskernel/optimizer/geqo:ga-main-loop-and-parameters",
+        "test_obligation:server/src/gausskernel/optimizer/geqo:entry-threshold-and-state-restore",
+        "test_obligation:server/src/gausskernel/optimizer/geqo:geqo-eval-restore-and-error-path-cases",
+        "test_obligation:server/src/gausskernel/optimizer/geqo:gimme-tree-clump-and-forced-join-cases"
+      ]
+    }
+  },
+  "database_execution": "not_run",
+  "compiler_graph_in_this_run": false,
+  "human_expert_review": false,
+  "client": "Claude Code",
+  "model": "deepseek-v4.1-flash[1m]",
+  "review": "actual_native_child_and_parent_AI_contexts",
+  "whole_repo_completion": "not_claimed",
+  "module_completion": "not_claimed",
+  "reviewed_reports": 9,
+  "current_packages": 3668,
+  "task_states": {
+    "accepted": 9,
+    "queued": 1
+  }
+}

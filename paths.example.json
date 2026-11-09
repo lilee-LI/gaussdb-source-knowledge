@@ -2,9 +2,9 @@
   "product": "GaussDB",
   "product_adapter": "gaussdb",
   "source": "E:/GaussDB/source",
-  "design": "E:/corpus/design",
   "manual": "E:/corpus/manual",
-  "index_db": "E:/ecs-export/build-01/knowledge.sqlite3",
-  "home": "E:/gaussdb-learning",
-  "graph_storage": "reference"
+  "features": "E:/corpus/features.csv",
+  "compile_db": "E:/corpus/compile_commands.json",
+  "path_maps": [{"from": "/data/GaussDB", "to": "E:/GaussDB/source"}],
+  "home": "E:/knowledge/gaussdb"
 }

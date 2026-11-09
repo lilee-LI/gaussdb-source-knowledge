@@ -19,6 +19,11 @@ from .store import Store, canonical, require
 
 
 QUERY_TOOLS = {
+    "learning_curriculum": "Read bounded module/feature/mainline work packages, historical feature mappings or coverage summary. Graph nodes/TUs are never learning tasks.",
+    "learning_inputs": "Read input manifest summary, unmapped compile contexts and input issues; compile commands are declarations, not verified graph facts.",
+    "compile_contexts": "Page compiler/macro/include declarations by module or source file; no compiler execution or read receipts.",
+    "implementation_items": "Page physical C++ regions that need substantive source explanations; reading alone is not semantic completion.",
+    "task_read_plan": "Read a bounded read-only source/context plan and complete local SCC membership; creates no tasks or read receipts.",
     "reference_knowledge": "Read up to 24 exact reviewed knowledge/reference units by ID, including signed coordinator references in a member workspace.",
     "program_status": "Read the whole-repository program, per-module evidence coverage, or acceptance blockers. Inventory is not learned knowledge.",
     "module_assets": "Page the full assigned module asset ledger; includes files without feature leads and unreadable materials.",
@@ -38,6 +43,8 @@ QUERY_TOOLS = {
     "knowledge_delta": "Compare semantic content and source bindings across frozen knowledge revisions.",
 }
 WORK_TOOLS = {
+    "refine_curriculum": "Refine module work packages before execution using an exact curriculum revision; must preserve every owned asset obligation.",
+    "learning_batch": "Allocate/resume a bounded batch for the current host's native subagents. Does not launch model processes or accept knowledge; private handles retain tokens.",
     "read_research_drafts": "Read this active lease's unreviewed units and unit_hash values to resume or repair drafts; bounded pages, never accepts knowledge.",
     "search_source": "Search frozen module/extra materials for a literal, or explicit asset glob patterns; bounded to 200 files per page. Results are locations, not read receipts.",
     "read_source": "Read 1..400 lines of a frozen source/material with an actual task receipt; returns total_lines and next_line.",
@@ -79,7 +86,12 @@ def progress_schema():
                         ["unit","side","module","producer_module","consumer_module","reason","evidence_refs"]),
         "gaps":row({"question":text,"reason":text,"resolved_by":strings},["question","reason"]),
         "templates":row({"id":text,"state":{"type":"string","enum":["verified","not_applicable"]},"reason":text,
-                         "evidence_refs":strings,"unit_ids":strings},["id","state","reason","evidence_refs"])},"additionalProperties":False}
+                         "evidence_refs":strings,"unit_ids":strings},["id","state","reason","evidence_refs"]),
+        "implementations":row({"item":text,"state":{"type":"string","enum":["explained","open","no_implementation"]},"reason":text,
+                              "analysis":{"type":"object","properties":{k:text for k in ('behavior','conditions','state','consumers','cleanup','test_basis')}},
+                              "unit_ids":strings,"evidence_refs":strings,"unknowns":strings,"sha256":text},["item","state","reason"]),
+        "feature_mappings":row({"feature_id":text,"state":{"type":"string","enum":["mapped","ambiguous","not_located","out_of_scope"]},
+                               "modules":strings,"reason":text,"unit_ids":strings,"evidence_refs":strings},["feature_id","state","modules","reason","evidence_refs"])},"additionalProperties":False}
 
 
 def tools(role="query"):
@@ -93,8 +105,16 @@ def tools(role="query"):
         "token_budget": {"type": "integer", "minimum": 512, "maximum": 128000},
         "embedding_space": {"type": "string"}, "query_vector": {"type": "array", "items": {"type": "number"}},
         "diff_ref": {"type": "string"},
+        **{key:{"type":["string","array"],"items":{"type":"string"}} for key in ('module','feature','mainline')},
     }
     schemas = {
+        "learning_curriculum": ({"view":{"type":"string","enum":["status","packages","features"]},"module":{"type":"string"},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":200}},[]),
+        "learning_inputs": ({},[]),
+        "compile_contexts": ({"module":{"type":"string"},"asset":{"type":"string"},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},[]),
+        "implementation_items": ({"module":{"type":"string"},"asset":{"type":"string"},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":200}},[]),
+        "task_read_plan": ({"task":{"type":"string"},"max_chars":{"type":"integer","minimum":4000,"maximum":128000},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},["task"]),
+        "refine_curriculum": ({"module":{"type":"string"},"packages":{"type":"array","items":{"type":"object"}},"author":{"type":"string"},"expected_revision":{"type":"string"}},["module","packages","author","expected_revision"]),
+        "learning_batch": ({"action":{"type":"string","enum":["begin","next","status","close","attach"]},"parent_session":{"type":"string"},"paths":{"type":"string"},"modules":{"type":"array","items":{"type":"string"}},"parallel":{"type":"integer","minimum":1,"maximum":8},"include_dependencies":{"type":"boolean"},"batch_id":{"type":"string"},"release":{"type":"boolean"},"child_session":{"type":"string"},"native_agent_id":{"type":"string"}},["action","parent_session"]),
         "read_research_drafts": ({"task":{"type":"string"},"worker":{"type":"string"},"token":{"type":"string"},"ids":{"type":"array","items":{"type":"string"}},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":10}},["task","worker","token"]),
         "reference_knowledge": ({"ids":{"type":"array","items":{"type":"string"}}},["ids"]),
         "search_source": ({"task":{"type":"string"},"worker":{"type":"string"},"token":{"type":"string"},"query":{"type":"string"},"asset_patterns":{"type":"array","items":{"type":"string"}},"limit":{"type":"integer","minimum":1,"maximum":100},"offset":{"type":"integer","minimum":0},"line_offset":{"type":"integer","minimum":0}},["task","worker","token","query"]),
@@ -117,7 +137,7 @@ def tools(role="query"):
                           "question": {"type": "string"}, "extend": {"type": "string"}, "profile": {"type": "string"}, "symbol": {"type": "string"},
                           "limit": {"type": "integer", "minimum": 1, "maximum": 100},
                           "candidate_id":{"type":"string"},"jobs": {"type": "integer", "minimum": 1, "maximum": 8}}, []),
-        "get_context": (context_properties, ["task", "source_snapshot"]),
+        "get_context": (context_properties, ["task"]),
         "find_knowledge": ({**context_properties, "limit": {"type": "integer"}}, ["source_snapshot"]),
         "query_graph": ({"run": {"type": "string"}, "targets": {"type": "array", "items": {"type": "string"}},
                          "direction": {"type": "string"}, "depth": {"type": "integer"}, "limit": {"type": "integer"},
@@ -188,6 +208,38 @@ def invoke(store, name, values, *, role="query"):
     specification = next((t for t in tools(role) if t["name"] == name), None)
     require(specification is not None, "Tool unavailable for this role")
     _validate(values, specification["inputSchema"])
+    if name=='learning_inputs':
+        value=store.get_meta('learning_inputs',{})
+        return {k:value.get(k) for k in ('schema','digest','inputs','summary','issues','capabilities')}
+    if name=='compile_contexts':
+        from .inputs import contexts
+        return contexts(store,**values)
+    if name=='implementation_items':
+        from .implementation import listing
+        return listing(store,**values)
+    if name=='task_read_plan':
+        from .context_builder import build
+        return build(store,**values)
+    if name=='refine_curriculum':
+        from .curriculum import refine
+        return refine(store,**values)
+    if name=='learning_curriculum':
+        from . import curriculum
+        view=values.get('view','status');module=values.get('module')
+        if view=='status':return curriculum.status(store,module)
+        if view=='packages':return curriculum.listing(store,module,values.get('offset',0),values.get('limit',30))
+        rows=curriculum.feature_status(store,module);offset=values.get('offset',0);limit=values.get('limit',30)
+        return {'total':len(rows),'items':rows[offset:offset+limit],'next_offset':offset+limit if offset+limit<len(rows) else None}
+    if name=='learning_batch':
+        from . import dispatch
+        action=values['action'];parent=values['parent_session']
+        if action=='begin':return dispatch.begin(store,parent,values.get('paths'),values.get('modules',[]),values.get('parallel',3),values.get('include_dependencies',True))
+        bid=values.get('batch_id');batch=store.get_meta('dispatch:'+str(bid))
+        require(batch and batch['parent_session']==parent,'Batch belongs to a different parent session')
+        if action=='next':return dispatch.next_batch(store,bid)
+        if action=='status':return dispatch.status(store,bid)
+        if action=='close':return dispatch.close(store,bid,values.get('release',False))
+        return dispatch.attach_agent(store,bid,values.get('child_session'),values.get('native_agent_id'))
     if name=='read_research_drafts':
         from .planner import read_research_drafts
         return read_research_drafts(store,**values)
@@ -197,8 +249,9 @@ def invoke(store, name, values, *, role="query"):
         return {'units':reference_units(store,values['ids']),'semantic_approval':'references retain their original review and binding'}
     if name in {'get_context','find_knowledge','explain_path','test_obligations','request_refresh'} and store.get_meta('study_head'):
         bound=study.current(store)
+        values={**values};values.setdefault('source_snapshot',bound['snapshot'])
         if values.get('source_snapshot')==bound['snapshot']:
-            values={**values};values.setdefault('build_profile',bound['profile']);values.setdefault('index_run',bound['run'])
+            values.setdefault('build_profile',bound['profile']);values.setdefault('index_run',bound['run'])
     if name in {'program_status','module_assets','stage_progress','read_source','search_source'}:
         from . import whole
         if name=='program_status':return whole.audit(store,values.get('module')) if values.get('audit') else whole.status(store,values.get('module'))

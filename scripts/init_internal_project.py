@@ -45,6 +45,7 @@ def create(args):
             require(path.exists(), "Material directory/file missing: " + name)
             config["materials"].append({"id": name, "path": str(path), "material_kind": name,
                                         "status": "unreviewed", "revision": "user-material-snapshot"})
+    config['materials'].extend(getattr(args,'input_materials',[]))
     if args.compile_db:
         path = args.compile_db.expanduser().resolve()
         require(path.is_file(), "Compilation database missing: " + str(path))
